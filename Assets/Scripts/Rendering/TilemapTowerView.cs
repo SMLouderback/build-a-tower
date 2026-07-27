@@ -31,9 +31,8 @@ namespace BuildATower
         public void SetGhost(Vector2Int origin, Vector2Int size, Color color, bool valid)
         {
             ClearGhost();
-            var c = color;
-            c.a = valid ? 0.45f : 0.45f;
-            if (!valid) c = Color.Lerp(color, Color.red, 0.65f);
+            var c = valid ? color : Color.Lerp(color, Color.red, 0.65f);
+            c.a = 0.45f;
             var tile = GetTile(c);
             for (var dy = 0; dy < size.y; dy++)
             for (var dx = 0; dx < size.x; dx++)

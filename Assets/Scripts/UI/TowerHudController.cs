@@ -14,16 +14,31 @@ namespace BuildATower
         Label _tool;
         Label _cell;
         VisualElement _toolbar;
+        Button _bulldozeButton;
+        readonly List<Button> _roomButtons = new();
+        bool _initialized;
 
         void OnEnable()
+        {
+            if (_initialized) Activate();
+        }
+
+        void Start()
         {
             var root = document.rootVisualElement;
             _funds = root.Q<Label>("funds-label");
             _tool = root.Q<Label>("tool-label");
             _cell = root.Q<Label>("cell-label");
             _toolbar = root.Q<VisualElement>("toolbar");
+            _bulldozeButton = root.Q<Button>("btn-bulldoze");
+            _initialized = true;
+            Activate();
+        }
 
-            root.Q<Button>("btn-bulldoze").clicked += () => build.SetTool(BuildTool.Bulldoze);
+        void Activate()
+        {
+            ClearRoomButtons();
+            _bulldozeButton.clicked += OnBulldozeClicked;
 
             foreach (var room in placeableRooms)
             {
@@ -31,6 +46,7 @@ namespace BuildATower
                 var captured = room;
                 var btn = new Button(() => build.SetRoomType(captured)) { text = room.displayName };
                 _toolbar.Add(btn);
+                _roomButtons.Add(btn);
             }
 
             build.StateChanged += Refresh;
@@ -40,6 +56,17 @@ namespace BuildATower
         void OnDisable()
         {
             if (build != null) build.StateChanged -= Refresh;
+            if (_bulldozeButton != null) _bulldozeButton.clicked -= OnBulldozeClicked;
+            ClearRoomButtons();
+        }
+
+        void OnBulldozeClicked() => build.SetTool(BuildTool.Bulldoze);
+
+        void ClearRoomButtons()
+        {
+            foreach (var button in _roomButtons)
+                button.RemoveFromHierarchy();
+            _roomButtons.Clear();
         }
 
         void Update() => RefreshHoverOnly();
@@ -59,7 +86,7 @@ namespace BuildATower
             if (build.HoverCell.HasValue)
             {
                 var c = build.HoverCell.Value;
-                var floorLabel = c.y > 0 ? c.y.ToString() : $"B{-c.y}";
+                var floorLabel = c.y > 0 ? c.y.ToString() : c.y < 0 ? $"B{-c.y}" : "G";
                 _cell.text = $"Cell: ({c.x}, floor {floorLabel})";
             }
             else _cell.text = "Cell: —";

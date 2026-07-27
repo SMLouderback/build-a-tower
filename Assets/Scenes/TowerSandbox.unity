@@ -426,6 +426,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: BuildATower.Runtime::BuildATower.BuildController
   view: {fileID: 375015720}
   worldCamera: {fileID: 1093245805}
+  hudDocument: {fileID: 1906885127}
   lobbyType: {fileID: 11400000, guid: d8dfb28260ecebf4794af7e17096c5f7, type: 2}
   startingFunds: 2000000
 --- !u!4 &701963389

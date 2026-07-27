@@ -89,6 +89,7 @@ Orthographic Camera
 | `activeHoursStart` / `End` | int? | e.g. offices 9–17; null = always |
 | `allowAboveGround` | bool | Placement rule |
 | `allowBasement` | bool | Placement rule |
+| `isLobby` | bool | Identifies the unique lobby room type |
 
 ### 5.2 `RoomInstance` (runtime)
 

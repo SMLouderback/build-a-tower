@@ -1,6 +1,6 @@
 using System;
 using UnityEngine;
-using UnityEngine.EventSystems;
+using UnityEngine.UIElements;
 
 namespace BuildATower
 {
@@ -8,6 +8,7 @@ namespace BuildATower
     {
         [SerializeField] TilemapTowerView view;
         [SerializeField] Camera worldCamera;
+        [SerializeField] UIDocument hudDocument;
         [SerializeField] RoomTypeSO lobbyType;
         [SerializeField] int startingFunds = 2_000_000;
 
@@ -31,7 +32,7 @@ namespace BuildATower
         void Update()
         {
             if (worldCamera == null) return;
-            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            if (IsPointerOverHud(Input.mousePosition))
             {
                 view.ClearGhost();
                 return;
@@ -58,7 +59,7 @@ namespace BuildATower
             StateChanged?.Invoke();
         }
 
-        public bool DebugTryPlaceLobby(int minX, int maxX)
+        public bool TryPlaceLobby(int minX, int maxX)
         {
             if (lobbyType == null || maxX < minX) return false;
 
@@ -75,7 +76,7 @@ namespace BuildATower
             return true;
         }
 
-        public bool DebugTryPlaceSelectedAt(Vector2Int cell)
+        public bool TryPlaceSelected(Vector2Int cell)
         {
             if (!Grid.HasLobby ||
                 CurrentTool != BuildTool.PlaceRoom ||
@@ -98,7 +99,7 @@ namespace BuildATower
             return true;
         }
 
-        public bool DebugTryDemolishAt(Vector2Int cell)
+        public bool TryDemolishAt(Vector2Int cell)
         {
             if (!Grid.TryDemolishAt(cell, out var removed)) return false;
 
@@ -135,7 +136,7 @@ namespace BuildATower
                 if (Input.GetMouseButtonUp(0))
                 {
                     _draggingLobby = false;
-                    if (valid) DebugTryPlaceLobby(minX, maxX);
+                    if (valid) TryPlaceLobby(minX, maxX);
                     view.ClearGhost();
                 }
             }
@@ -163,11 +164,27 @@ namespace BuildATower
 
             if (CurrentTool == BuildTool.Bulldoze)
             {
-                DebugTryDemolishAt(cell);
+                TryDemolishAt(cell);
                 return;
             }
 
-            DebugTryPlaceSelectedAt(cell);
+            TryPlaceSelected(cell);
+        }
+
+        bool IsPointerOverHud(Vector3 screen)
+        {
+            if (hudDocument == null) return false;
+
+            var documentRoot = hudDocument.rootVisualElement;
+            var panel = documentRoot?.panel;
+            var hudRoot = documentRoot?.Q<VisualElement>("root");
+            if (panel == null || hudRoot == null) return false;
+
+            var panelPosition = RuntimePanelUtils.ScreenToPanel(
+                panel,
+                new Vector2(screen.x, Screen.height - screen.y));
+            var picked = panel.Pick(panelPosition);
+            return picked != null && (picked == hudRoot || hudRoot.Contains(picked));
         }
 
         Vector2Int ScreenToCell(Vector3 screen)
