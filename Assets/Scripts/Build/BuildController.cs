@@ -86,11 +86,17 @@ namespace BuildATower
                 if (Input.GetMouseButtonUp(0))
                 {
                     _draggingLobby = false;
-                    if (valid && Wallet.TrySpend(cost) &&
-                        Grid.TryPlaceLobby(lobbyType, minX, maxX, 1, out var room))
+                    if (valid && Wallet.TrySpend(cost))
                     {
-                        view.PaintRoom(room);
-                        StateChanged?.Invoke();
+                        if (Grid.TryPlaceLobby(lobbyType, minX, maxX, 1, out var room))
+                        {
+                            view.PaintRoom(room);
+                            StateChanged?.Invoke();
+                        }
+                        else
+                        {
+                            Wallet.Add(cost);
+                        }
                     }
                     view.ClearGhost();
                 }
