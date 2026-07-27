@@ -1,0 +1,25 @@
+.root {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  padding: 10px;
+  background-color: rgba(0, 0, 0, 0.55);
+  border-radius: 6px;
+  min-width: 220px;
+}
+
+.funds, .tool, .cell {
+  color: rgb(240, 240, 240);
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.toolbar {
+  flex-direction: row;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.toolbar Button {
+  margin: 2px;
+}

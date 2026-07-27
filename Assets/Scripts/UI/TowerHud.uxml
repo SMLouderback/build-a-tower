@@ -1,0 +1,11 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+  <Style src="TowerHud.uss" />
+  <ui:VisualElement name="root" class="root">
+    <ui:Label name="funds-label" text="Funds: $0" class="funds" />
+    <ui:Label name="tool-label" text="Tool: —" class="tool" />
+    <ui:Label name="cell-label" text="Cell: —" class="cell" />
+    <ui:VisualElement name="toolbar" class="toolbar">
+      <ui:Button name="btn-bulldoze" text="Bulldoze" />
+    </ui:VisualElement>
+  </ui:VisualElement>
+</ui:UXML>
