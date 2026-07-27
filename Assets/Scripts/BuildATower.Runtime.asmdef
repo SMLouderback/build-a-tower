@@ -1,0 +1,16 @@
+{
+  "name": "BuildATower.Runtime",
+  "rootNamespace": "BuildATower",
+  "references": [
+    "Unity.TextMeshPro",
+    "UnityEngine.UIElementsModule"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
