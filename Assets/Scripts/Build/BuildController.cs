@@ -58,6 +58,55 @@ namespace BuildATower
             StateChanged?.Invoke();
         }
 
+        public bool DebugTryPlaceLobby(int minX, int maxX)
+        {
+            if (lobbyType == null || maxX < minX) return false;
+
+            var cost = (maxX - minX + 1) * lobbyType.buildCost;
+            if (!Grid.CanPlaceLobby(minX, maxX, 1) || !Wallet.TrySpend(cost)) return false;
+            if (!Grid.TryPlaceLobby(lobbyType, minX, maxX, 1, out var room))
+            {
+                Wallet.Add(cost);
+                return false;
+            }
+
+            view.PaintRoom(room);
+            StateChanged?.Invoke();
+            return true;
+        }
+
+        public bool DebugTryPlaceSelectedAt(Vector2Int cell)
+        {
+            if (!Grid.HasLobby ||
+                CurrentTool != BuildTool.PlaceRoom ||
+                SelectedRoomType == null ||
+                SelectedRoomType.isLobby)
+            {
+                return false;
+            }
+
+            var cost = SelectedRoomType.buildCost;
+            if (!Grid.CanPlace(SelectedRoomType, cell) || !Wallet.TrySpend(cost)) return false;
+            if (!Grid.TryPlace(SelectedRoomType, cell, out var room))
+            {
+                Wallet.Add(cost);
+                return false;
+            }
+
+            view.PaintRoom(room);
+            StateChanged?.Invoke();
+            return true;
+        }
+
+        public bool DebugTryDemolishAt(Vector2Int cell)
+        {
+            if (!Grid.TryDemolishAt(cell, out var removed)) return false;
+
+            view.ClearRoom(removed);
+            StateChanged?.Invoke();
+            return true;
+        }
+
         void HandleLobbyDrag(Vector2Int cell)
         {
             if (Grid.HasLobby || lobbyType == null) return;
@@ -86,18 +135,7 @@ namespace BuildATower
                 if (Input.GetMouseButtonUp(0))
                 {
                     _draggingLobby = false;
-                    if (valid && Wallet.TrySpend(cost))
-                    {
-                        if (Grid.TryPlaceLobby(lobbyType, minX, maxX, 1, out var room))
-                        {
-                            view.PaintRoom(room);
-                            StateChanged?.Invoke();
-                        }
-                        else
-                        {
-                            Wallet.Add(cost);
-                        }
-                    }
+                    if (valid) DebugTryPlaceLobby(minX, maxX);
                     view.ClearGhost();
                 }
             }
@@ -125,33 +163,11 @@ namespace BuildATower
 
             if (CurrentTool == BuildTool.Bulldoze)
             {
-                if (Grid.TryDemolishAt(cell, out var removed))
-                {
-                    view.ClearRoom(removed);
-                    StateChanged?.Invoke();
-                }
+                DebugTryDemolishAt(cell);
                 return;
             }
 
-            if (!Grid.HasLobby) return;
-            if (CurrentTool != BuildTool.PlaceRoom ||
-                SelectedRoomType == null ||
-                SelectedRoomType.isLobby)
-            {
-                return;
-            }
-
-            var cost = SelectedRoomType.buildCost;
-            if (!Grid.CanPlace(SelectedRoomType, cell) || !Wallet.CanAfford(cost)) return;
-            if (!Wallet.TrySpend(cost)) return;
-            if (!Grid.TryPlace(SelectedRoomType, cell, out var room))
-            {
-                Wallet.Add(cost);
-                return;
-            }
-
-            view.PaintRoom(room);
-            StateChanged?.Invoke();
+            DebugTryPlaceSelectedAt(cell);
         }
 
         Vector2Int ScreenToCell(Vector3 screen)
