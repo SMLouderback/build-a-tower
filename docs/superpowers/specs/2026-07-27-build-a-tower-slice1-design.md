@@ -92,7 +92,7 @@ Orthographic Camera
 
 ### 5.2 `RoomInstance` (runtime)
 
-- `instanceId` (Guid or int)
+- `instanceId` (int, monotonic)
 - `type` → `RoomTypeSO`
 - `origin` (`Vector2Int`)
 - Covered cells = all `(origin.x + dx, origin.y + dy)` for size
@@ -104,14 +104,15 @@ Sizes are design targets for data assets; exact balance can tune later.
 
 | Blueprint | Size (W×H) | Category | Notes |
 |-----------|------------|----------|--------|
-| Lobby | stretchable width × 1 (optionally 2–3 later) | Structure | Required first on floor 1 |
+| Lobby | stretchable width × 1 | Structure | Required first on floor 1; height 1 only in slice #1 |
 | Office | 9×1 | Office | Quarterly rent later |
 | Condo | 16×1 | Condo | Upfront sale later |
 | Hotel Single | 4×1 | Hotel | Nightly + housekeeping later |
 | Retail / Fast Food | 16×1 | Commercial | Basement-friendly |
+
 Income and noise fields are authored now but **not simulated** in slice #1.
 
-**Not in slice #1 toolbar:** Stairs, elevators, escalators, parking ramps/spaces (data may exist later; no placement tools yet).
+**Not in slice #1 toolbar:** Stairs, elevators, escalators, parking ramps/spaces.
 
 ## 6. Grid layers & placement rules
 
