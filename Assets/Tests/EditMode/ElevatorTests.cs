@@ -253,5 +253,59 @@ namespace BuildATower.Tests
             Assert.AreEqual(ElevatorCarState.DoorsOpen, shaft.Car.State);
             Assert.IsEmpty(shaft.Car.PassengerIds);
         }
+
+        [Test]
+        public void Router_uses_stairs_when_span_le_3()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, 1), out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
+
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+
+            Assert.IsTrue(router.TryPlanTrip(
+                new Vector2Int(5, 0),
+                new Vector2Int(5, 1),
+                out var legs));
+            Assert.AreEqual(1, legs.Count);
+            Assert.AreEqual(TransitLegKind.Stairs, legs[0].Kind);
+            Assert.Greater(legs[0].Cells.Count, 1);
+        }
+
+        [Test]
+        public void Router_needs_elevator_when_span_gt_3()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            for (var floor = 1; floor <= 4; floor++)
+                Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, floor), out _));
+
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+            Assert.IsFalse(router.TryPlanTrip(
+                new Vector2Int(5, 0),
+                new Vector2Int(5, 4),
+                out _));
+
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 4, out _));
+            router.Rebuild(grid);
+
+            Assert.IsTrue(router.TryPlanTrip(
+                new Vector2Int(5, 0),
+                new Vector2Int(5, 4),
+                out var legs));
+            Assert.AreEqual(
+                new[] { TransitLegKind.Walk, TransitLegKind.Elevator, TransitLegKind.Walk },
+                legs.Select(leg => leg.Kind));
+            Assert.AreEqual(0, legs[1].ElevatorX);
+            Assert.AreEqual(0, legs[1].EntryFloor);
+            Assert.AreEqual(4, legs[1].ExitFloor);
+            CollectionAssert.AreEqual(
+                new[] { new Vector2Int(0, 0), new Vector2Int(0, 4) },
+                legs[1].Cells);
+        }
     }
 }
