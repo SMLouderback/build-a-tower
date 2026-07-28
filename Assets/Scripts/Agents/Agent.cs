@@ -24,6 +24,10 @@ namespace BuildATower
         public int PathIndex { get; set; }
         public Vector2Int? GoalCell { get; set; }
         public AgentPhase PhaseAfterMove { get; set; }
+        public List<TransitLeg> TripLegs { get; set; }
+        public int TripLegIndex { get; set; }
+        public int ElevatorDestFloor { get; set; }
+        public float ElevatorWaitMinutes { get; set; }
 
         public Agent(int id, AgentRole role, RoomInstance homeRoom, Vector2Int cell)
         {
@@ -35,6 +39,7 @@ namespace BuildATower
             Phase = AgentPhase.Outside;
             Visible = false;
             Path = new List<Vector2Int>();
+            TripLegs = new List<TransitLeg>();
         }
     }
 }

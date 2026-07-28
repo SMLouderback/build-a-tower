@@ -24,6 +24,8 @@ namespace BuildATower
         readonly StairsPathfinder _stairs;
         readonly ElevatorSystem _elevators;
 
+        public ElevatorSystem Elevators => _elevators;
+
         public TransitRouter(StairsPathfinder stairs, ElevatorSystem elevators)
         {
             _stairs = stairs;

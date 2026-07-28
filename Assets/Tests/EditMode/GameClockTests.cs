@@ -21,5 +21,18 @@ namespace BuildATower.Tests
             var clock = new GameClock(1f, 9 * 60 + 5);
             StringAssert.Contains("09:05", clock.FormatHud());
         }
+
+        [Test]
+        public void Tick_records_game_minutes_advanced_by_last_tick()
+        {
+            var clock = new GameClock(2f);
+
+            clock.Tick(1.5f);
+
+            Assert.AreEqual(3f, clock.LastTickGameMinutes);
+            clock.Paused = true;
+            clock.Tick(1f);
+            Assert.AreEqual(0f, clock.LastTickGameMinutes);
+        }
     }
 }

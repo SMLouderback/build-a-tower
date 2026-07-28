@@ -25,13 +25,16 @@ namespace BuildATower
         public int Hour => MinuteOfDay / 60;
         public int Minute => MinuteOfDay % 60;
         public bool Paused { get; set; }
+        public float LastTickGameMinutes { get; private set; }
 
         public event Action DayRolled;
 
         public void Tick(float deltaTimeSeconds)
         {
+            LastTickGameMinutes = 0f;
             if (Paused || deltaTimeSeconds <= 0f) return;
-            AdvanceMinutes(deltaTimeSeconds * _minutesPerRealSecond);
+            LastTickGameMinutes = deltaTimeSeconds * _minutesPerRealSecond;
+            AdvanceMinutes(LastTickGameMinutes);
         }
 
         public void AdvanceMinutes(float deltaMinutes)

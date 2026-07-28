@@ -13,6 +13,8 @@ namespace BuildATower
         Moving,
         AtHome,
         Working,
-        Staying
+        Staying,
+        WaitingAtElevator,
+        Riding
     }
 }

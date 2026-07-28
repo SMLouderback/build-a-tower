@@ -10,7 +10,8 @@ namespace BuildATower
         public const float MoveCellsPerSecond = 2.5f;
 
         readonly List<Agent> _agents = new();
-        readonly StairsPathfinder _pathfinder;
+        readonly TransitRouter _router;
+        readonly ElevatorSystem _elevators;
         readonly System.Random _rng = new(42);
         int _nextId = 1;
         int _lastTotalMinutes = int.MinValue;
@@ -28,7 +29,11 @@ namespace BuildATower
             }
         }
 
-        public AgentSystem(StairsPathfinder pathfinder) => _pathfinder = pathfinder;
+        public AgentSystem(TransitRouter router)
+        {
+            _router = router;
+            _elevators = router.Elevators;
+        }
 
         public void SyncHomes(TowerGrid grid)
         {
@@ -92,6 +97,8 @@ namespace BuildATower
                     agent.WorkedMinutes += advanced;
 
                 UpdateSchedule(agent, clock, grid);
+                if (agent.Phase == AgentPhase.WaitingAtElevator)
+                    agent.ElevatorWaitMinutes += clock.LastTickGameMinutes;
                 StepMovement(agent, deltaTime);
                 UpdateStress(agent, deltaTime);
             }
@@ -178,7 +185,9 @@ namespace BuildATower
             AgentPhase after,
             TowerGrid grid)
         {
-            if (agent.Phase == AgentPhase.Moving && agent.GoalCell == to) return;
+            if (agent.GoalCell == to &&
+                agent.Phase is AgentPhase.Moving or AgentPhase.WaitingAtElevator or AgentPhase.Riding)
+                return;
 
             agent.GoalCell = to;
             agent.PhaseAfterMove = after;
@@ -189,14 +198,16 @@ namespace BuildATower
                 agent.Visible = true;
             }
 
-            if (_pathfinder.TryFindPath(agent.Cell, to, out var path) && path.Count > 0)
+            if (_router.TryPlanTrip(agent.Cell, to, out var legs) && legs.Count > 0)
             {
-                agent.Path = path;
-                agent.PathIndex = 0;
-                agent.Phase = AgentPhase.Moving;
+                agent.TripLegs = legs;
+                agent.TripLegIndex = 0;
+                StartLeg(agent, legs[0]);
             }
             else
             {
+                agent.TripLegs = new List<TransitLeg>();
+                agent.TripLegIndex = 0;
                 agent.Path = new List<Vector2Int>();
                 agent.PathIndex = 0;
                 agent.Phase = AgentPhase.Moving;
@@ -205,20 +216,41 @@ namespace BuildATower
 
         void StepMovement(Agent agent, float deltaTime)
         {
-            if (agent.Phase != AgentPhase.Moving) return;
-
-            if (agent.Path == null || agent.Path.Count == 0)
+            if (agent.Phase == AgentPhase.WaitingAtElevator)
             {
-                if (agent.GoalCell.HasValue &&
-                    _pathfinder.TryFindPath(agent.Cell, agent.GoalCell.Value, out var retry) &&
-                    retry.Count > 0)
+                var shaft = CurrentElevatorShaft(agent);
+                if (shaft != null && shaft.Car.PassengerIds.Contains(agent.Id))
                 {
-                    agent.Path = retry;
-                    agent.PathIndex = 0;
+                    agent.Phase = AgentPhase.Riding;
+                    FollowElevatorCar(agent, shaft);
                 }
 
                 return;
             }
+
+            if (agent.Phase == AgentPhase.Riding)
+            {
+                var shaft = CurrentElevatorShaft(agent);
+                if (shaft == null) return;
+
+                FollowElevatorCar(agent, shaft);
+                if (shaft.Car.Floor != agent.ElevatorDestFloor ||
+                    shaft.Car.State != ElevatorCarState.DoorsOpen ||
+                    shaft.Car.PassengerIds.Contains(agent.Id))
+                    return;
+
+                agent.Cell = new Vector2Int(shaft.X, agent.ElevatorDestFloor);
+                agent.WorldPosition = new Vector2(agent.Cell.x + 0.5f, agent.Cell.y + 0.5f);
+                AdvanceLeg(agent);
+                if (agent.Phase == AgentPhase.Moving)
+                    StepMovement(agent, deltaTime);
+                return;
+            }
+
+            if (agent.Phase != AgentPhase.Moving) return;
+
+            if (agent.Path == null || agent.Path.Count == 0)
+                return;
 
             var target = agent.Path[Mathf.Min(agent.PathIndex, agent.Path.Count - 1)];
             var targetPos = new Vector2(target.x + 0.5f, target.y + 0.5f);
@@ -234,21 +266,80 @@ namespace BuildATower
             if (agent.PathIndex < agent.Path.Count) return;
 
             agent.Path.Clear();
-            agent.Phase = agent.PhaseAfterMove;
-            agent.GoalCell = null;
-            if (agent.Phase == AgentPhase.Outside)
-                agent.Visible = false;
+            AdvanceLeg(agent);
         }
 
         void UpdateStress(Agent agent, float deltaTime)
         {
-            var stuck = agent.Phase == AgentPhase.Moving &&
-                        (agent.Path == null || agent.Path.Count == 0) &&
-                        agent.GoalCell.HasValue;
+            var stuck = (agent.Phase == AgentPhase.Moving &&
+                         (agent.Path == null || agent.Path.Count == 0) &&
+                         agent.GoalCell.HasValue) ||
+                        (agent.Phase == AgentPhase.WaitingAtElevator &&
+                         agent.ElevatorWaitMinutes > 10f);
             if (stuck)
                 agent.Stress = Mathf.Min(100f, agent.Stress + StressGainPerSecond * deltaTime);
             else
                 agent.Stress = Mathf.Max(0f, agent.Stress - StressDecayPerSecond * deltaTime);
+        }
+
+        void StartLeg(Agent agent, TransitLeg leg)
+        {
+            if (leg.Kind != TransitLegKind.Elevator)
+            {
+                agent.Path = leg.Cells ?? new List<Vector2Int>();
+                agent.PathIndex = 0;
+                agent.Phase = AgentPhase.Moving;
+                return;
+            }
+
+            agent.Path.Clear();
+            agent.PathIndex = 0;
+            agent.ElevatorDestFloor = leg.ExitFloor;
+            agent.ElevatorWaitMinutes = 0f;
+            var direction = leg.ExitFloor > leg.EntryFloor
+                ? ElevatorDirection.Up
+                : ElevatorDirection.Down;
+
+            _elevators.SetPassengerDestination(agent.Id, leg.ExitFloor);
+            if (_elevators.TryEnqueue(agent.Id, leg.ElevatorX, leg.EntryFloor, direction))
+                agent.Phase = AgentPhase.WaitingAtElevator;
+            else
+                agent.Phase = AgentPhase.Moving;
+        }
+
+        void AdvanceLeg(Agent agent)
+        {
+            agent.TripLegIndex++;
+            if (agent.TripLegs != null && agent.TripLegIndex < agent.TripLegs.Count)
+            {
+                StartLeg(agent, agent.TripLegs[agent.TripLegIndex]);
+                return;
+            }
+
+            agent.Phase = agent.PhaseAfterMove;
+            agent.GoalCell = null;
+            agent.ElevatorWaitMinutes = 0f;
+            if (agent.Phase == AgentPhase.Outside)
+                agent.Visible = false;
+        }
+
+        ElevatorShaftRuntime CurrentElevatorShaft(Agent agent)
+        {
+            if (agent.TripLegs == null ||
+                agent.TripLegIndex < 0 ||
+                agent.TripLegIndex >= agent.TripLegs.Count)
+                return null;
+
+            var leg = agent.TripLegs[agent.TripLegIndex];
+            if (leg.Kind != TransitLegKind.Elevator)
+                return null;
+            return _elevators.FindServing(leg.ElevatorX, leg.EntryFloor, leg.ExitFloor);
+        }
+
+        static void FollowElevatorCar(Agent agent, ElevatorShaftRuntime shaft)
+        {
+            agent.Cell = new Vector2Int(shaft.X, shaft.Car.Floor);
+            agent.WorldPosition = new Vector2(shaft.X + 0.5f, shaft.Car.Floor + 0.5f);
         }
 
         void ConfigureSchedule(Agent agent)
