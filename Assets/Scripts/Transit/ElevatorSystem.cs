@@ -88,6 +88,10 @@ namespace BuildATower
             return false;
         }
 
+        /// <summary>
+        /// Records a passenger's destination floor. Call before or when boarding;
+        /// passengers without a recorded destination will not alight.
+        /// </summary>
         public void SetPassengerDestination(int agentId, int floor)
         {
             _passengerDestFloor[agentId] = floor;
