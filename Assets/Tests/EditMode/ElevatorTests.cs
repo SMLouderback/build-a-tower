@@ -1,3 +1,4 @@
+using System.Linq;
 using BuildATower;
 using NUnit.Framework;
 using UnityEngine;
@@ -140,6 +141,117 @@ namespace BuildATower.Tests
             Assert.AreSame(lobby, lobbyCell);
             Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(0, 1), out var officeCell));
             Assert.AreSame(office, officeCell);
+        }
+
+        [Test]
+        public void SyncFromGrid_creates_runtime_for_each_elevator_shaft()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(3, 0), out var first));
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(8, -1), out var second));
+
+            var system = new ElevatorSystem();
+            system.SyncFromGrid(grid);
+
+            Assert.AreEqual(2, system.Shafts.Count);
+            var firstRuntime = system.Shafts.Single(s => s.RoomInstanceId == first.InstanceId);
+            Assert.AreEqual(3, firstRuntime.X);
+            Assert.AreEqual(0, firstRuntime.MinFloor);
+            Assert.AreEqual(1, firstRuntime.MaxFloor);
+            Assert.AreEqual(0, firstRuntime.Car.Floor);
+            Assert.IsTrue(firstRuntime.UpQueues.ContainsKey(0));
+            Assert.IsTrue(firstRuntime.DownQueues.ContainsKey(1));
+
+            var secondRuntime = system.Shafts.Single(s => s.RoomInstanceId == second.InstanceId);
+            Assert.AreEqual(-1, secondRuntime.MinFloor);
+            Assert.AreEqual(0, secondRuntime.MaxFloor);
+            Assert.AreEqual(0, secondRuntime.Car.Floor);
+        }
+
+        [Test]
+        public void FindServing_requires_both_floors_and_optional_matching_x()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(3, 0), out var shortShaft));
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(8, 0), out var tallShaft));
+            Assert.IsTrue(grid.TryExtendElevator(tallShaft, 0, 4, out _));
+
+            var system = new ElevatorSystem();
+            system.SyncFromGrid(grid);
+
+            Assert.AreEqual(tallShaft.InstanceId, system.FindServing(0, 4).RoomInstanceId);
+            Assert.AreEqual(tallShaft.InstanceId, system.FindServing(8, 0, 4).RoomInstanceId);
+            Assert.IsNull(system.FindServing(3, 0, 4));
+            Assert.IsNull(system.FindServing(-1, 4));
+        }
+
+        [Test]
+        public void TryEnqueue_adds_agent_only_to_matching_floor_direction_and_shaft()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(3, 0), out _));
+
+            var system = new ElevatorSystem();
+            system.SyncFromGrid(grid);
+            var shaft = system.Shafts[0];
+
+            Assert.IsTrue(system.TryEnqueue(99, 3, 1, ElevatorDirection.Down));
+            Assert.AreEqual(99, shaft.DownQueues[1].Dequeue());
+            Assert.IsFalse(system.TryEnqueue(99, 3, 2, ElevatorDirection.Down));
+            Assert.IsFalse(system.TryEnqueue(99, 4, 1, ElevatorDirection.Down));
+            Assert.IsFalse(system.TryEnqueue(99, 3, 1, ElevatorDirection.None));
+        }
+
+        [Test]
+        public void Elevator_car_moves_toward_queued_floor()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 4, out _));
+
+            var system = new ElevatorSystem();
+            system.SyncFromGrid(grid);
+            var shaft = system.Shafts[0];
+            Assert.AreEqual(0, shaft.Car.Floor);
+            Assert.IsTrue(system.TryEnqueue(99, shaft.X, 4, ElevatorDirection.Down));
+
+            for (var i = 0; i < 20; i++)
+                system.Tick(1f);
+
+            Assert.AreEqual(4, shaft.Car.Floor);
+        }
+
+        [Test]
+        public void Elevator_boards_only_up_to_capacity_and_alights_at_destination()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 2, out _));
+
+            var system = new ElevatorSystem();
+            system.SyncFromGrid(grid);
+            var shaft = system.Shafts[0];
+            for (var id = 1; id <= ElevatorCar.Capacity + 1; id++)
+            {
+                system.SetPassengerDestination(id, 2);
+                Assert.IsTrue(system.TryEnqueue(id, shaft.X, 0, ElevatorDirection.Up));
+            }
+
+            system.Tick(ElevatorCar.DoorDwellMinutes);
+
+            Assert.AreEqual(ElevatorCar.Capacity, shaft.Car.PassengerIds.Count);
+            Assert.AreEqual(1, shaft.UpQueues[0].Count);
+
+            system.Tick(2 * ElevatorCar.MinutesPerFloor);
+
+            Assert.AreEqual(2, shaft.Car.Floor);
+            Assert.AreEqual(ElevatorCarState.DoorsOpen, shaft.Car.State);
+            Assert.IsEmpty(shaft.Car.PassengerIds);
         }
     }
 }
