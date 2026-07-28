@@ -426,7 +426,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: BuildATower.Runtime::BuildATower.BuildController
   view: {fileID: 375015720}
   worldCamera: {fileID: 1093245805}
-  hudDocument: {fileID: 1906885127}
+  hud: {fileID: 2131519731}
   lobbyType: {fileID: 11400000, guid: d8dfb28260ecebf4794af7e17096c5f7, type: 2}
   startingFunds: 2000000
 --- !u!4 &701963389
@@ -498,7 +498,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 12
+  orthographic size: 8
   m_Depth: 0
   m_CullingMask:
     serializedVersion: 2
@@ -548,7 +548,7 @@ Transform:
   m_GameObject: {fileID: 1093245804}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 15, y: 5, z: -10}
+  m_LocalPosition: {x: 12, y: 3, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -857,7 +857,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1906885127
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -873,7 +873,7 @@ MonoBehaviour:
   m_PanelSettings: {fileID: 11400000, guid: 3b97c14fbbe805d468c72eaf64afff35, type: 2}
   m_ParentUI: {fileID: 0}
   sourceAsset: {fileID: 9197481963319205126, guid: 6853989f4458c1342992f58cf3cdf8fe, type: 3}
-  m_SortingOrder: 0
+  m_SortingOrder: 100
   m_Position: 0
   m_WorldSpaceSizeMode: 1
   m_WorldSpaceWidth: 1920
@@ -987,13 +987,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9a63f457652c1214c862e39e5ff10171, type: 3}
   m_Name: 
   m_EditorClassIdentifier: BuildATower.Runtime::BuildATower.TowerHudController
-  document: {fileID: 1906885127}
   build: {fileID: 701963388}
   placeableRooms:
   - {fileID: 11400000, guid: 9ad8bbe88b4262d4db855e0f90078797, type: 2}
   - {fileID: 11400000, guid: 4099465f1657274469f3b334b5206601, type: 2}
   - {fileID: 11400000, guid: 12849fa16d369244e93af4e5866eea79, type: 2}
   - {fileID: 11400000, guid: e787759d9e9cee448b7189ce5e2d99dc, type: 2}
+  panelWidth: 250
+  edgeGapPixels: 12
+  edgeGapScreenFraction: 0.01
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

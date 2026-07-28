@@ -22,5 +22,6 @@ namespace BuildATower
         public bool allowAboveGround = true;
         public bool allowBasement;
         public bool isLobby;
+        public bool isScaffolding;
     }
 }

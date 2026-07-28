@@ -15,7 +15,7 @@ namespace BuildATower
 
         public void PaintRoom(RoomInstance room)
         {
-            var map = room.Type.isLobby ? structureTilemap : roomsTilemap;
+            var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
             var tile = GetTile(room.Type.placeholderColor);
             foreach (var cell in room.OccupiedCells())
                 map.SetTile(ToTileCell(cell), tile);
@@ -23,7 +23,7 @@ namespace BuildATower
 
         public void ClearRoom(RoomInstance room)
         {
-            var map = room.Type.isLobby ? structureTilemap : roomsTilemap;
+            var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
             foreach (var cell in room.OccupiedCells())
                 map.SetTile(ToTileCell(cell), null);
         }
@@ -50,6 +50,32 @@ namespace BuildATower
             _ghostCells.Clear();
         }
 
+        /// <summary>
+        /// Visual-only starter band: dirt below ground, dark ground line at y=0,
+        /// and a yellow "Floor 1" strip where the lobby must be dragged.
+        /// Does not occupy TowerGrid cells.
+        /// </summary>
+        public void PaintStarterGuides(int minX, int maxX)
+        {
+            var dirt = GetTile(new Color(0.45f, 0.32f, 0.22f, 1f));
+            var ground = GetTile(new Color(0.22f, 0.22f, 0.22f, 1f));
+            var floorOne = GetTile(new Color(0.95f, 0.82f, 0.28f, 1f));
+
+            for (var x = minX; x <= maxX; x++)
+            {
+                structureTilemap.SetTile(new Vector3Int(x, 0, 0), ground);
+                structureTilemap.SetTile(new Vector3Int(x, 1, 0), floorOne);
+                for (var y = -1; y >= -5; y--)
+                    structureTilemap.SetTile(new Vector3Int(x, y, 0), dirt);
+            }
+        }
+
+        public void ClearStructureRow(int floor, int minX, int maxX)
+        {
+            for (var x = minX; x <= maxX; x++)
+                structureTilemap.SetTile(new Vector3Int(x, floor, 0), null);
+        }
+
         Tile GetTile(Color color)
         {
             if (_tiles.TryGetValue(color, out var existing)) return existing;
@@ -65,5 +91,8 @@ namespace BuildATower
 
         static Vector3Int ToTileCell(Vector2Int logic) =>
             new(logic.x, logic.y, 0);
+
+        static bool UsesStructureMap(RoomInstance room) =>
+            room.Type != null && (room.Type.isLobby || room.Type.isScaffolding);
     }
 }

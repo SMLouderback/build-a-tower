@@ -1,0 +1,24 @@
+---
+description: Build-A-Tower art style and 3D vision (this game only)
+alwaysApply: true
+---
+
+# Build-A-Tower — art & vision
+
+Scope: **this project only**. Do not apply these preferences to other Escape work or global Cursor sessions.
+
+## Current slice
+
+Stay on the 2D height×width grid and placeholder cells unless the user explicitly asks to advance visual/tech slices.
+
+## Art polish (when assets are made)
+
+Target the polish of high-end stylized building packs (bright teal / orange / cream / stone; soft gradients; crisp edge highlights; readable materials; no heavy black outlines). Prefer side-cutaway room modules with that finish — not isometric whole-building silhouettes as the primary tower view.
+
+## Mid-term look (2.5D cutaway)
+
+Evolve toward a Project Highrise–style orthographic cutaway: rooms as depth boxes (floor slabs, back/side walls, interiors), tiered tower silhouette, parallax on background / depth layers for a 3D feel — still driven by the 2D grid until a true 3D build is requested.
+
+## Long-term product (true 3D)
+
+A later 3D (or separate 3D) version may add depth as a build axis (H×W×D block placement), freer room footprints, richer elevator/stair routing, and translucent / transparent layering so players can slice and dive into zones to build, rebuild, manage, and upgrade. Do not implement that model until asked; keep Slice #1 architecture compatible where cheap (clear floor/cell concepts), but do not prematurely invent a voxel API.
