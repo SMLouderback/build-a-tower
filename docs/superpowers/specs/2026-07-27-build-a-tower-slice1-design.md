@@ -13,7 +13,7 @@ Build the foundation for a mobile-capable tower sim by proving **grid placement 
 
 In Play mode a player can:
 
-1. Place a **Lobby on floor 1** (sets tower width).
+1. Place a **Lobby on Floor G** (`y == 0`; sets tower width).
 2. Select room blueprints from a toolbar backed by **ScriptableObjects**.
 3. Place rooms as multi-cell blocks with ghost preview (valid/invalid).
 4. Demolish rooms and free cells.
@@ -40,7 +40,7 @@ SimTower cutaway screenshots live in `docs/reference/simtower/`. Gameplay refere
 Key visual/mechanical cues from references:
 
 - Horizontal floor bands; sky above, brown “dirt” for basements
-- Floor 1 lobby; tower width capped by lobby
+- Floor G lobby; tower width capped by lobby
 - Modular rooms (hotels, offices, retail, parking)
 - Elevator shafts as vertical black columns (behavior later)
 - Escalators often B1↔lobby; short stairs between nearby floors
@@ -65,7 +65,8 @@ Orthographic Camera
 ## 4. Coordinate system
 
 - Cell key: `Vector2Int(x, floor)`
-- `floor >= 1` → above ground; `floor <= -1` → basement; **floor `0` unused**
+- **Floor G / lobby / 1st floor = `y == 0`** (ground and level 1 are the same on flat terrain; they only diverge on uneven ground later)
+- `floor >= 1` → above lobby; `floor <= -1` → basement
 - World cell size: 1×1 Unity units (width × floor height)
 - Room footprint: `origin` (bottom-left / min corner) + `size` (`Vector2Int` width × height in floors)
 
@@ -105,7 +106,7 @@ Sizes are design targets for data assets; exact balance can tune later.
 
 | Blueprint | Size (W×H) | Category | Notes |
 |-----------|------------|----------|--------|
-| Lobby | stretchable width × 1 | Structure | Required first on floor 1; height 1 only in slice #1 |
+| Lobby | stretchable width × 1 | Structure | Required first on Floor G; height 1 only in slice #1 |
 | Office | 9×1 | Office | Quarterly rent later |
 | Condo | 16×1 | Condo | Upfront sale later |
 | Hotel Single | 4×1 | Hotel | Nightly + housekeeping later |
@@ -129,7 +130,7 @@ Income and noise fields are authored now but **not simulated** in slice #1.
 
 ### 6.2 Placement rules
 
-1. First structure: **Lobby on floor 1**; defines `minX`/`maxX` for the tower.
+1. First structure: **Lobby on Floor G** (`y == 0`); defines `minX`/`maxX` for the tower.
 2. No room may extend past lobby horizontal bounds.
 3. All cells in the footprint must be free on the Rooms layer (and Transit when used).
 4. Respect `allowAboveGround` / `allowBasement` on the room type.
@@ -140,7 +141,7 @@ Income and noise fields are authored now but **not simulated** in slice #1.
 ## 7. Editor build flow (Play mode)
 
 1. Start with empty scene + **$2,000,000** starting funds.
-2. Place lobby on floor 1 via **click-drag** to set width (height fixed at **1** floor for slice #1). Lobby `buildCost` scales with width (per-cell cost on the Lobby `RoomTypeSO`).
+2. Place lobby on Floor G via **click-drag** to set width (height fixed at **1** floor for slice #1). Lobby `buildCost` scales with width (per-cell cost on the Lobby `RoomTypeSO`).
 3. Select tool/room from toolbar listing `RoomTypeSO` assets.
 4. Move ghost on grid; click to place; funds − `buildCost` (reject place if insufficient funds).
 5. Bulldoze tool removes non-lobby rooms; **lobby cannot be demolished** in slice #1.

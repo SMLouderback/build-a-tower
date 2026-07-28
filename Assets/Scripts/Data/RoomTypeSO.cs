@@ -23,5 +23,7 @@ namespace BuildATower
         public bool allowBasement;
         public bool isLobby;
         public bool isScaffolding;
+        public bool isStairs;
+        [Min(0)] public int maxOccupants;
     }
 }

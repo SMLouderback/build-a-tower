@@ -2,22 +2,26 @@
 
 SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 
-See `docs/superpowers/specs/2026-07-27-build-a-tower-slice1-design.md` for Slice #1 design.
+- Slice #1: `docs/superpowers/specs/2026-07-27-build-a-tower-slice1-design.md`
+- Slice #2: `docs/superpowers/specs/2026-07-28-build-a-tower-slice2-design.md`
+- SimTower behavior reference (tower-together): `docs/reference/tower-together/`
+- Slice #3 elevators checklist: `docs/reference/tower-together/SLICE3-ELEVATORS-CHECKLIST.md`
 
-## Play Slice #1
+## Play (Slice #1 + #2)
 
 1. Open this folder in Unity **6000.4.7f1**.
 2. Open `Assets/Scenes/TowerSandbox.unity`.
 3. Press **Play**.
-4. You should see:
-   - A dark **HUD panel in the top-left** with funds + how-to text
-   - Brown **dirt** underground, a dark **ground line**, and a **yellow Floor 1** strip
-5. **Drag left → right on the yellow Floor 1 band** to place the Lobby.
-6. Click a room button (Office / Condo / Hotel / Retail), then click above the lobby.
-7. Right/middle-drag pans; scroll zooms; Bulldoze removes non-lobby rooms.
+4. HUD (top-left): funds, **clock**, **agents / stress**, tools.
+5. **Drag left → right on Floor G** (lobby / ground / 1st floor — same level) to place the Lobby.
+6. Place **Office / Condo / Hotel / Retail** above the lobby on floors 1+ (no overhangs). Basement rooms go on B1 (−1) and below.
+7. Place **Stairs** (**2×2**, two floors). From Floor G, stairs reach **B1** (origin at −1) or **floor 1** (origin at 0). Stair run is bottom-left → top-right. Stack the next flight one floor up on the same columns (connecting floor shares landings; roles 1 and 4 cannot overlap).
+8. Watch **office workers** commute in the morning and **hotel guests** after 4pm (clock runs ~1 game minute per real second).
+9. Trips farther than **3 floors** via stairs fail and raise stress (elevators come in Slice #3).
+10. Bulldoze under occupied floors leaves scaffolding; RMB/MMB pan, scroll zoom.
 
 ### Important: Game view Scale
 
-Keep the Game tab **Scale slider at 1x** (or Scale to Fit). If Scale is above 1x (e.g. 1.4x), Unity zooms the Game view and **crops the menu** so you only see a corner of it.
+Keep the Game tab **Scale slider at 1x** (or Scale to Fit). Scale &gt; 1x crops the HUD.
 
-On Play, the project tries to reset Scale to 1x automatically. You can also use menu **Build-A-Tower → Reset Game View Scale to 1x**.
+On Play, the project tries to reset Scale to 1x. Menu: **Build-A-Tower → Reset Game View Scale to 1x**.

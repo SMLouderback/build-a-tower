@@ -19,6 +19,7 @@ namespace BuildATower
         public string HelpText { get; private set; }
         public RoomTypeSO LobbyType => lobbyType;
         public event Action StateChanged;
+        public event Action GridChanged;
 
         const int GuideMinX = -5;
         const int GuideMaxX = 40;
@@ -33,6 +34,8 @@ namespace BuildATower
             Wallet = new FundsWallet(startingFunds);
             SelectedRoomType = lobbyType;
             RefreshHelpText();
+            if (GetComponent<TowerSimulation>() == null)
+                gameObject.AddComponent<TowerSimulation>();
         }
 
         void Start()
@@ -99,8 +102,8 @@ namespace BuildATower
             if (lobbyType == null || maxX < minX) return false;
 
             var cost = (maxX - minX + 1) * lobbyType.buildCost;
-            if (!Grid.CanPlaceLobby(minX, maxX, 1) || !Wallet.TrySpend(cost)) return false;
-            if (!Grid.TryPlaceLobby(lobbyType, minX, maxX, 1, out var room))
+            if (!Grid.CanPlaceLobby(minX, maxX, TowerGrid.LobbyFloor) || !Wallet.TrySpend(cost)) return false;
+            if (!Grid.TryPlaceLobby(lobbyType, minX, maxX, TowerGrid.LobbyFloor, out var room))
             {
                 Wallet.Add(cost);
                 return false;
@@ -110,6 +113,7 @@ namespace BuildATower
             view.PaintRoom(room);
             SelectedRoomType = null;
             RefreshHelpText();
+            NotifyGridChanged();
             StateChanged?.Invoke();
             return true;
         }
@@ -143,6 +147,7 @@ namespace BuildATower
                 view.ClearRoom(oldLobby);
             view.PaintRoom(lobby);
             RefreshHelpText();
+            NotifyGridChanged();
             StateChanged?.Invoke();
             return true;
         }
@@ -168,19 +173,62 @@ namespace BuildATower
             foreach (var scaffold in clearedScaffolding)
                 view.ClearRoom(scaffold);
             view.PaintRoom(room);
+            // Stairs sit on the rooms layer; keep them visible over rooms built behind.
+            if (room.Type != null && room.Type.isStairs)
+            {
+                foreach (var c in room.OccupiedCells())
+                    view.PaintCell(c, room);
+            }
+            else
+            {
+                foreach (var c in room.OccupiedCells())
+                {
+                    if (Grid.TryGetRoomAt(c, out var at) && at.Type != null && at.Type.isStairs)
+                        view.PaintCell(c, at);
+                }
+            }
+
             RefreshHelpText();
+            NotifyGridChanged();
             StateChanged?.Invoke();
             return true;
         }
 
         public bool TryDemolishAt(Vector2Int cell)
         {
-            if (!Grid.TryDemolishAt(cell, out var removed, out var scaffoldsPlaced)) return false;
+            if (!Grid.TryDemolishAt(cell, out var removed, out var scaffoldsPlaced, out _))
+                return false;
 
-            view.ClearRoom(removed);
+            if (removed.Type != null && removed.Type.isStairs)
+            {
+                foreach (var c in removed.OccupiedCells())
+                {
+                    view.ClearCell(c, structureMap: false);
+                    if (Grid.TryGetRoomAt(c, out var at))
+                        view.PaintCell(c, at);
+                }
+            }
+            else
+            {
+                foreach (var c in removed.OccupiedCells())
+                {
+                    if (Grid.TryGetRoomAt(c, out var at))
+                    {
+                        // Stairs still punch through — keep / refresh their paint.
+                        if (at.Type != null && at.Type.isStairs)
+                            view.PaintCell(c, at);
+                        continue;
+                    }
+
+                    view.ClearCell(c, structureMap: false);
+                    view.ClearCell(c, structureMap: true);
+                }
+            }
+
             foreach (var scaffold in scaffoldsPlaced)
                 view.PaintRoom(scaffold);
             RefreshHelpText();
+            NotifyGridChanged();
             StateChanged?.Invoke();
             return true;
         }
@@ -213,9 +261,9 @@ namespace BuildATower
                 var maxX = Mathf.Max(_dragStartX, cell.x);
                 var width = maxX - minX + 1;
                 var cost = width * lobbyType.buildCost;
-                var valid = Grid.CanPlaceLobby(minX, maxX, 1) && Wallet.CanAfford(cost);
+                var valid = Grid.CanPlaceLobby(minX, maxX, TowerGrid.LobbyFloor) && Wallet.CanAfford(cost);
                 view.SetGhost(
-                    new Vector2Int(minX, 1),
+                    new Vector2Int(minX, TowerGrid.LobbyFloor),
                     new Vector2Int(width, 1),
                     lobbyType.placeholderColor,
                     valid);
@@ -242,7 +290,7 @@ namespace BuildATower
                               Wallet.CanAfford(extendCost);
 
             view.SetGhost(
-                new Vector2Int(newMin, 1),
+                new Vector2Int(newMin, TowerGrid.LobbyFloor),
                 new Vector2Int(newMax - newMin + 1, 1),
                 lobbyType.placeholderColor,
                 extendValid);
@@ -267,19 +315,19 @@ namespace BuildATower
                     return;
                 }
 
-                var onFloorOne = cell.y == 1;
+                var onLobbyFloor = cell.y == TowerGrid.LobbyFloor;
                 view.SetGhost(
-                    new Vector2Int(cell.x, 1),
+                    new Vector2Int(cell.x, TowerGrid.LobbyFloor),
                     Vector2Int.one,
                     lobbyType.placeholderColor,
-                    onFloorOne && Wallet.CanAfford(lobbyType.buildCost));
+                    onLobbyFloor && Wallet.CanAfford(lobbyType.buildCost));
                 return;
             }
 
             if (IsLobbyToolActive())
             {
                 // Preview one-cell extension toward cursor when outside current lobby.
-                if (cell.y != 1)
+                if (cell.y != TowerGrid.LobbyFloor)
                 {
                     view.ClearGhost();
                     return;
@@ -297,7 +345,7 @@ namespace BuildATower
                 var cost = added * lobbyType.buildCost;
                 var valid = Grid.CanExtendLobby(newMin, newMax) && Wallet.CanAfford(cost);
                 view.SetGhost(
-                    new Vector2Int(newMin, 1),
+                    new Vector2Int(newMin, TowerGrid.LobbyFloor),
                     new Vector2Int(newMax - newMin + 1, 1),
                     lobbyType.placeholderColor,
                     valid);
@@ -320,7 +368,7 @@ namespace BuildATower
         void ClearFloorOneHintIfNeeded()
         {
             if (_clearedFloorOneHint || view == null) return;
-            view.ClearStructureRow(1, GuideMinX, GuideMaxX);
+            view.ClearStructureRow(TowerGrid.LobbyFloor, GuideMinX, GuideMaxX);
             _clearedFloorOneHint = true;
         }
 
@@ -329,7 +377,7 @@ namespace BuildATower
             if (!Grid.HasLobby)
             {
                 HelpText =
-                    "Drag LEFT→RIGHT on Floor 1 to place the Lobby. RMB pan · Scroll zoom.";
+                    "Drag LEFT→RIGHT on Floor G (lobby) to place the Lobby. RMB pan · Scroll zoom.";
                 return;
             }
 
@@ -342,14 +390,16 @@ namespace BuildATower
 
             if (IsLobbyToolActive())
             {
-                HelpText = "Lobby tool: drag on Floor 1 past the lobby ends to extend it.";
+                HelpText = "Lobby tool: drag on Floor G past the lobby ends to extend it.";
                 return;
             }
 
             HelpText =
                 SelectedRoomType == null
-                    ? "Pick Lobby to extend, or Office / Condo / Hotel / Retail to build."
-                    : $"Selected: {SelectedRoomType.displayName}. Build only on top of the floor below (no overhangs).";
+                    ? "Pick Lobby to extend, or Office / Condo / Hotel / Retail / Stairs to build."
+                    : SelectedRoomType.isStairs
+                        ? "Stairs (2×2): BL→UR run. Stack next flight one floor up (share connecting floor). Roles 1+4 cannot overlap; 2+3 can."
+                        : $"Selected: {SelectedRoomType.displayName}. Build only on top of the floor below (no overhangs).";
         }
 
         void HandleClicks(Vector2Int cell)
@@ -378,5 +428,7 @@ namespace BuildATower
             var world = worldCamera.ScreenToWorldPoint(screen);
             return new Vector2Int(Mathf.FloorToInt(world.x), Mathf.FloorToInt(world.y));
         }
+
+        void NotifyGridChanged() => GridChanged?.Invoke();
     }
 }
