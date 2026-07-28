@@ -3,23 +3,62 @@
   left: 12px;
   top: 12px;
   padding: 10px;
-  background-color: rgba(0, 0, 0, 0.55);
-  border-radius: 6px;
-  min-width: 220px;
+  background-color: rgba(10, 14, 22, 0.92);
+  border-radius: 8px;
+  border-width: 1px;
+  border-color: rgba(255, 255, 255, 0.25);
+  width: 240px;
+  height: auto;
+  min-height: 180px;
 }
 
-.funds, .tool, .cell {
-  color: rgb(240, 240, 240);
+.title {
+  color: rgb(255, 220, 120);
+  font-size: 16px;
+  -unity-font-style: bold;
   margin-bottom: 4px;
-  font-size: 14px;
+}
+
+.help {
+  color: rgb(230, 235, 245);
+  font-size: 11px;
+  white-space: normal;
+  margin-bottom: 6px;
+}
+
+.funds, .tool, .cell, .controls {
+  color: rgb(210, 215, 225);
+  margin-bottom: 2px;
+  font-size: 11px;
+}
+
+.controls {
+  margin-top: 2px;
+  margin-bottom: 4px;
+  color: rgb(170, 180, 195);
+}
+
+.section {
+  color: rgb(255, 220, 120);
+  font-size: 11px;
+  -unity-font-style: bold;
+  margin-top: 6px;
+  margin-bottom: 2px;
 }
 
 .toolbar {
   flex-direction: row;
   flex-wrap: wrap;
-  margin-top: 8px;
 }
 
 .toolbar Button {
   margin: 2px;
+  height: 28px;
+  width: 108px;
+}
+
+.tool-button {
+  margin: 2px;
+  height: 28px;
+  width: 220px;
 }

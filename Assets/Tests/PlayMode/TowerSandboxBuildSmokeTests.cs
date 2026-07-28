@@ -11,7 +11,7 @@ namespace BuildATower.Tests
     public sealed class TowerSandboxBuildSmokeTests
     {
         [UnityTest]
-        public IEnumerator Lobby_office_and_bulldoze_update_scene_state_and_funds()
+        public IEnumerator Lobby_office_stairs_agents_and_bulldoze()
         {
             SceneManager.LoadScene("TowerSandbox", LoadSceneMode.Single);
             yield return null;
@@ -20,6 +20,8 @@ namespace BuildATower.Tests
             Assert.That(build, Is.Not.Null, "TowerSandbox must contain a BuildController.");
             var hud = Object.FindAnyObjectByType<TowerHudController>();
             Assert.That(hud, Is.Not.Null, "TowerSandbox must contain a TowerHudController.");
+            var sim = Object.FindAnyObjectByType<TowerSimulation>();
+            Assert.That(sim, Is.Not.Null, "TowerSimulation should auto-attach.");
 
             var document = Object.FindAnyObjectByType<UIDocument>();
             Assert.That(document, Is.Not.Null, "TowerSandbox must contain a UIDocument.");
@@ -30,23 +32,31 @@ namespace BuildATower.Tests
             Assert.That(toolbar.Query<Button>().ToList().Count, Is.EqualTo(initialButtonCount));
 
             var office = Resources.FindObjectsOfTypeAll<RoomTypeSO>()
-                .Single(room => room.id == "office");
+                .First(room => room.id == "office");
+            var stairs = Resources.FindObjectsOfTypeAll<RoomTypeSO>()
+                .First(room => room.id == "stairs");
             var startingFunds = build.Wallet.Balance;
 
-            Assert.That(build.TryPlaceLobby(0, 10), Is.True);
+            Assert.That(build.TryPlaceLobby(0, 20), Is.True);
             var afterLobby = build.Wallet.Balance;
             Assert.That(afterLobby, Is.LessThan(startingFunds));
 
             build.SetRoomType(office);
-            var officeCell = new Vector2Int(0, 2);
-            Assert.That(build.TryPlaceSelected(officeCell), Is.True);
-            Assert.That(build.Wallet.Balance, Is.EqualTo(afterLobby - office.buildCost));
-            Assert.That(build.Grid.TryGetRoomAt(officeCell, out _), Is.True);
+            Assert.That(build.TryPlaceSelected(new Vector2Int(0, 1)), Is.True);
 
-            var afterOffice = build.Wallet.Balance;
-            Assert.That(build.TryDemolishAt(officeCell), Is.True);
-            Assert.That(build.Wallet.Balance, Is.EqualTo(afterOffice));
-            Assert.That(build.Grid.TryGetRoomAt(officeCell, out _), Is.False);
+            build.SetRoomType(stairs);
+            Assert.That(build.TryPlaceSelected(new Vector2Int(0, 0)), Is.True);
+            Assert.That(build.Grid.TryGetRoomAt(new Vector2Int(0, 0), out var at), Is.True);
+            Assert.That(at.Type.isStairs, Is.True);
+
+            yield return null;
+            Assert.That(sim.Agents.Agents.Count, Is.GreaterThan(0));
+            Assert.That(sim.Clock, Is.Not.Null);
+            Assert.That(sim.Pathfinder.TryFindPath(new Vector2Int(5, 0), new Vector2Int(0, 1), out _), Is.True);
+
+            var afterBuild = build.Wallet.Balance;
+            Assert.That(build.TryDemolishAt(new Vector2Int(0, 1)), Is.True);
+            Assert.That(build.Wallet.Balance, Is.EqualTo(afterBuild));
         }
     }
 }

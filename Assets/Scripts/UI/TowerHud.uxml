@@ -1,11 +1,15 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
   <Style src="TowerHud.uss" />
   <ui:VisualElement name="root" class="root">
+    <ui:Label name="title-label" text="Build-A-Tower" class="title" />
+    <ui:Label name="help-label" text="Loading…" class="help" />
     <ui:Label name="funds-label" text="Funds: $0" class="funds" />
     <ui:Label name="tool-label" text="Tool: —" class="tool" />
     <ui:Label name="cell-label" text="Cell: —" class="cell" />
-    <ui:VisualElement name="toolbar" class="toolbar">
-      <ui:Button name="btn-bulldoze" text="Bulldoze" />
-    </ui:VisualElement>
+    <ui:Label name="controls-label" text="LMB build · RMB/MMB pan · Scroll zoom" class="controls" />
+    <ui:Label text="Rooms" class="section" />
+    <ui:VisualElement name="toolbar" class="toolbar" />
+    <ui:Label text="Tools" class="section" />
+    <ui:Button name="btn-bulldoze" text="Bulldoze" class="tool-button" />
   </ui:VisualElement>
 </ui:UXML>

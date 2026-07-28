@@ -29,3 +29,6 @@ MonoBehaviour:
   allowAboveGround: 1
   allowBasement: 0
   isLobby: 0
+  isScaffolding: 0
+  isStairs: 0
+  maxOccupants: 2

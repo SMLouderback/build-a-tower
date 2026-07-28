@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: RetailFastFood
   m_EditorClassIdentifier: BuildATower.Runtime::BuildATower.RoomTypeSO
   id: retail
-  displayName: Retail / Fast Food
+  displayName: Retail
   category: 4
   size: {x: 16, y: 1}
   buildCost: 100000
@@ -29,3 +29,6 @@ MonoBehaviour:
   allowAboveGround: 1
   allowBasement: 1
   isLobby: 0
+  isScaffolding: 0
+  isStairs: 0
+  maxOccupants: 0
