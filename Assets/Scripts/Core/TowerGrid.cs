@@ -543,6 +543,12 @@ namespace BuildATower
             HashSet<Vector2Int> footprint,
             RoomInstance extendingShaft)
         {
+            if (type.size.x != 1) return false;
+            if (footprint.Count < 2 || footprint.Count > MaxElevatorSpan) return false;
+            if (extendingShaft == null &&
+                (type.size.y != 2 || footprint.Count != 2))
+                return false;
+
             foreach (var cell in footprint)
             {
                 if (!IsFloorAllowed(type, cell.y)) return false;
@@ -606,6 +612,7 @@ namespace BuildATower
         public bool CanExtendElevator(RoomInstance shaft, int newMinY, int newMaxY)
         {
             if (!IsElevator(shaft)) return false;
+            if (!_rooms.Contains(shaft)) return false;
             var span = newMaxY - newMinY + 1;
             if (span < 2 || span > MaxElevatorSpan) return false;
             if (newMinY > shaft.Origin.y ||
