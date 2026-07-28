@@ -13,6 +13,7 @@ namespace BuildATower
         [SerializeField] TowerSimulation simulation;
         [SerializeField] List<RoomTypeSO> placeableRooms = new();
         [SerializeField] RoomTypeSO stairsRoom;
+        [SerializeField] RoomTypeSO elevatorRoom;
 
         [SerializeField] float panelWidth = 260f;
         [SerializeField] float edgeGapPixels = 12f;
@@ -26,13 +27,15 @@ namespace BuildATower
         {
             if (simulation == null && build != null)
                 simulation = build.GetComponent<TowerSimulation>();
-            EnsureStairsAndCatalog();
+            EnsureElevatorAndCatalog();
         }
 
-        void EnsureStairsAndCatalog()
+        void EnsureElevatorAndCatalog()
         {
             if (stairsRoom == null)
                 stairsRoom = Resources.Load<RoomTypeSO>("Rooms/Stairs");
+            if (elevatorRoom == null)
+                elevatorRoom = Resources.Load<RoomTypeSO>("Rooms/ElevatorNormal");
 
             _roomButtons.Clear();
             foreach (var room in placeableRooms)
@@ -49,13 +52,20 @@ namespace BuildATower
                 _roomButtons.RemoveAll(r => r != null && r.id == "stairs");
                 _roomButtons.Add(stairsRoom);
             }
+
+            // Always expose Elevator even if the scene list ref is missing.
+            if (elevatorRoom != null && !_roomButtons.Contains(elevatorRoom))
+            {
+                _roomButtons.RemoveAll(r => r != null && r.id == "elevator_normal");
+                _roomButtons.Add(elevatorRoom);
+            }
         }
 
         void OnGUI()
         {
             if (build == null) return;
             if (_roomButtons.Count == 0)
-                EnsureStairsAndCatalog();
+                EnsureElevatorAndCatalog();
 
             if (simulation == null)
                 simulation = build.GetComponent<TowerSimulation>() ?? FindAnyObjectByType<TowerSimulation>();
@@ -99,6 +109,7 @@ namespace BuildATower
                 roomRows * (btnH + 4f) +
                 4f + row +
                 btnH + // Stairs tool
+                4f + btnH + // Elevator tool
                 4f + btnH + // Extend Lobby
                 4f + btnH + // Bulldoze
                 10f;
@@ -186,6 +197,10 @@ namespace BuildATower
                 build.SetRoomType(stairsRoom);
             cy += btnH + 4f;
 
+            if (elevatorRoom != null && GUI.Button(new Rect(cx, cy, inner, btnH), "Elevator"))
+                build.SetRoomType(elevatorRoom);
+            cy += btnH + 4f;
+
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Extend Lobby"))
                 build.SelectLobbyTool();
             cy += btnH + 4f;
@@ -202,6 +217,7 @@ namespace BuildATower
             if (displayName.StartsWith("Hotel")) return "Hotel";
             if (displayName.StartsWith("Retail")) return "Retail";
             if (displayName.StartsWith("Stairs")) return "Stairs";
+            if (displayName.StartsWith("Elevator")) return "Elevator";
             return displayName;
         }
     }

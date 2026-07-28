@@ -9,6 +9,7 @@ namespace BuildATower
     {
         [SerializeField] BuildController build;
         [SerializeField] AgentView agentView;
+        [SerializeField] ElevatorView elevatorView;
         [SerializeField] float minutesPerRealSecond = 1f;
         [SerializeField] int startMinuteOfDay = 6 * 60;
 
@@ -42,6 +43,14 @@ namespace BuildATower
                 viewGo.transform.SetParent(transform, false);
                 agentView = viewGo.AddComponent<AgentView>();
             }
+
+            if (elevatorView == null)
+            {
+                var viewGo = new GameObject("ElevatorView");
+                viewGo.transform.SetParent(transform, false);
+                elevatorView = viewGo.AddComponent<ElevatorView>();
+            }
+            elevatorView.Bind(_elevators);
         }
 
         void OnEnable() => TrySubscribe();

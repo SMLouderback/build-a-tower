@@ -15,9 +15,9 @@ namespace BuildATower
 
         public void PaintRoom(RoomInstance room)
         {
-            if (room?.Type != null && room.Type.isStairs)
+            if (IsVisibleTransit(room))
             {
-                // Stairs draw on the rooms layer so they stay visible over condos/offices.
+                // Transit draws on the rooms layer so it stays visible over rooms.
                 var tile = GetTile(room.Type.placeholderColor);
                 foreach (var cell in room.OccupiedCells())
                 {
@@ -37,7 +37,7 @@ namespace BuildATower
         public void PaintCell(Vector2Int cell, RoomInstance room)
         {
             if (room?.Type == null) return;
-            if (room.Type.isStairs)
+            if (IsVisibleTransit(room))
             {
                 roomsTilemap.SetTile(ToTileCell(cell), GetTile(room.Type.placeholderColor));
                 return;
@@ -49,7 +49,7 @@ namespace BuildATower
 
         public void ClearRoom(RoomInstance room)
         {
-            if (room?.Type != null && room.Type.isStairs)
+            if (IsVisibleTransit(room))
             {
                 foreach (var cell in room.OccupiedCells())
                     roomsTilemap.SetTile(ToTileCell(cell), null);
@@ -130,5 +130,8 @@ namespace BuildATower
 
         static bool UsesStructureMap(RoomInstance room) =>
             room.Type != null && (room.Type.isLobby || room.Type.isScaffolding);
+
+        static bool IsVisibleTransit(RoomInstance room) =>
+            room?.Type != null && (room.Type.isStairs || room.Type.isElevatorShaft);
     }
 }

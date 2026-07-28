@@ -26,6 +26,9 @@ namespace BuildATower
 
         bool _draggingLobby;
         int _dragStartX;
+        bool _draggingElevator;
+        int _dragStartY;
+        RoomInstance _elevatorToExtend;
         bool _clearedFloorOneHint;
 
         void Awake()
@@ -59,7 +62,7 @@ namespace BuildATower
             if (worldCamera == null) return;
             if (IsPointerOverHud(Input.mousePosition))
             {
-                if (!_draggingLobby)
+                if (!_draggingLobby && !_draggingElevator)
                     view.ClearGhost();
                 HoverCell = null;
                 return;
@@ -68,6 +71,7 @@ namespace BuildATower
             var cell = ScreenToCell(Input.mousePosition);
             HoverCell = cell;
             HandleLobbyDrag(cell);
+            HandleElevatorDrag(cell);
             HandleHoverGhost(cell);
             HandleClicks(cell);
         }
@@ -162,7 +166,8 @@ namespace BuildATower
                 return false;
             }
 
-            var cost = SelectedRoomType.buildCost;
+            var cost = SelectedRoomType.buildCost *
+                       (SelectedRoomType.isElevatorShaft ? SelectedRoomType.size.y : 1);
             if (!Grid.CanPlace(SelectedRoomType, cell) || !Wallet.TrySpend(cost)) return false;
             if (!Grid.TryPlace(SelectedRoomType, cell, out var room, out var clearedScaffolding))
             {
@@ -173,8 +178,8 @@ namespace BuildATower
             foreach (var scaffold in clearedScaffolding)
                 view.ClearRoom(scaffold);
             view.PaintRoom(room);
-            // Stairs sit on the rooms layer; keep them visible over rooms built behind.
-            if (room.Type != null && room.Type.isStairs)
+            // Transit sits on the rooms layer; keep it visible over rooms built behind.
+            if (IsVisibleTransit(room))
             {
                 foreach (var c in room.OccupiedCells())
                     view.PaintCell(c, room);
@@ -183,9 +188,41 @@ namespace BuildATower
             {
                 foreach (var c in room.OccupiedCells())
                 {
-                    if (Grid.TryGetRoomAt(c, out var at) && at.Type != null && at.Type.isStairs)
+                    if (Grid.TryGetRoomAt(c, out var at) && IsVisibleTransit(at))
                         view.PaintCell(c, at);
                 }
+            }
+
+            RefreshHelpText();
+            NotifyGridChanged();
+            StateChanged?.Invoke();
+            return true;
+        }
+
+        public bool TryExtendElevator(RoomInstance shaft, int newMinY, int newMaxY)
+        {
+            if (shaft?.Type == null || !shaft.Type.isElevatorShaft) return false;
+
+            var added = newMaxY - newMinY + 1 - shaft.Size.y;
+            var cost = added * shaft.Type.buildCost;
+            if (added <= 0 ||
+                !Grid.CanExtendElevator(shaft, newMinY, newMaxY) ||
+                !Wallet.TrySpend(cost))
+                return false;
+
+            var instanceId = shaft.InstanceId;
+            if (!Grid.TryExtendElevator(shaft, newMinY, newMaxY, out _))
+            {
+                Wallet.Add(cost);
+                return false;
+            }
+
+            view.ClearRoom(shaft);
+            foreach (var room in Grid.Rooms)
+            {
+                if (room.InstanceId != instanceId) continue;
+                view.PaintRoom(room);
+                break;
             }
 
             RefreshHelpText();
@@ -199,7 +236,7 @@ namespace BuildATower
             if (!Grid.TryDemolishAt(cell, out var removed, out var scaffoldsPlaced, out _))
                 return false;
 
-            if (removed.Type != null && removed.Type.isStairs)
+            if (IsVisibleTransit(removed))
             {
                 foreach (var c in removed.OccupiedCells())
                 {
@@ -214,8 +251,8 @@ namespace BuildATower
                 {
                     if (Grid.TryGetRoomAt(c, out var at))
                     {
-                        // Stairs still punch through — keep / refresh their paint.
-                        if (at.Type != null && at.Type.isStairs)
+                        // Transit still punches through — keep / refresh its paint.
+                        if (IsVisibleTransit(at))
                             view.PaintCell(c, at);
                         continue;
                     }
@@ -303,9 +340,52 @@ namespace BuildATower
             }
         }
 
+        void HandleElevatorDrag(Vector2Int cell)
+        {
+            if (!IsElevatorToolActive()) return;
+
+            if (Input.GetMouseButtonDown(0) &&
+                Grid.TryGetRoomAt(cell, out var room) &&
+                room.Type != null &&
+                room.Type.isElevatorShaft)
+            {
+                _draggingElevator = true;
+                _dragStartY = cell.y;
+                _elevatorToExtend = room;
+            }
+
+            if (!_draggingElevator || _elevatorToExtend == null) return;
+
+            var oldMin = _elevatorToExtend.Origin.y;
+            var oldMax = oldMin + _elevatorToExtend.Size.y - 1;
+            var dragMin = Mathf.Min(_dragStartY, cell.y);
+            var dragMax = Mathf.Max(_dragStartY, cell.y);
+            var newMin = Mathf.Min(oldMin, dragMin);
+            var newMax = Mathf.Max(oldMax, dragMax);
+            var added = newMax - newMin + 1 - _elevatorToExtend.Size.y;
+            var cost = added * _elevatorToExtend.Type.buildCost;
+            var valid = added > 0 &&
+                        Grid.CanExtendElevator(_elevatorToExtend, newMin, newMax) &&
+                        Wallet.CanAfford(cost);
+
+            view.SetGhost(
+                new Vector2Int(_elevatorToExtend.Origin.x, newMin),
+                new Vector2Int(1, newMax - newMin + 1),
+                _elevatorToExtend.Type.placeholderColor,
+                valid);
+
+            if (!Input.GetMouseButtonUp(0)) return;
+
+            var shaft = _elevatorToExtend;
+            _draggingElevator = false;
+            _elevatorToExtend = null;
+            if (valid) TryExtendElevator(shaft, newMin, newMax);
+            view.ClearGhost();
+        }
+
         void HandleHoverGhost(Vector2Int cell)
         {
-            if (_draggingLobby) return;
+            if (_draggingLobby || _draggingElevator) return;
 
             if (!Grid.HasLobby)
             {
@@ -360,7 +440,8 @@ namespace BuildATower
                 return;
             }
 
-            var roomCost = SelectedRoomType.buildCost;
+            var roomCost = SelectedRoomType.buildCost *
+                           (SelectedRoomType.isElevatorShaft ? SelectedRoomType.size.y : 1);
             var roomValid = Grid.CanPlace(SelectedRoomType, cell) && Wallet.CanAfford(roomCost);
             view.SetGhost(cell, SelectedRoomType.size, SelectedRoomType.placeholderColor, roomValid);
         }
@@ -396,15 +477,17 @@ namespace BuildATower
 
             HelpText =
                 SelectedRoomType == null
-                    ? "Pick Lobby to extend, or Office / Condo / Hotel / Retail / Stairs to build."
+                    ? "Pick Lobby to extend, or Office / Condo / Hotel / Retail / Stairs / Elevator to build."
                     : SelectedRoomType.isStairs
                         ? "Stairs (2×2): BL→UR run. Stack next flight one floor up (share connecting floor). Roles 1+4 cannot overlap; 2+3 can."
+                        : SelectedRoomType.isElevatorShaft
+                            ? "Elevator (1×2): click to place. Drag vertically from its shaft to extend (30 floors max). Elevators cannot overlap stairs."
                         : $"Selected: {SelectedRoomType.displayName}. Build only on top of the floor below (no overhangs).";
         }
 
         void HandleClicks(Vector2Int cell)
         {
-            if (!Input.GetMouseButtonDown(0) || _draggingLobby) return;
+            if (!Input.GetMouseButtonDown(0) || _draggingLobby || _draggingElevator) return;
 
             if (CurrentTool == BuildTool.Bulldoze)
             {
@@ -430,5 +513,13 @@ namespace BuildATower
         }
 
         void NotifyGridChanged() => GridChanged?.Invoke();
+
+        bool IsElevatorToolActive() =>
+            CurrentTool == BuildTool.PlaceRoom &&
+            SelectedRoomType != null &&
+            SelectedRoomType.isElevatorShaft;
+
+        static bool IsVisibleTransit(RoomInstance room) =>
+            room?.Type != null && (room.Type.isStairs || room.Type.isElevatorShaft);
     }
 }

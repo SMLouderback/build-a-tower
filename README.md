@@ -7,7 +7,7 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 - SimTower behavior reference (tower-together): `docs/reference/tower-together/`
 - Slice #3 elevators checklist: `docs/reference/tower-together/SLICE3-ELEVATORS-CHECKLIST.md`
 
-## Play (Slice #1 + #2)
+## Play (Slice #1 + #2 + #3)
 
 1. Open this folder in Unity **6000.4.7f1**.
 2. Open `Assets/Scenes/TowerSandbox.unity`.
@@ -17,8 +17,11 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 6. Place **Office / Condo / Hotel / Retail** above the lobby on floors 1+ (no overhangs). Basement rooms go on B1 (−1) and below.
 7. Place **Stairs** (**2×2**, two floors). From Floor G, stairs reach **B1** (origin at −1) or **floor 1** (origin at 0). Stair run is bottom-left → top-right. Stack the next flight one floor up on the same columns (connecting floor shares landings; roles 1 and 4 cannot overlap).
 8. Watch **office workers** commute in the morning and **hotel guests** after 4pm (clock runs ~1 game minute per real second).
-9. Trips farther than **3 floors** via stairs fail and raise stress (elevators come in Slice #3).
+9. Trips farther than **3 floors** via stairs use elevators when a shaft serves both floors; otherwise they fail and raise stress.
 10. Bulldoze under occupied floors leaves scaffolding; RMB/MMB pan, scroll zoom.
+11. Select **Elevator** and click to place a **1×2** shaft through supported floors (the initial cost is two floors).
+12. With Elevator still selected, drag vertically from any cell in an existing shaft to extend it. Extensions charge only for newly added floors.
+13. Elevator shafts span at most **30 floors** and cannot overlap stairs. Watch the gold car marker move as agents call and ride the elevator.
 
 ### Important: Game view Scale
 
