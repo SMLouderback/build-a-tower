@@ -25,6 +25,7 @@ namespace BuildATower
         public bool isScaffolding;
         public bool isStairs;
         public bool isElevatorShaft;
+        [Min(0)] public int requiredStars;
         [Min(0)] public int maxOccupants;
     }
 }
