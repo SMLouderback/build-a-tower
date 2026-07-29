@@ -10,10 +10,12 @@ namespace BuildATower
         /// Floors above are 1, 2, …; basements are -1, -2, ….
         /// </summary>
         public const int LobbyFloor = 0;
+        public const int MaxElevatorSpan = 30;
 
         readonly Dictionary<Vector2Int, RoomInstance> _cells = new();
         readonly List<RoomInstance> _rooms = new();
         readonly Dictionary<Vector2Int, RoomInstance> _underStairs = new();
+        readonly Dictionary<Vector2Int, RoomInstance> _underElevator = new();
         readonly RoomTypeSO _scaffoldingType;
         int _nextId = 1;
 
@@ -69,7 +71,7 @@ namespace BuildATower
             {
                 var cell = new Vector2Int(x, LobbyFloor);
                 if (!_cells.TryGetValue(cell, out var occupant)) continue;
-                if (IsStairs(occupant)) continue;
+                if (IsStairs(occupant) || IsElevator(occupant)) continue;
                 if (occupant.Type == null || !occupant.Type.isLobby) return false;
             }
 
@@ -103,17 +105,18 @@ namespace BuildATower
             addedCells = (newMaxX - newMinX + 1) - oldLobby.Size.x;
             if (addedCells <= 0) return false;
 
-            // Preserve stairs that punch through the lobby.
-            var stairsOnLobby = new List<RoomInstance>();
+            // Preserve transit rooms that punch through the lobby.
+            var transitOnLobby = new List<RoomInstance>();
             foreach (var room in _rooms)
             {
-                if (IsStairs(room))
-                    stairsOnLobby.Add(room);
+                if (IsStairs(room) || IsElevator(room))
+                    transitOnLobby.Add(room);
             }
 
             foreach (var c in oldLobby.OccupiedCells())
             {
-                if (_cells.TryGetValue(c, out var occ) && IsStairs(occ)) continue;
+                if (_cells.TryGetValue(c, out var occ) &&
+                    (IsStairs(occ) || IsElevator(occ))) continue;
                 _cells.Remove(c);
             }
 
@@ -126,15 +129,22 @@ namespace BuildATower
                 new Vector2Int(newMaxX - newMinX + 1, 1));
             Register(lobby);
 
-            // Re-assert stairs on top of the new lobby span where they already existed.
-            foreach (var stairs in stairsOnLobby)
+            // Re-assert transit rooms on top of the new lobby span where they already existed.
+            foreach (var transit in transitOnLobby)
             {
-                foreach (var c in stairs.OccupiedCells())
+                foreach (var c in transit.OccupiedCells())
                 {
                     if (c.y != LobbyFloor) continue;
-                    if (_cells.TryGetValue(c, out var under) && !IsStairs(under))
-                        _underStairs[c] = under;
-                    _cells[c] = stairs;
+                    if (_cells.TryGetValue(c, out var under) &&
+                        !IsStairs(under) &&
+                        !IsElevator(under))
+                    {
+                        if (IsStairs(transit))
+                            _underStairs[c] = under;
+                        else
+                            _underElevator[c] = under;
+                    }
+                    _cells[c] = transit;
                 }
             }
 
@@ -152,6 +162,8 @@ namespace BuildATower
             var footprint = BuildFootprint(origin, type.size);
             if (type.isStairs)
                 return CanPlaceStairs(type, origin, footprint);
+            if (type.isElevatorShaft)
+                return CanPlaceElevator(type, footprint, null);
 
             foreach (var cell in footprint)
             {
@@ -169,6 +181,14 @@ namespace BuildATower
                     {
                         // Rooms may sit behind stairs (stairs stay the visible/path owner).
                         if (_underStairs.TryGetValue(cell, out var under) &&
+                            under != null &&
+                            !IsScaffolding(under))
+                            return false;
+                    }
+                    else if (IsElevator(occupant))
+                    {
+                        // Rooms may sit behind elevators (elevators stay the visible owner).
+                        if (_underElevator.TryGetValue(cell, out var under) &&
                             under != null &&
                             !IsScaffolding(under))
                             return false;
@@ -205,6 +225,11 @@ namespace BuildATower
                 room = PlaceStairs(type, origin, footprint, clearedScaffolding);
                 return room != null;
             }
+            if (type.isElevatorShaft)
+            {
+                room = PlaceElevator(type, origin, footprint, clearedScaffolding, _nextId++);
+                return room != null;
+            }
 
             var seen = new HashSet<RoomInstance>();
             foreach (var cell in footprint)
@@ -217,21 +242,26 @@ namespace BuildATower
             }
 
             room = new RoomInstance(_nextId++, type, origin, type.size);
-            RegisterBehindStairs(room, footprint);
+            RegisterBehindTransit(room, footprint);
             return true;
         }
 
         /// <summary>
-        /// Claims empty cells for the room; where stairs already own a cell, bookmark the room
-        /// as underlay so demolishing stairs restores it and pathing/paint keep stairs on top.
+        /// Claims empty cells for the room; where transit already owns a cell, bookmark the room
+        /// as underlay so demolishing transit restores it and transit stays on top.
         /// </summary>
-        void RegisterBehindStairs(RoomInstance room, HashSet<Vector2Int> footprint)
+        void RegisterBehindTransit(RoomInstance room, HashSet<Vector2Int> footprint)
         {
             foreach (var cell in footprint)
             {
                 if (_cells.TryGetValue(cell, out var occupant) && IsStairs(occupant))
                 {
                     _underStairs[cell] = room;
+                    continue;
+                }
+                if (_cells.TryGetValue(cell, out occupant) && IsElevator(occupant))
+                {
+                    _underElevator[cell] = room;
                     continue;
                 }
 
@@ -272,24 +302,28 @@ namespace BuildATower
 
             var vacated = new List<Vector2Int>(room.OccupiedCells());
 
-            if (IsStairs(room))
+            if (IsStairs(room) || IsElevator(room))
             {
+                var underTransit = IsStairs(room) ? _underStairs : _underElevator;
                 RemoveRoom(room);
                 removed = room;
                 var restoredSeen = new HashSet<RoomInstance>();
                 foreach (var vacatedCell in vacated)
                 {
                     // Stacked stairs may still cover this landing — keep the chain.
-                    var otherStairs = FindStairsCovering(vacatedCell);
-                    if (otherStairs != null)
+                    if (IsStairs(room))
                     {
-                        _cells[vacatedCell] = otherStairs;
-                        continue;
+                        var otherStairs = FindStairsCovering(vacatedCell);
+                        if (otherStairs != null)
+                        {
+                            _cells[vacatedCell] = otherStairs;
+                            continue;
+                        }
                     }
 
-                    if (_underStairs.TryGetValue(vacatedCell, out var under))
+                    if (underTransit.TryGetValue(vacatedCell, out var under))
                     {
-                        _underStairs.Remove(vacatedCell);
+                        underTransit.Remove(vacatedCell);
                         _cells[vacatedCell] = under;
                         if (restoredSeen.Add(under))
                             restoredUnderStairs.Add(under);
@@ -319,6 +353,16 @@ namespace BuildATower
 
             foreach (var key in underKeys)
                 _underStairs.Remove(key);
+
+            underKeys.Clear();
+            foreach (var pair in _underElevator)
+            {
+                if (ReferenceEquals(pair.Value, room))
+                    underKeys.Add(pair.Key);
+            }
+
+            foreach (var key in underKeys)
+                _underElevator.Remove(key);
 
             RemoveRoom(room);
             removed = room;
@@ -352,6 +396,7 @@ namespace BuildATower
 
                 if (_cells.TryGetValue(cell, out var occupant))
                 {
+                    if (IsElevator(occupant)) return false;
                     if (IsStairs(occupant))
                     {
                         var existingRole = StairsCornerRole(occupant.Origin, occupant.Size, cell);
@@ -365,12 +410,21 @@ namespace BuildATower
                     continue;
                 }
 
+                if (FindElevatorCovering(cell) != null) return false;
                 if (!HasSupportForStairs(cell, footprint)) return false;
             }
 
             // Check every stairs room (stacked segments may not be the _cells owner).
             foreach (var existing in _rooms)
             {
+                if (IsElevator(existing))
+                {
+                    foreach (var cell in footprint)
+                    {
+                        if (RoomContains(existing, cell)) return false;
+                    }
+                    continue;
+                }
                 if (!IsStairs(existing)) continue;
                 foreach (var cell in footprint)
                 {
@@ -419,7 +473,12 @@ namespace BuildATower
 
         static bool StairsContains(RoomInstance stairs, Vector2Int cell)
         {
-            foreach (var c in stairs.OccupiedCells())
+            return RoomContains(stairs, cell);
+        }
+
+        static bool RoomContains(RoomInstance room, Vector2Int cell)
+        {
+            foreach (var c in room.OccupiedCells())
             {
                 if (c == cell) return true;
             }
@@ -466,6 +525,184 @@ namespace BuildATower
             }
 
             return null;
+        }
+
+        RoomInstance FindElevatorCovering(Vector2Int cell)
+        {
+            foreach (var room in _rooms)
+            {
+                if (!IsElevator(room)) continue;
+                if (RoomContains(room, cell)) return room;
+            }
+
+            return null;
+        }
+
+        bool CanPlaceElevator(
+            RoomTypeSO type,
+            HashSet<Vector2Int> footprint,
+            RoomInstance extendingShaft)
+        {
+            if (type.size.x != 1) return false;
+            if (footprint.Count < 2 || footprint.Count > MaxElevatorSpan) return false;
+            if (extendingShaft == null &&
+                (type.size.y != 2 || footprint.Count != 2))
+                return false;
+
+            foreach (var cell in footprint)
+            {
+                if (!IsFloorAllowed(type, cell.y)) return false;
+                if (cell.x < MinX || cell.x > MaxX) return false;
+                if (FindStairsCovering(cell) != null) return false;
+
+                var coveringElevator = FindElevatorCovering(cell);
+                if (coveringElevator != null &&
+                    !ReferenceEquals(coveringElevator, extendingShaft))
+                    return false;
+
+                if (_cells.TryGetValue(cell, out var occupant))
+                {
+                    if (IsStairs(occupant)) return false;
+                    if (IsElevator(occupant) &&
+                        !ReferenceEquals(occupant, extendingShaft))
+                        return false;
+
+                    // Lobby, rooms, scaffolding, and the extending shaft may be overlapped.
+                    continue;
+                }
+
+                if (!HasSupportForStairs(cell, footprint)) return false;
+            }
+
+            return true;
+        }
+
+        RoomInstance PlaceElevator(
+            RoomTypeSO type,
+            Vector2Int origin,
+            HashSet<Vector2Int> footprint,
+            List<RoomInstance> clearedScaffolding,
+            int instanceId)
+        {
+            var seenScaffold = new HashSet<RoomInstance>();
+            foreach (var cell in footprint)
+            {
+                if (!_cells.TryGetValue(cell, out var occupant)) continue;
+                if (IsScaffolding(occupant))
+                {
+                    if (!seenScaffold.Add(occupant)) continue;
+                    RemoveRoom(occupant);
+                    clearedScaffolding.Add(occupant);
+                    continue;
+                }
+
+                if (IsElevator(occupant)) continue;
+                _underElevator[cell] = occupant;
+            }
+
+            var elevator = new RoomInstance(
+                instanceId,
+                type,
+                origin,
+                new Vector2Int(type.size.x, footprint.Count / type.size.x));
+            Register(elevator);
+            return elevator;
+        }
+
+        public bool CanExtendElevator(RoomInstance shaft, int newMinY, int newMaxY)
+        {
+            if (!IsElevator(shaft) || !_rooms.Contains(shaft)) return false;
+            var oldMin = shaft.Origin.y;
+            var oldMax = oldMin + shaft.Size.y - 1;
+            if (newMinY > oldMin || newMaxY < oldMax) return false;
+            return CanResizeElevator(shaft, newMinY, newMaxY);
+        }
+
+        public bool TryExtendElevator(
+            RoomInstance shaft,
+            int newMinY,
+            int newMaxY,
+            out int addedCells)
+        {
+            addedCells = 0;
+            if (!CanExtendElevator(shaft, newMinY, newMaxY)) return false;
+            if (!TryResizeElevator(shaft, newMinY, newMaxY, out var delta))
+                return false;
+            addedCells = delta;
+            return true;
+        }
+
+        /// <summary>
+        /// Geometric grow/shrink. Policy (maintenance / correction window) is enforced by callers.
+        /// Mixed grow+shrink in one call is rejected.
+        /// </summary>
+        public bool CanResizeElevator(RoomInstance shaft, int newMinY, int newMaxY)
+        {
+            if (!IsElevator(shaft) || !_rooms.Contains(shaft)) return false;
+            var span = newMaxY - newMinY + 1;
+            if (span < 2 || span > MaxElevatorSpan) return false;
+
+            var oldMin = shaft.Origin.y;
+            var oldMax = oldMin + shaft.Size.y - 1;
+            if (newMinY == oldMin && newMaxY == oldMax) return false;
+
+            var growing = newMinY < oldMin || newMaxY > oldMax;
+            var shrinking = newMinY > oldMin || newMaxY < oldMax;
+            if (growing && shrinking) return false;
+
+            if (shrinking)
+                return newMinY >= oldMin && newMaxY <= oldMax;
+
+            var footprint = BuildFootprint(
+                new Vector2Int(shaft.Origin.x, newMinY),
+                new Vector2Int(1, span));
+            return CanPlaceElevator(shaft.Type, footprint, shaft);
+        }
+
+        public bool TryResizeElevator(
+            RoomInstance shaft,
+            int newMinY,
+            int newMaxY,
+            out int deltaCells)
+        {
+            deltaCells = 0;
+            if (!CanResizeElevator(shaft, newMinY, newMaxY)) return false;
+
+            var oldSpan = shaft.Size.y;
+            var oldCells = new List<Vector2Int>(shaft.OccupiedCells());
+            var instanceId = shaft.InstanceId;
+            var type = shaft.Type;
+            var x = shaft.Origin.x;
+            RemoveRoom(shaft);
+
+            foreach (var cell in oldCells)
+            {
+                if (!_underElevator.TryGetValue(cell, out var under)) continue;
+                _underElevator.Remove(cell);
+                _cells[cell] = under;
+            }
+
+            var span = newMaxY - newMinY + 1;
+            var origin = new Vector2Int(x, newMinY);
+            var footprint = BuildFootprint(origin, new Vector2Int(1, span));
+            PlaceElevator(type, origin, footprint, new List<RoomInstance>(), instanceId);
+
+            // Vacated shaft cells with nothing under them may still need structural fill.
+            foreach (var cell in oldCells)
+            {
+                if (footprint.Contains(cell)) continue;
+                if (_cells.ContainsKey(cell)) continue;
+                if (!NeedsStructuralFill(cell)) continue;
+                var scaffold = new RoomInstance(
+                    _nextId++,
+                    _scaffoldingType,
+                    cell,
+                    Vector2Int.one);
+                Register(scaffold);
+            }
+
+            deltaCells = span - oldSpan;
+            return true;
         }
 
         bool HasSupportForStairs(Vector2Int cell, HashSet<Vector2Int> footprint)
@@ -527,10 +764,13 @@ namespace BuildATower
         static bool IsStairs(RoomInstance room) =>
             room?.Type != null && room.Type.isStairs;
 
+        static bool IsElevator(RoomInstance room) =>
+            room?.Type != null && room.Type.isElevatorShaft;
+
         static bool IsFloorAllowed(RoomTypeSO type, int floor)
         {
             if (floor == LobbyFloor)
-                return type.isStairs && type.allowAboveGround;
+                return (type.isStairs || type.isElevatorShaft) && type.allowAboveGround;
             if (floor > LobbyFloor) return type.allowAboveGround;
             if (floor < LobbyFloor) return type.allowBasement;
             return false;

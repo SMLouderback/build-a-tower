@@ -36,7 +36,10 @@ namespace BuildATower
                 _bound[i] = agent;
                 sr.enabled = agent.Visible;
                 if (!agent.Visible) continue;
-                sr.transform.position = new Vector3(agent.WorldPosition.x, agent.WorldPosition.y, 0f);
+                var position = agent.Phase == AgentPhase.Riding
+                    ? new Vector2(agent.WorldPosition.x, agent.Cell.y + 0.5f)
+                    : agent.WorldPosition;
+                sr.transform.position = new Vector3(position.x, position.y, 0f);
                 sr.color = ColorFor(agent.Role);
                 sr.transform.localScale = Vector3.one * 0.35f;
             }

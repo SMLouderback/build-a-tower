@@ -24,6 +24,20 @@ namespace BuildATower
         public int PathIndex { get; set; }
         public Vector2Int? GoalCell { get; set; }
         public AgentPhase PhaseAfterMove { get; set; }
+        public List<TransitLeg> TripLegs { get; set; }
+        public int TripLegIndex { get; set; }
+        public int ElevatorDestFloor { get; set; }
+        public int ElevatorEntryFloor { get; set; }
+
+        /// <summary>
+        /// Shaft the agent is committed to (room instance id), or 0 when none.
+        /// Resolved by id so maintenance mode cannot orphan a waiter or rider.
+        /// </summary>
+        public int ElevatorShaftId { get; set; }
+
+        /// <summary>+1 queues to the right of the shaft, -1 to the left.</summary>
+        public int ElevatorQueueSide { get; set; } = 1;
+        public float ElevatorWaitMinutes { get; set; }
 
         public Agent(int id, AgentRole role, RoomInstance homeRoom, Vector2Int cell)
         {
@@ -35,6 +49,7 @@ namespace BuildATower
             Phase = AgentPhase.Outside;
             Visible = false;
             Path = new List<Vector2Int>();
+            TripLegs = new List<TransitLeg>();
         }
     }
 }
