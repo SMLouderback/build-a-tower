@@ -10,6 +10,7 @@ namespace BuildATower
         public Vector2Int Origin { get; }
         public Vector2Int Size { get; }
         public int Evaluation { get; set; } = 100;
+        public bool CondoSold { get; set; }
 
         public RoomInstance(int instanceId, RoomTypeSO type, Vector2Int origin, Vector2Int size)
         {

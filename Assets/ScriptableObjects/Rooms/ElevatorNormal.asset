@@ -32,4 +32,5 @@ MonoBehaviour:
   isScaffolding: 0
   isStairs: 0
   isElevatorShaft: 1
+  requiredStars: 1
   maxOccupants: 0

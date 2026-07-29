@@ -10,27 +10,26 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 00fe1abdabb23524093ed643f4aca030, type: 3}
-  m_Name: ElevatorNormal
+  m_Name: HotelPremium
   m_EditorClassIdentifier: BuildATower.Runtime::BuildATower.RoomTypeSO
-  id: elevator_normal
-  displayName: Elevator
-  category: 5
-  size: {x: 1, y: 2}
-  buildCost: 20000
-  placeholderColor: {r: 0.2, g: 0.25, b: 0.35, a: 1}
-  incomeModel: 0
-  baseIncome: 0
+  id: hotel_premium
+  displayName: Premium Hotel
+  category: 3
+  size: {x: 4, y: 1}
+  buildCost: 40000
+  placeholderColor: {r: 0.78039217, g: 0.2509804, b: 0.32156864, a: 1}
+  incomeModel: 2
+  baseIncome: 4000
   noiseOutput: 0
   noiseSensitivity: 0
-  requiresHousekeeping: 0
+  requiresHousekeeping: 1
   hasActiveHours: 0
   activeHoursStart: 0
   activeHoursEnd: 0
   allowAboveGround: 1
-  allowBasement: 1
+  allowBasement: 0
   isLobby: 0
   isScaffolding: 0
   isStairs: 0
-  isElevatorShaft: 1
-  requiredStars: 1
-  maxOccupants: 0
+  requiredStars: 2
+  maxOccupants: 2

@@ -20,5 +20,11 @@ namespace BuildATower
             if (amount < 0) return;
             Balance += amount;
         }
+
+        public void Subtract(int amount)
+        {
+            if (amount < 0) return;
+            Balance = System.Math.Max(0, Balance - amount);
+        }
     }
 }

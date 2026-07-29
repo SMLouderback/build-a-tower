@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using BuildATower;
 using NUnit.Framework;
@@ -7,6 +8,21 @@ namespace BuildATower.Tests
 {
     public class AgentSystemTests
     {
+        [Test]
+        public void SyncHomes_notifies_when_a_condo_resident_is_created()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Condo(), new Vector2Int(0, 1), out var condo));
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            var agents = new AgentSystem(router);
+            var notifiedRooms = new List<RoomInstance>();
+
+            agents.SyncHomes(grid, notifiedRooms.Add);
+
+            CollectionAssert.AreEqual(new[] { condo }, notifiedRooms);
+        }
+
         [Test]
         public void Agent_rides_elevator_and_alights_at_destination()
         {
@@ -213,6 +229,17 @@ namespace BuildATower.Tests
             room.isElevatorShaft = true;
             room.allowAboveGround = true;
             room.allowBasement = true;
+            return room;
+        }
+
+        static RoomTypeSO Condo()
+        {
+            var room = ScriptableObject.CreateInstance<RoomTypeSO>();
+            room.id = "condo";
+            room.category = RoomCategory.Condo;
+            room.size = Vector2Int.one;
+            room.maxOccupants = 1;
+            room.allowAboveGround = true;
             return room;
         }
     }

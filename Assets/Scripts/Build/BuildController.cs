@@ -273,6 +273,14 @@ namespace BuildATower
                 return false;
             }
 
+            var simulation = GetComponent<TowerSimulation>();
+            if (simulation?.Stars != null && !simulation.Stars.CanBuild(SelectedRoomType))
+            {
+                HelpText = $"Needs {SelectedRoomType.requiredStars}★.";
+                StateChanged?.Invoke();
+                return false;
+            }
+
             var cost = SelectedRoomType.buildCost *
                        (SelectedRoomType.isElevatorShaft ? SelectedRoomType.size.y : 1);
             if (!Grid.CanPlace(SelectedRoomType, cell) || !Wallet.TrySpend(cost)) return false;
@@ -309,6 +317,9 @@ namespace BuildATower
         public bool TryExtendElevator(RoomInstance shaft, int newMinY, int newMaxY)
         {
             if (shaft?.Type == null || !shaft.Type.isElevatorShaft) return false;
+            var simulation = GetComponent<TowerSimulation>();
+            if (simulation?.Stars != null && !simulation.Stars.CanBuild(shaft.Type))
+                return false;
 
             var oldMin = shaft.Origin.y;
             var oldMax = oldMin + shaft.Size.y - 1;
@@ -868,9 +879,10 @@ namespace BuildATower
 
         bool IsPointerOverHud(Vector3 screen)
         {
-            if (hud == null) return false;
             var guiPoint = new Vector2(screen.x, Screen.height - screen.y);
-            return hud.PanelScreenRect.Contains(guiPoint);
+            return (hud != null && hud.PanelScreenRect.Contains(guiPoint)) ||
+                   CutawayCamera.HorizontalScrollbarScreenRect.Contains(guiPoint) ||
+                   CutawayCamera.VerticalScrollbarScreenRect.Contains(guiPoint);
         }
 
         Vector2Int ScreenToCell(Vector3 screen)

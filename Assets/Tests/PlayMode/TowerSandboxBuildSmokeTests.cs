@@ -54,6 +54,11 @@ namespace BuildATower.Tests
             Assert.That(sim.Clock, Is.Not.Null);
             Assert.That(sim.Pathfinder.TryFindPath(new Vector2Int(5, 0), new Vector2Int(0, 1), out _), Is.True);
 
+            var beforeMidnight = build.Wallet.Balance;
+            sim.Economy.OnNewDay(build.Grid, sim.Agents.Agents, build.Wallet);
+            Assert.That(sim.Economy.LastIncome, Is.GreaterThan(0), "Occupied office should pay rent at midnight.");
+            Assert.That(build.Wallet.Balance, Is.GreaterThan(beforeMidnight));
+
             var afterBuild = build.Wallet.Balance;
             Assert.That(build.TryDemolishAt(new Vector2Int(0, 1)), Is.True);
             Assert.That(build.Wallet.Balance, Is.EqualTo(afterBuild));
@@ -80,6 +85,7 @@ namespace BuildATower.Tests
                 Is.False,
                 "A 4-floor trip should not route before any shaft exists.");
 
+            sim.Stars.ForceStars(1);
             build.SetRoomType(elevator);
             Assert.That(build.TryPlaceSelected(new Vector2Int(5, 0)), Is.True);
             Assert.That(build.Grid.TryGetRoomAt(new Vector2Int(5, 0), out var shaftCell), Is.True);
