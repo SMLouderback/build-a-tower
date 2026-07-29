@@ -34,5 +34,14 @@ namespace BuildATower.Tests
             clock.Tick(1f);
             Assert.AreEqual(0f, clock.LastTickGameMinutes);
         }
+
+        [Test]
+        public void SetSpeed_changes_minutes_advanced_per_real_second()
+        {
+            var clock = new GameClock(1f);
+            clock.MinutesPerRealSecond = 5f;
+            clock.Tick(1f);
+            Assert.AreEqual(5f, clock.LastTickGameMinutes);
+        }
     }
 }

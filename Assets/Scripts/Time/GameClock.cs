@@ -10,12 +10,18 @@ namespace BuildATower
     {
         public const int MinutesPerDay = 24 * 60;
 
-        readonly float _minutesPerRealSecond;
+        float _minutesPerRealSecond;
         float _minuteAccumulator;
+
+        public float MinutesPerRealSecond
+        {
+            get => _minutesPerRealSecond;
+            set => _minutesPerRealSecond = Mathf.Max(0.01f, value);
+        }
 
         public GameClock(float minutesPerRealSecond = 1f, int startMinuteOfDay = 6 * 60)
         {
-            _minutesPerRealSecond = Mathf.Max(0.01f, minutesPerRealSecond);
+            MinutesPerRealSecond = minutesPerRealSecond;
             MinuteOfDay = ((startMinuteOfDay % MinutesPerDay) + MinutesPerDay) % MinutesPerDay;
             DayIndex = 0;
         }
