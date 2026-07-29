@@ -1,7 +1,7 @@
 # Build-A-Tower — Slice #3 Design
 
 **Date:** 2026-07-28  
-**Status:** Approved (implement)  
+**Status:** Done  
 **Depends on:** Slice #2 (stairs, agents, clock, stress stub, Floor G lobby)  
 **Engine target:** Unity (2D Tilemap), desktop/Editor-first  
 **Reference:** `docs/reference/tower-together/SLICE3-ELEVATORS-CHECKLIST.md`  
