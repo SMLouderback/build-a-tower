@@ -11,6 +11,7 @@ namespace BuildATower
         public ElevatorCar Car;
         public Dictionary<int, Queue<int>> UpQueues;
         public Dictionary<int, Queue<int>> DownQueues;
+        public bool InMaintenance;
 
         public bool Serves(int floor) => floor >= MinFloor && floor <= MaxFloor;
     }

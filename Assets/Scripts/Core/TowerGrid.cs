@@ -611,19 +611,11 @@ namespace BuildATower
 
         public bool CanExtendElevator(RoomInstance shaft, int newMinY, int newMaxY)
         {
-            if (!IsElevator(shaft)) return false;
-            if (!_rooms.Contains(shaft)) return false;
-            var span = newMaxY - newMinY + 1;
-            if (span < 2 || span > MaxElevatorSpan) return false;
-            if (newMinY > shaft.Origin.y ||
-                newMaxY < shaft.Origin.y + shaft.Size.y - 1) return false;
-            if (newMinY == shaft.Origin.y &&
-                newMaxY == shaft.Origin.y + shaft.Size.y - 1) return false;
-
-            var footprint = BuildFootprint(
-                new Vector2Int(shaft.Origin.x, newMinY),
-                new Vector2Int(1, span));
-            return CanPlaceElevator(shaft.Type, footprint, shaft);
+            if (!IsElevator(shaft) || !_rooms.Contains(shaft)) return false;
+            var oldMin = shaft.Origin.y;
+            var oldMax = oldMin + shaft.Size.y - 1;
+            if (newMinY > oldMin || newMaxY < oldMax) return false;
+            return CanResizeElevator(shaft, newMinY, newMaxY);
         }
 
         public bool TryExtendElevator(
@@ -634,9 +626,55 @@ namespace BuildATower
         {
             addedCells = 0;
             if (!CanExtendElevator(shaft, newMinY, newMaxY)) return false;
+            if (!TryResizeElevator(shaft, newMinY, newMaxY, out var delta))
+                return false;
+            addedCells = delta;
+            return true;
+        }
 
+        /// <summary>
+        /// Geometric grow/shrink. Policy (maintenance / correction window) is enforced by callers.
+        /// Mixed grow+shrink in one call is rejected.
+        /// </summary>
+        public bool CanResizeElevator(RoomInstance shaft, int newMinY, int newMaxY)
+        {
+            if (!IsElevator(shaft) || !_rooms.Contains(shaft)) return false;
+            var span = newMaxY - newMinY + 1;
+            if (span < 2 || span > MaxElevatorSpan) return false;
+
+            var oldMin = shaft.Origin.y;
+            var oldMax = oldMin + shaft.Size.y - 1;
+            if (newMinY == oldMin && newMaxY == oldMax) return false;
+
+            var growing = newMinY < oldMin || newMaxY > oldMax;
+            var shrinking = newMinY > oldMin || newMaxY < oldMax;
+            if (growing && shrinking) return false;
+
+            if (shrinking)
+                return newMinY >= oldMin && newMaxY <= oldMax;
+
+            var footprint = BuildFootprint(
+                new Vector2Int(shaft.Origin.x, newMinY),
+                new Vector2Int(1, span));
+            return CanPlaceElevator(shaft.Type, footprint, shaft);
+        }
+
+        public bool TryResizeElevator(
+            RoomInstance shaft,
+            int newMinY,
+            int newMaxY,
+            out int deltaCells)
+        {
+            deltaCells = 0;
+            if (!CanResizeElevator(shaft, newMinY, newMaxY)) return false;
+
+            var oldSpan = shaft.Size.y;
             var oldCells = new List<Vector2Int>(shaft.OccupiedCells());
+            var instanceId = shaft.InstanceId;
+            var type = shaft.Type;
+            var x = shaft.Origin.x;
             RemoveRoom(shaft);
+
             foreach (var cell in oldCells)
             {
                 if (!_underElevator.TryGetValue(cell, out var under)) continue;
@@ -645,10 +683,25 @@ namespace BuildATower
             }
 
             var span = newMaxY - newMinY + 1;
-            var origin = new Vector2Int(shaft.Origin.x, newMinY);
+            var origin = new Vector2Int(x, newMinY);
             var footprint = BuildFootprint(origin, new Vector2Int(1, span));
-            PlaceElevator(shaft.Type, origin, footprint, new List<RoomInstance>(), shaft.InstanceId);
-            addedCells = span - shaft.Size.y;
+            PlaceElevator(type, origin, footprint, new List<RoomInstance>(), instanceId);
+
+            // Vacated shaft cells with nothing under them may still need structural fill.
+            foreach (var cell in oldCells)
+            {
+                if (footprint.Contains(cell)) continue;
+                if (_cells.ContainsKey(cell)) continue;
+                if (!NeedsStructuralFill(cell)) continue;
+                var scaffold = new RoomInstance(
+                    _nextId++,
+                    _scaffoldingType,
+                    cell,
+                    Vector2Int.one);
+                Register(scaffold);
+            }
+
+            deltaCells = span - oldSpan;
             return true;
         }
 

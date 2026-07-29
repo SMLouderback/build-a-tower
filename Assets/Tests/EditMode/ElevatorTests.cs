@@ -247,11 +247,75 @@ namespace BuildATower.Tests
             Assert.AreEqual(ElevatorCar.Capacity, shaft.Car.PassengerIds.Count);
             Assert.AreEqual(1, shaft.UpQueues[0].Count);
 
-            system.Tick(2 * ElevatorCar.MinutesPerFloor);
+            // Floor 1 is passed; floor 2 is the stop.
+            system.Tick(
+                ElevatorCar.MinutesPerPassingFloor + ElevatorCar.MinutesPerFloor);
 
             Assert.AreEqual(2, shaft.Car.Floor);
             Assert.AreEqual(ElevatorCarState.DoorsOpen, shaft.Car.State);
             Assert.IsEmpty(shaft.Car.PassengerIds);
+        }
+
+        [Test]
+        public void Elevator_passes_intermediate_floors_faster_than_stop_approach()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 4, out _));
+
+            var system = new ElevatorSystem();
+            system.SyncFromGrid(grid);
+            var shaft = system.Shafts[0];
+            system.SetPassengerDestination(1, 4);
+            Assert.IsTrue(system.TryEnqueue(1, shaft.X, 0, ElevatorDirection.Up));
+
+            // Board at lobby.
+            system.Tick(ElevatorCar.DoorDwellMinutes);
+            Assert.AreEqual(1, shaft.Car.PassengerIds.Count);
+            Assert.AreEqual(ElevatorCarState.Idle, shaft.Car.State);
+
+            // Not enough time at stop-approach rate for three floors, but enough if
+            // floors 1–3 are passed at the faster rate and only 4 uses approach.
+            var passTrip =
+                3 * ElevatorCar.MinutesPerPassingFloor + ElevatorCar.MinutesPerFloor;
+            Assert.Less(passTrip, 3 * ElevatorCar.MinutesPerFloor);
+
+            system.Tick(passTrip - 0.01f);
+            Assert.AreEqual(3, shaft.Car.Floor);
+            Assert.AreEqual(ElevatorCarState.Moving, shaft.Car.State);
+
+            system.Tick(0.01f + ElevatorCar.MinutesPerFloor);
+            Assert.AreEqual(4, shaft.Car.Floor);
+            Assert.AreEqual(ElevatorCarState.DoorsOpen, shaft.Car.State);
+            Assert.IsEmpty(shaft.Car.PassengerIds);
+        }
+
+        [Test]
+        public void Elevator_uses_approach_rate_when_next_floor_is_a_stop()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 2, out _));
+
+            var system = new ElevatorSystem();
+            system.SyncFromGrid(grid);
+            var shaft = system.Shafts[0];
+            system.SetPassengerDestination(1, 1);
+            Assert.IsTrue(system.TryEnqueue(1, shaft.X, 0, ElevatorDirection.Up));
+
+            system.Tick(ElevatorCar.DoorDwellMinutes);
+            Assert.Contains(1, shaft.Car.PassengerIds);
+
+            // Next floor is the destination — passing rate alone must not arrive.
+            system.Tick(ElevatorCar.MinutesPerPassingFloor);
+            Assert.AreEqual(0, shaft.Car.Floor);
+            Assert.AreEqual(ElevatorCarState.Moving, shaft.Car.State);
+
+            system.Tick(ElevatorCar.MinutesPerFloor - ElevatorCar.MinutesPerPassingFloor);
+            Assert.AreEqual(1, shaft.Car.Floor);
+            Assert.AreEqual(ElevatorCarState.DoorsOpen, shaft.Car.State);
         }
 
         [Test]
@@ -306,6 +370,118 @@ namespace BuildATower.Tests
             CollectionAssert.AreEqual(
                 new[] { new Vector2Int(0, 0), new Vector2Int(0, 4) },
                 legs[1].Cells);
+        }
+
+        [Test]
+        public void Resize_elevator_grows_and_shrinks_geometrically()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(5, 0), out var shaft));
+            Assert.IsTrue(grid.CanResizeElevator(shaft, 0, 4));
+            Assert.IsTrue(grid.TryResizeElevator(shaft, 0, 4, out var grown));
+            Assert.AreEqual(3, grown);
+
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(5, 0), out shaft));
+            Assert.IsTrue(grid.CanResizeElevator(shaft, 0, 2));
+            Assert.IsTrue(grid.TryResizeElevator(shaft, 0, 2, out var shrunk));
+            Assert.AreEqual(-2, shrunk);
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(5, 2), out var top));
+            Assert.IsTrue(top.Type.isElevatorShaft);
+            Assert.IsFalse(grid.TryGetRoomAt(new Vector2Int(5, 3), out _));
+        }
+
+        [Test]
+        public void Resize_elevator_rejects_span_below_two()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(5, 0), out var shaft));
+            Assert.IsTrue(grid.TryResizeElevator(shaft, 0, 3, out _));
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(5, 0), out shaft));
+            Assert.IsFalse(grid.CanResizeElevator(shaft, 0, 0));
+        }
+
+        [Test]
+        public void Shrink_restores_room_built_behind_removed_floors()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var shaft));
+            Assert.IsTrue(grid.TryResizeElevator(shaft, 0, 2, out _));
+            Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, 2), out var office));
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(0, 2), out shaft));
+            Assert.IsTrue(grid.TryResizeElevator(shaft, 0, 1, out _));
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(0, 2), out var restored));
+            Assert.AreSame(office, restored);
+        }
+
+        [Test]
+        public void Maintenance_blocks_enqueue_and_routing_but_drains()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 4, out _));
+
+            var system = new ElevatorSystem();
+            system.SyncFromGrid(grid);
+            var shaft = system.Shafts[0];
+            Assert.IsTrue(system.TryEnqueue(1, 0, 0, ElevatorDirection.Up));
+            system.SetPassengerDestination(1, 4);
+            Assert.IsTrue(system.TrySetMaintenance(shaft.RoomInstanceId, true));
+            Assert.IsFalse(system.TryEnqueue(2, 0, 0, ElevatorDirection.Up));
+            Assert.IsNull(system.FindServing(0, 4));
+
+            for (var i = 0; i < 40; i++)
+                system.Tick(1f);
+
+            Assert.IsTrue(system.IsDrained(shaft));
+        }
+
+        [Test]
+        public void Router_skips_maintenance_shaft()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            for (var floor = 1; floor <= 4; floor++)
+                Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, floor), out _));
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 4, out _));
+
+            var elevators = new ElevatorSystem();
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+            Assert.IsTrue(router.TryPlanTrip(new Vector2Int(5, 0), new Vector2Int(5, 4), out _));
+
+            Assert.IsTrue(elevators.TrySetMaintenance(elevators.Shafts[0].RoomInstanceId, true));
+            Assert.IsFalse(router.TryPlanTrip(new Vector2Int(5, 0), new Vector2Int(5, 4), out _));
+        }
+
+        [Test]
+        public void Correction_window_allows_shrink_toward_previous_bounds()
+        {
+            var window = new ElevatorCorrectionWindow(7, 0, 1, nowRealtime: 100f);
+            Assert.IsTrue(window.AllowsResize(0, 4, 0, 2, 105f));
+            Assert.IsTrue(window.AllowsResize(0, 4, 0, 1, 109f));
+            Assert.IsFalse(window.AllowsResize(0, 4, 1, 4, 105f));
+            Assert.IsFalse(window.AllowsResize(0, 4, 0, 1, 110f));
+        }
+
+        [Test]
+        public void CanVacateFloors_blocks_when_queue_on_removed_floor()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 4, out _));
+
+            var system = new ElevatorSystem();
+            system.SyncFromGrid(grid);
+            var shaft = system.Shafts[0];
+            Assert.IsTrue(system.TryEnqueue(9, 0, 4, ElevatorDirection.Down));
+            Assert.IsFalse(system.CanVacateFloors(shaft, 0, 1));
+            Assert.IsTrue(system.CanVacateFloors(shaft, 0, 4));
         }
     }
 }

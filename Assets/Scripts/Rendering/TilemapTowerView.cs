@@ -12,6 +12,8 @@ namespace BuildATower
 
         readonly Dictionary<Color, Tile> _tiles = new();
         readonly List<Vector3Int> _ghostCells = new();
+        readonly List<Vector3Int> _selectionCells = new();
+        readonly List<Vector3Int> _handleCells = new();
 
         public void PaintRoom(RoomInstance room)
         {
@@ -70,6 +72,7 @@ namespace BuildATower
         public void SetGhost(Vector2Int origin, Vector2Int size, Color color, bool valid)
         {
             ClearGhost();
+            // Keep selection/handles from fighting the ghost preview occupancy list.
             var c = valid ? color : Color.Lerp(color, Color.red, 0.65f);
             c.a = 0.45f;
             var tile = GetTile(c);
@@ -87,6 +90,55 @@ namespace BuildATower
             foreach (var cell in _ghostCells)
                 ghostTilemap.SetTile(cell, null);
             _ghostCells.Clear();
+        }
+
+        public void SetSelection(RoomInstance room)
+        {
+            ClearSelection();
+            if (room == null || ghostTilemap == null) return;
+            var color = new Color(1f, 1f, 1f, 0.28f);
+            var tile = GetTile(color);
+            foreach (var cell in room.OccupiedCells())
+            {
+                var tc = ToTileCell(cell);
+                ghostTilemap.SetTile(tc, tile);
+                _selectionCells.Add(tc);
+            }
+        }
+
+        public void ClearSelection()
+        {
+            if (ghostTilemap == null) return;
+            foreach (var cell in _selectionCells)
+                ghostTilemap.SetTile(cell, null);
+            _selectionCells.Clear();
+        }
+
+        public void SetElevatorEdgeHandles(RoomInstance shaft)
+        {
+            ClearEdgeHandles();
+            if (shaft?.Type == null || !shaft.Type.isElevatorShaft || ghostTilemap == null)
+                return;
+
+            var color = new Color(1f, 0.85f, 0.2f, 0.75f);
+            var tile = GetTile(color);
+            var minY = shaft.Origin.y;
+            var maxY = minY + shaft.Size.y - 1;
+            var top = ToTileCell(new Vector2Int(shaft.Origin.x, maxY));
+            var bottom = ToTileCell(new Vector2Int(shaft.Origin.x, minY));
+            ghostTilemap.SetTile(top, tile);
+            ghostTilemap.SetTile(bottom, tile);
+            _handleCells.Add(top);
+            if (top != bottom)
+                _handleCells.Add(bottom);
+        }
+
+        public void ClearEdgeHandles()
+        {
+            if (ghostTilemap == null) return;
+            foreach (var cell in _handleCells)
+                ghostTilemap.SetTile(cell, null);
+            _handleCells.Clear();
         }
 
         /// <summary>

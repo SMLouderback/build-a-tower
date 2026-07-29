@@ -19,8 +19,15 @@ namespace BuildATower
     public sealed class ElevatorCar
     {
         public const int Capacity = 8;
-        public const float MinutesPerFloor = 2f;
-        public const float DoorDwellMinutes = 1f;
+
+        /// <summary>Travel time when the next floor is a planned stop.</summary>
+        public const float MinutesPerFloor = 0.75f;
+
+        /// <summary>Travel time when passing a floor with no planned stop.</summary>
+        public const float MinutesPerPassingFloor = 0.35f;
+
+        /// <summary>Door open / load-unload dwell (~15 simulated seconds).</summary>
+        public const float DoorDwellMinutes = 0.25f;
 
         public int Floor;
         public ElevatorDirection Direction;

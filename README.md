@@ -3,7 +3,8 @@
 SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 
 - Slice #1: `docs/superpowers/specs/2026-07-27-build-a-tower-slice1-design.md`
-- Slice #2: `docs/superpowers/specs/2026-07-28-build-a-tower-slice2-design.md`
+- Slice #3: `docs/superpowers/specs/2026-07-28-build-a-tower-slice3-design.md`
+- Selector + elevator maintenance resize: `docs/superpowers/specs/2026-07-29-selector-elevator-maintenance-design.md`
 - SimTower behavior reference (tower-together): `docs/reference/tower-together/`
 - Slice #3 elevators checklist: `docs/reference/tower-together/SLICE3-ELEVATORS-CHECKLIST.md`
 
@@ -20,8 +21,11 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 9. Trips farther than **3 floors** via stairs use elevators when a shaft serves both floors; otherwise they fail and raise stress.
 10. Bulldoze under occupied floors leaves scaffolding; RMB/MMB pan, scroll zoom.
 11. Select **Elevator** and click to place a **1×2** shaft through supported floors (the initial cost is two floors).
-12. With Elevator still selected, drag vertically from any cell in an existing shaft to extend it. Extensions charge only for newly added floors.
-13. Elevator shafts span at most **30 floors** and cannot overlap stairs. Watch the gold car marker move as agents call and ride the elevator.
+12. Use **Selector** to click any built room for a HUD summary. Selected elevators show **top/bottom edge handles** — drag to extend (charges new floors) or shorten under the rules below.
+13. After an extension you have **10 real-time seconds** to shrink back toward the previous height without maintenance (quick mistake undo). Extending never requires maintenance.
+14. Outside that window, open **Enter Maintenance** on the selected elevator. Existing queues/passengers finish; new agents will not board. When status is **Ready to shorten**, drag an edge inward (no refund; min height 2 floors), then **Exit Maintenance**.
+15. Elevator shafts span at most **30 floors** and cannot overlap stairs. Watch the gold car marker move as agents call and ride the elevator. Waiting agents form a **visible line beside the shaft** (on the side they walked in from), so long queues are easy to spot; they only enter the shaft once they board.
+16. (Optional) With the Elevator place tool still selected, drag vertically from a shaft cell to extend — same as edge handles.
 
 ### Important: Game view Scale
 

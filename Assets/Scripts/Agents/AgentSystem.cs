@@ -9,6 +9,10 @@ namespace BuildATower
         public const float StressDecayPerSecond = 4f;
         public const float MoveCellsPerSecond = 2.5f;
 
+        /// <summary>Distance from shaft centre to the first waiter, so the line starts outside the shaft cell.</summary>
+        public const float QueueLaneOffset = 0.8f;
+        public const float QueueSpacing = 0.34f;
+
         readonly List<Agent> _agents = new();
         readonly TransitRouter _router;
         readonly ElevatorSystem _elevators;
@@ -98,7 +102,13 @@ namespace BuildATower
 
                 UpdateSchedule(agent, clock, grid);
                 if (agent.Phase == AgentPhase.WaitingAtElevator)
+                {
                     agent.ElevatorWaitMinutes += clock.LastTickGameMinutes;
+                    // Watchdog: covers maintenance toggles, shortening, and demolition.
+                    if (IsElevatorWaitOrphaned(agent))
+                        ReplanTrip(agent, allowReplan: true);
+                }
+
                 StepMovement(agent, deltaTime);
                 UpdateStress(agent, deltaTime);
             }
@@ -206,11 +216,7 @@ namespace BuildATower
             }
             else
             {
-                agent.TripLegs = new List<TransitLeg>();
-                agent.TripLegIndex = 0;
-                agent.Path = new List<Vector2Int>();
-                agent.PathIndex = 0;
-                agent.Phase = AgentPhase.Moving;
+                StallInPlace(agent);
             }
         }
 
@@ -219,19 +225,30 @@ namespace BuildATower
             if (agent.Phase == AgentPhase.WaitingAtElevator)
             {
                 var shaft = CurrentElevatorShaft(agent);
-                if (shaft != null && shaft.Car.PassengerIds.Contains(agent.Id))
+                if (shaft == null) return;
+
+                if (shaft.Car.PassengerIds.Contains(agent.Id))
                 {
                     agent.Phase = AgentPhase.Riding;
                     FollowElevatorCar(agent, shaft);
+                    return;
                 }
 
+                // Re-place each tick so the line closes up as people board.
+                PlaceInQueueLane(agent, shaft);
                 return;
             }
 
             if (agent.Phase == AgentPhase.Riding)
             {
                 var shaft = CurrentElevatorShaft(agent);
-                if (shaft == null) return;
+                if (shaft == null)
+                {
+                    // Shaft vanished under the rider (demolished): drop off and re-plan.
+                    _elevators.RemoveFromQueues(agent.Id);
+                    ReplanTrip(agent, allowReplan: true);
+                    return;
+                }
 
                 FollowElevatorCar(agent, shaft);
                 if (shaft.Car.Floor != agent.ElevatorDestFloor ||
@@ -282,7 +299,7 @@ namespace BuildATower
                 agent.Stress = Mathf.Max(0f, agent.Stress - StressDecayPerSecond * deltaTime);
         }
 
-        void StartLeg(Agent agent, TransitLeg leg)
+        void StartLeg(Agent agent, TransitLeg leg, bool allowReplan = true)
         {
             if (leg.Kind != TransitLegKind.Elevator)
             {
@@ -295,16 +312,70 @@ namespace BuildATower
             agent.Path.Clear();
             agent.PathIndex = 0;
             agent.ElevatorDestFloor = leg.ExitFloor;
+            agent.ElevatorEntryFloor = leg.EntryFloor;
+            agent.ElevatorQueueSide = QueueSideFor(agent, leg);
             agent.ElevatorWaitMinutes = 0f;
             var direction = leg.ExitFloor > leg.EntryFloor
                 ? ElevatorDirection.Up
                 : ElevatorDirection.Down;
 
             _elevators.SetPassengerDestination(agent.Id, leg.ExitFloor);
-            if (_elevators.TryEnqueue(agent.Id, leg.ElevatorX, leg.EntryFloor, direction))
-                agent.Phase = AgentPhase.WaitingAtElevator;
-            else
-                agent.Phase = AgentPhase.Moving;
+            if (!_elevators.TryEnqueue(agent.Id, leg.ElevatorX, leg.EntryFloor, direction))
+            {
+                // Shaft refused the call (for example it just entered maintenance).
+                _elevators.ClearPassengerDestination(agent.Id);
+                ClearElevatorTripState(agent);
+                if (allowReplan)
+                    ReplanTrip(agent, allowReplan: false);
+                else
+                    StallInPlace(agent);
+                return;
+            }
+
+            agent.Phase = AgentPhase.WaitingAtElevator;
+            var shaft = _elevators.FindShaftAt(leg.ElevatorX, leg.EntryFloor, leg.ExitFloor);
+            if (shaft == null) return;
+
+            agent.ElevatorShaftId = shaft.RoomInstanceId;
+            PlaceInQueueLane(agent, shaft);
+        }
+
+        /// <summary>
+        /// Waiters stand beside the shaft on the side they walked in from, so a long
+        /// line is visible instead of agents stacking inside the shaft cell.
+        /// </summary>
+        void PlaceInQueueLane(Agent agent, ElevatorShaftRuntime shaft)
+        {
+            var direction = agent.ElevatorDestFloor > agent.ElevatorEntryFloor
+                ? ElevatorDirection.Up
+                : ElevatorDirection.Down;
+            var index = _elevators.GetQueueIndex(
+                shaft,
+                agent.ElevatorEntryFloor,
+                direction,
+                agent.Id);
+            var slot = Mathf.Max(0, index);
+            var side = agent.ElevatorQueueSide >= 0 ? 1f : -1f;
+            var x = shaft.X + 0.5f + side * (QueueLaneOffset + slot * QueueSpacing);
+            agent.WorldPosition = new Vector2(x, agent.ElevatorEntryFloor + 0.5f);
+        }
+
+        static int QueueSideFor(Agent agent, TransitLeg leg)
+        {
+            if (agent.TripLegs != null && agent.TripLegIndex > 0)
+            {
+                var previous = agent.TripLegs[agent.TripLegIndex - 1];
+                if (previous.Cells != null)
+                {
+                    for (var i = previous.Cells.Count - 1; i >= 0; i--)
+                    {
+                        var dx = previous.Cells[i].x - leg.ElevatorX;
+                        if (dx != 0) return dx > 0 ? 1 : -1;
+                    }
+                }
+            }
+
+            return agent.Cell.x >= leg.ElevatorX ? 1 : -1;
         }
 
         void AdvanceLeg(Agent agent)
@@ -318,13 +389,20 @@ namespace BuildATower
 
             agent.Phase = agent.PhaseAfterMove;
             agent.GoalCell = null;
-            agent.ElevatorWaitMinutes = 0f;
+            ClearElevatorTripState(agent);
             if (agent.Phase == AgentPhase.Outside)
                 agent.Visible = false;
         }
 
+        /// <summary>
+        /// Resolves the committed shaft by id, not by route search, so a shaft entering
+        /// maintenance never orphans agents already waiting in or riding it.
+        /// </summary>
         ElevatorShaftRuntime CurrentElevatorShaft(Agent agent)
         {
+            if (agent.ElevatorShaftId != 0)
+                return _elevators.FindByRoomId(agent.ElevatorShaftId);
+
             if (agent.TripLegs == null ||
                 agent.TripLegIndex < 0 ||
                 agent.TripLegIndex >= agent.TripLegs.Count)
@@ -334,6 +412,89 @@ namespace BuildATower
             if (leg.Kind != TransitLegKind.Elevator)
                 return null;
             return _elevators.FindServing(leg.ElevatorX, leg.EntryFloor, leg.ExitFloor);
+        }
+
+        /// <summary>
+        /// True when a waiting agent can no longer be served by its shaft: the shaft is
+        /// gone, no longer spans the trip, or the agent lost its queue slot.
+        /// </summary>
+        bool IsElevatorWaitOrphaned(Agent agent)
+        {
+            var shaft = CurrentElevatorShaft(agent);
+            if (shaft == null) return true;
+            if (shaft.Car.PassengerIds.Contains(agent.Id)) return false;
+            if (!shaft.Serves(agent.ElevatorEntryFloor) ||
+                !shaft.Serves(agent.ElevatorDestFloor))
+                return true;
+
+            var direction = agent.ElevatorDestFloor > agent.ElevatorEntryFloor
+                ? ElevatorDirection.Up
+                : ElevatorDirection.Down;
+            return _elevators.GetQueueIndex(
+                shaft,
+                agent.ElevatorEntryFloor,
+                direction,
+                agent.Id) < 0;
+        }
+
+        /// <summary>
+        /// Cleanup hook for entering or leaving maintenance. Riders and correctly queued
+        /// waiters are left to finish; anyone the shaft can no longer serve is re-routed.
+        /// </summary>
+        public void OnElevatorServiceChanged(int shaftRoomInstanceId)
+        {
+            foreach (var agent in _agents)
+            {
+                if (agent.ElevatorShaftId != shaftRoomInstanceId) continue;
+                if (agent.Phase is not (AgentPhase.WaitingAtElevator or AgentPhase.Riding))
+                    continue;
+
+                var shaft = _elevators.FindByRoomId(shaftRoomInstanceId);
+                if (shaft != null && shaft.Car.PassengerIds.Contains(agent.Id))
+                    continue;
+                if (agent.Phase == AgentPhase.WaitingAtElevator && !IsElevatorWaitOrphaned(agent))
+                    continue;
+
+                _elevators.RemoveFromQueues(agent.Id);
+                ReplanTrip(agent, allowReplan: true);
+            }
+        }
+
+        void ReplanTrip(Agent agent, bool allowReplan)
+        {
+            ClearElevatorTripState(agent);
+            if (!agent.GoalCell.HasValue)
+            {
+                agent.Phase = agent.PhaseAfterMove;
+                return;
+            }
+
+            if (_router.TryPlanTrip(agent.Cell, agent.GoalCell.Value, out var legs) &&
+                legs.Count > 0)
+            {
+                agent.TripLegs = legs;
+                agent.TripLegIndex = 0;
+                StartLeg(agent, legs[0], allowReplan);
+                return;
+            }
+
+            StallInPlace(agent);
+        }
+
+        static void ClearElevatorTripState(Agent agent)
+        {
+            agent.ElevatorShaftId = 0;
+            agent.ElevatorWaitMinutes = 0f;
+        }
+
+        /// <summary>No route available: hold position and let stress build.</summary>
+        static void StallInPlace(Agent agent)
+        {
+            agent.TripLegs = new List<TransitLeg>();
+            agent.TripLegIndex = 0;
+            agent.Path = new List<Vector2Int>();
+            agent.PathIndex = 0;
+            agent.Phase = AgentPhase.Moving;
         }
 
         static void FollowElevatorCar(Agent agent, ElevatorShaftRuntime shaft)

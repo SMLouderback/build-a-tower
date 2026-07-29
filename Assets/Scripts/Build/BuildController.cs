@@ -15,9 +15,11 @@ namespace BuildATower
         public FundsWallet Wallet { get; private set; }
         public BuildTool CurrentTool { get; private set; } = BuildTool.PlaceRoom;
         public RoomTypeSO SelectedRoomType { get; private set; }
+        public RoomInstance SelectedRoom { get; private set; }
         public Vector2Int? HoverCell { get; private set; }
         public string HelpText { get; private set; }
         public RoomTypeSO LobbyType => lobbyType;
+        public ElevatorCorrectionWindow ActiveCorrectionWindow { get; private set; }
         public event Action StateChanged;
         public event Action GridChanged;
 
@@ -29,6 +31,9 @@ namespace BuildATower
         bool _draggingElevator;
         int _dragStartY;
         RoomInstance _elevatorToExtend;
+        bool _draggingElevatorEdge;
+        bool _dragTopEdge;
+        RoomInstance _elevatorEdgeShaft;
         bool _clearedFloorOneHint;
 
         void Awake()
@@ -62,7 +67,7 @@ namespace BuildATower
             if (worldCamera == null) return;
             if (IsPointerOverHud(Input.mousePosition))
             {
-                if (!_draggingLobby && !_draggingElevator)
+                if (!_draggingLobby && !_draggingElevator && !_draggingElevatorEdge)
                     view.ClearGhost();
                 HoverCell = null;
                 return;
@@ -72,13 +77,20 @@ namespace BuildATower
             HoverCell = cell;
             HandleLobbyDrag(cell);
             HandleElevatorDrag(cell);
+            HandleElevatorEdgeDrag(cell);
             HandleHoverGhost(cell);
             HandleClicks(cell);
+            if (!_draggingElevatorEdge)
+                RefreshSelectionVisuals();
         }
 
         public void SetTool(BuildTool tool)
         {
             CurrentTool = tool;
+            if (tool != BuildTool.PlaceRoom)
+                SelectedRoomType = null;
+            if (tool != BuildTool.Select)
+                ClearSelection();
             view.ClearGhost();
             RefreshHelpText();
             StateChanged?.Invoke();
@@ -88,6 +100,7 @@ namespace BuildATower
         {
             SelectedRoomType = type;
             CurrentTool = BuildTool.PlaceRoom;
+            ClearSelection();
             RefreshHelpText();
             StateChanged?.Invoke();
         }
@@ -97,9 +110,103 @@ namespace BuildATower
             if (lobbyType == null) return;
             SelectedRoomType = lobbyType;
             CurrentTool = BuildTool.PlaceRoom;
+            ClearSelection();
             RefreshHelpText();
             StateChanged?.Invoke();
         }
+
+        public void SelectTool()
+        {
+            CurrentTool = BuildTool.Select;
+            SelectedRoomType = null;
+            view.ClearGhost();
+            RefreshHelpText();
+            StateChanged?.Invoke();
+        }
+
+        public void ClearSelection()
+        {
+            SelectedRoom = null;
+            _draggingElevatorEdge = false;
+            _elevatorEdgeShaft = null;
+            if (view != null)
+            {
+                view.ClearSelection();
+                view.ClearEdgeHandles();
+            }
+        }
+
+        public bool TrySelectAt(Vector2Int cell)
+        {
+            if (!Grid.TryGetRoomAt(cell, out var room) || room?.Type == null)
+            {
+                ClearSelection();
+                RefreshHelpText();
+                StateChanged?.Invoke();
+                return false;
+            }
+
+            SelectedRoom = room;
+            RefreshSelectionVisuals();
+            RefreshHelpText();
+            StateChanged?.Invoke();
+            return true;
+        }
+
+        public bool TrySetSelectedElevatorMaintenance(bool inMaintenance)
+        {
+            if (SelectedRoom?.Type == null || !SelectedRoom.Type.isElevatorShaft)
+                return false;
+            var sim = GetComponent<TowerSimulation>();
+            if (sim?.Elevators == null) return false;
+            if (!sim.Elevators.TrySetMaintenance(SelectedRoom.InstanceId, inMaintenance))
+                return false;
+
+            // Re-route anyone the shaft can no longer serve so nobody is left queued.
+            sim.Agents?.OnElevatorServiceChanged(SelectedRoom.InstanceId);
+            RefreshHelpText();
+            StateChanged?.Invoke();
+            return true;
+        }
+
+        public string GetSelectionSummary()
+        {
+            if (SelectedRoom?.Type == null) return null;
+            var room = SelectedRoom;
+            var minY = room.Origin.y;
+            var maxY = minY + room.Size.y - 1;
+            var floors = minY == maxY
+                ? FloorLabel(minY)
+                : $"{FloorLabel(minY)}–{FloorLabel(maxY)}";
+            return
+                $"{room.Type.displayName} #{room.InstanceId}\n" +
+                $"Origin ({room.Origin.x}, {FloorLabel(room.Origin.y)})  " +
+                $"Size {room.Size.x}×{room.Size.y}  Floors {floors}\n" +
+                $"Condition {room.Evaluation}";
+        }
+
+        public string GetElevatorStatusText()
+        {
+            if (SelectedRoom?.Type == null || !SelectedRoom.Type.isElevatorShaft)
+                return null;
+
+            var now = Time.realtimeSinceStartup;
+            if (ActiveCorrectionWindow != null &&
+                ActiveCorrectionWindow.ShaftInstanceId == SelectedRoom.InstanceId &&
+                ActiveCorrectionWindow.IsActive(now))
+            {
+                return $"Correction {ActiveCorrectionWindow.SecondsRemaining(now):0.0}s";
+            }
+
+            var sim = GetComponent<TowerSimulation>();
+            var shaft = sim?.Elevators?.FindByRoomId(SelectedRoom.InstanceId);
+            if (shaft == null) return "Service";
+            if (!shaft.InMaintenance) return "Service";
+            return sim.Elevators.IsDrained(shaft) ? "Ready to shorten" : "Draining";
+        }
+
+        static string FloorLabel(int y) =>
+            y > 0 ? y.ToString() : y < 0 ? $"B{-y}" : "G";
 
         public bool TryPlaceLobby(int minX, int maxX)
         {
@@ -203,6 +310,8 @@ namespace BuildATower
         {
             if (shaft?.Type == null || !shaft.Type.isElevatorShaft) return false;
 
+            var oldMin = shaft.Origin.y;
+            var oldMax = oldMin + shaft.Size.y - 1;
             var added = newMaxY - newMinY + 1 - shaft.Size.y;
             var cost = added * shaft.Type.buildCost;
             if (added <= 0 ||
@@ -217,18 +326,148 @@ namespace BuildATower
                 return false;
             }
 
-            view.ClearRoom(shaft);
+            BeginOrRefreshCorrectionWindow(instanceId, oldMin, oldMax);
+            RepaintAfterElevatorResize(shaft, instanceId);
+            if (SelectedRoom != null && SelectedRoom.InstanceId == instanceId)
+                ReselectById(instanceId);
+
+            RefreshHelpText();
+            NotifyGridChanged();
+            StateChanged?.Invoke();
+            return true;
+        }
+
+        /// <summary>
+        /// Resize under UX policy: extend always; shorten via correction window or drained maintenance.
+        /// </summary>
+        public bool TryResizeSelectedElevator(int newMinY, int newMaxY)
+        {
+            if (SelectedRoom?.Type == null || !SelectedRoom.Type.isElevatorShaft)
+                return false;
+            return TryResizeElevator(SelectedRoom, newMinY, newMaxY);
+        }
+
+        public bool TryResizeElevator(RoomInstance shaft, int newMinY, int newMaxY)
+        {
+            if (shaft?.Type == null || !shaft.Type.isElevatorShaft) return false;
+            if (!Grid.CanResizeElevator(shaft, newMinY, newMaxY)) return false;
+
+            var oldMin = shaft.Origin.y;
+            var oldMax = oldMin + shaft.Size.y - 1;
+            var growing = newMinY < oldMin || newMaxY > oldMax;
+            var shrinking = newMinY > oldMin || newMaxY < oldMax;
+            var delta = (newMaxY - newMinY + 1) - shaft.Size.y;
+            var now = Time.realtimeSinceStartup;
+
+            if (shrinking)
+            {
+                if (!CanShortenElevator(shaft, oldMin, oldMax, newMinY, newMaxY, now))
+                    return false;
+            }
+
+            if (growing)
+            {
+                var cost = delta * shaft.Type.buildCost;
+                if (!Wallet.TrySpend(cost)) return false;
+            }
+
+            var instanceId = shaft.InstanceId;
+            if (!Grid.TryResizeElevator(shaft, newMinY, newMaxY, out _))
+            {
+                if (growing)
+                    Wallet.Add(delta * shaft.Type.buildCost);
+                return false;
+            }
+
+            if (growing)
+                BeginOrRefreshCorrectionWindow(instanceId, oldMin, oldMax);
+            else if (ActiveCorrectionWindow != null &&
+                     ActiveCorrectionWindow.ShaftInstanceId == instanceId &&
+                     newMinY == ActiveCorrectionWindow.PreviousMinY &&
+                     newMaxY == ActiveCorrectionWindow.PreviousMaxY)
+            {
+                ActiveCorrectionWindow = null;
+            }
+
+            RepaintAfterElevatorResize(shaft, instanceId);
+            ReselectById(instanceId);
+            RefreshHelpText();
+            NotifyGridChanged();
+            StateChanged?.Invoke();
+            return true;
+        }
+
+        bool CanShortenElevator(
+            RoomInstance shaft,
+            int oldMin,
+            int oldMax,
+            int newMinY,
+            int newMaxY,
+            float now)
+        {
+            var sim = GetComponent<TowerSimulation>();
+            var runtime = sim?.Elevators?.FindByRoomId(shaft.InstanceId);
+
+            if (ActiveCorrectionWindow != null &&
+                ActiveCorrectionWindow.ShaftInstanceId == shaft.InstanceId &&
+                ActiveCorrectionWindow.AllowsResize(oldMin, oldMax, newMinY, newMaxY, now))
+            {
+                // Quick undo: only if no agents depend on the floors being removed.
+                return runtime == null || sim.Elevators.CanVacateFloors(runtime, newMinY, newMaxY);
+            }
+
+            return runtime != null &&
+                   runtime.InMaintenance &&
+                   sim.Elevators.IsDrained(runtime);
+        }
+
+        void BeginOrRefreshCorrectionWindow(int instanceId, int previousMin, int previousMax)
+        {
+            var now = Time.realtimeSinceStartup;
+            if (ActiveCorrectionWindow != null &&
+                ActiveCorrectionWindow.ShaftInstanceId == instanceId)
+            {
+                // Keep the original pre-extension bounds; only refresh the timer.
+                ActiveCorrectionWindow.RefreshDeadline(now);
+                return;
+            }
+
+            ActiveCorrectionWindow = new ElevatorCorrectionWindow(
+                instanceId,
+                previousMin,
+                previousMax,
+                now);
+        }
+
+        void RepaintAfterElevatorResize(RoomInstance oldShaft, int instanceId)
+        {
+            foreach (var c in oldShaft.OccupiedCells())
+            {
+                view.ClearCell(c, structureMap: false);
+                view.ClearCell(c, structureMap: true);
+                if (Grid.TryGetRoomAt(c, out var at))
+                    view.PaintCell(c, at);
+            }
+
             foreach (var room in Grid.Rooms)
             {
                 if (room.InstanceId != instanceId) continue;
                 view.PaintRoom(room);
                 break;
             }
+        }
 
-            RefreshHelpText();
-            NotifyGridChanged();
-            StateChanged?.Invoke();
-            return true;
+        void ReselectById(int instanceId)
+        {
+            foreach (var room in Grid.Rooms)
+            {
+                if (room.InstanceId != instanceId) continue;
+                SelectedRoom = room;
+                RefreshSelectionVisuals();
+                return;
+            }
+
+            ClearSelection();
         }
 
         public bool TryDemolishAt(Vector2Int cell)
@@ -383,9 +622,100 @@ namespace BuildATower
             view.ClearGhost();
         }
 
+        void HandleElevatorEdgeDrag(Vector2Int cell)
+        {
+            if (CurrentTool != BuildTool.Select ||
+                SelectedRoom?.Type == null ||
+                !SelectedRoom.Type.isElevatorShaft)
+                return;
+
+            var shaft = SelectedRoom;
+            var oldMin = shaft.Origin.y;
+            var oldMax = oldMin + shaft.Size.y - 1;
+            var x = shaft.Origin.x;
+
+            if (Input.GetMouseButtonDown(0) && cell.x == x)
+            {
+                if (cell.y == oldMax)
+                {
+                    _draggingElevatorEdge = true;
+                    _dragTopEdge = true;
+                    _elevatorEdgeShaft = shaft;
+                    _dragStartY = cell.y;
+                }
+                else if (cell.y == oldMin)
+                {
+                    _draggingElevatorEdge = true;
+                    _dragTopEdge = false;
+                    _elevatorEdgeShaft = shaft;
+                    _dragStartY = cell.y;
+                }
+            }
+
+            if (!_draggingElevatorEdge || _elevatorEdgeShaft == null) return;
+
+            shaft = _elevatorEdgeShaft;
+            oldMin = shaft.Origin.y;
+            oldMax = oldMin + shaft.Size.y - 1;
+            var newMin = oldMin;
+            var newMax = oldMax;
+            if (_dragTopEdge)
+                newMax = Mathf.Max(oldMin + 1, cell.y);
+            else
+                newMin = Mathf.Min(oldMax - 1, cell.y);
+
+            var now = Time.realtimeSinceStartup;
+            var growing = newMin < oldMin || newMax > oldMax;
+            var shrinking = newMin > oldMin || newMax < oldMax;
+            var delta = (newMax - newMin + 1) - shaft.Size.y;
+            var cost = growing ? delta * shaft.Type.buildCost : 0;
+            var geometricallyOk = Grid.CanResizeElevator(shaft, newMin, newMax);
+            var policyOk = !shrinking ||
+                           CanShortenElevator(shaft, oldMin, oldMax, newMin, newMax, now);
+            var valid = geometricallyOk &&
+                        policyOk &&
+                        (!growing || Wallet.CanAfford(cost));
+
+            view.SetGhost(
+                new Vector2Int(x, newMin),
+                new Vector2Int(1, newMax - newMin + 1),
+                shaft.Type.placeholderColor,
+                valid);
+
+            if (!Input.GetMouseButtonUp(0)) return;
+
+            _draggingElevatorEdge = false;
+            _elevatorEdgeShaft = null;
+            if (valid) TryResizeElevator(shaft, newMin, newMax);
+            view.ClearGhost();
+        }
+
+        void RefreshSelectionVisuals()
+        {
+            if (view == null) return;
+            if (SelectedRoom == null)
+            {
+                view.ClearSelection();
+                view.ClearEdgeHandles();
+                return;
+            }
+
+            view.SetSelection(SelectedRoom);
+            if (SelectedRoom.Type != null && SelectedRoom.Type.isElevatorShaft)
+                view.SetElevatorEdgeHandles(SelectedRoom);
+            else
+                view.ClearEdgeHandles();
+        }
+
         void HandleHoverGhost(Vector2Int cell)
         {
-            if (_draggingLobby || _draggingElevator) return;
+            if (_draggingLobby || _draggingElevator || _draggingElevatorEdge) return;
+
+            if (CurrentTool == BuildTool.Select)
+            {
+                view.ClearGhost();
+                return;
+            }
 
             if (!Grid.HasLobby)
             {
@@ -462,6 +792,22 @@ namespace BuildATower
                 return;
             }
 
+            if (CurrentTool == BuildTool.Select)
+            {
+                if (SelectedRoom?.Type != null && SelectedRoom.Type.isElevatorShaft)
+                {
+                    HelpText =
+                        "Elevator selected: drag top/bottom edges to extend. " +
+                        "Shorten within 10s of an extension, or use Maintenance then drain to shorten later.";
+                    return;
+                }
+
+                HelpText = SelectedRoom != null
+                    ? "Inspecting selection. Click empty space to clear, or pick another room."
+                    : "Selector: click any built room to inspect. Elevators show edge handles when selected.";
+                return;
+            }
+
             if (CurrentTool == BuildTool.Bulldoze)
             {
                 HelpText =
@@ -477,17 +823,38 @@ namespace BuildATower
 
             HelpText =
                 SelectedRoomType == null
-                    ? "Pick Lobby to extend, or Office / Condo / Hotel / Retail / Stairs / Elevator to build."
+                    ? "Pick Selector to inspect, or Lobby / Office / Condo / Hotel / Retail / Stairs / Elevator to build."
                     : SelectedRoomType.isStairs
                         ? "Stairs (2×2): BL→UR run. Stack next flight one floor up (share connecting floor). Roles 1+4 cannot overlap; 2+3 can."
                         : SelectedRoomType.isElevatorShaft
-                            ? "Elevator (1×2): click to place. Drag vertically from its shaft to extend (30 floors max). Elevators cannot overlap stairs."
+                            ? "Elevator (1×2): click to place. Or use Selector and drag shaft edges to resize (30 floors max)."
                         : $"Selected: {SelectedRoomType.displayName}. Build only on top of the floor below (no overhangs).";
         }
 
         void HandleClicks(Vector2Int cell)
         {
-            if (!Input.GetMouseButtonDown(0) || _draggingLobby || _draggingElevator) return;
+            if (!Input.GetMouseButtonDown(0) ||
+                _draggingLobby ||
+                _draggingElevator ||
+                _draggingElevatorEdge)
+                return;
+
+            if (CurrentTool == BuildTool.Select)
+            {
+                // Edge clicks start a drag; don't also re-select / clear.
+                if (SelectedRoom?.Type != null &&
+                    SelectedRoom.Type.isElevatorShaft &&
+                    cell.x == SelectedRoom.Origin.x)
+                {
+                    var minY = SelectedRoom.Origin.y;
+                    var maxY = minY + SelectedRoom.Size.y - 1;
+                    if (cell.y == minY || cell.y == maxY)
+                        return;
+                }
+
+                TrySelectAt(cell);
+                return;
+            }
 
             if (CurrentTool == BuildTool.Bulldoze)
             {

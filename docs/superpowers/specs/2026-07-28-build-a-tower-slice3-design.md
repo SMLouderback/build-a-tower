@@ -97,7 +97,7 @@ BuildController ──► TowerGrid / TilemapTowerView
 | `Direction` | Up / Down / None |
 | `State` | `Idle`, `Moving`, `DoorsOpen` |
 | `Passengers` | Up to capacity 8 |
-| Motion | **1 floor per 2 game minutes** default (tunable); doors dwell **1 game minute** |
+| Motion | **0.75 game minutes** approaching a planned stop; **0.35** when passing floors with no stop; doors dwell **0.25** (~15 simulated seconds) |
 
 **Dispatch (simplified):**
 
