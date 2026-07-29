@@ -1,7 +1,7 @@
 # Build-A-Tower — Slice #4 Design
 
 **Date:** 2026-07-29  
-**Status:** Approved (implement)  
+**Status:** Done  
 **Depends on:** Slice #3 (elevators, TransitRouter, agents, Floor G lobby, selector)  
 **Engine target:** Unity (2D Tilemap), desktop/Editor-first  
 **Approach:** Lightweight `EconomySystem` + `StarSystem` on the existing sim (not full tower-together ledgers)

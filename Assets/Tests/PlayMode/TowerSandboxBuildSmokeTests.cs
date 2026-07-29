@@ -54,6 +54,11 @@ namespace BuildATower.Tests
             Assert.That(sim.Clock, Is.Not.Null);
             Assert.That(sim.Pathfinder.TryFindPath(new Vector2Int(5, 0), new Vector2Int(0, 1), out _), Is.True);
 
+            var beforeMidnight = build.Wallet.Balance;
+            sim.Economy.OnNewDay(build.Grid, sim.Agents.Agents, build.Wallet);
+            Assert.That(sim.Economy.LastIncome, Is.GreaterThan(0), "Occupied office should pay rent at midnight.");
+            Assert.That(build.Wallet.Balance, Is.GreaterThan(beforeMidnight));
+
             var afterBuild = build.Wallet.Balance;
             Assert.That(build.TryDemolishAt(new Vector2Int(0, 1)), Is.True);
             Assert.That(build.Wallet.Balance, Is.EqualTo(afterBuild));
