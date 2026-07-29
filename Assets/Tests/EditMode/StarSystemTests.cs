@@ -80,5 +80,17 @@ namespace BuildATower.Tests
 
             Assert.IsTrue(stars.CanBuild(elevator));
         }
+
+        [TestCase(-1, 0)]
+        [TestCase(1, 1)]
+        [TestCase(3, StarSystem.MaxStars)]
+        public void ForceStars_clamps_requested_test_tier(int requestedStars, int expectedStars)
+        {
+            var stars = new StarSystem();
+
+            stars.ForceStars(requestedStars);
+
+            Assert.AreEqual(expectedStars, stars.CurrentStars);
+        }
     }
 }

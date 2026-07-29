@@ -85,6 +85,7 @@ namespace BuildATower.Tests
                 Is.False,
                 "A 4-floor trip should not route before any shaft exists.");
 
+            sim.Stars.ForceStars(1);
             build.SetRoomType(elevator);
             Assert.That(build.TryPlaceSelected(new Vector2Int(5, 0)), Is.True);
             Assert.That(build.Grid.TryGetRoomAt(new Vector2Int(5, 0), out var shaftCell), Is.True);

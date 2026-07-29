@@ -35,6 +35,11 @@ namespace BuildATower
         public bool CanBuild(RoomTypeSO type) =>
             type == null || CurrentStars >= type.requiredStars;
 
+        public void ForceStars(int stars)
+        {
+            CurrentStars = System.Math.Clamp(stars, 0, MaxStars);
+        }
+
         static bool MeetsCriteria(int stars, TowerGrid grid, float averageStress, int population)
         {
             if (grid == null || !grid.HasLobby) return false;

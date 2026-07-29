@@ -275,7 +275,11 @@ namespace BuildATower
 
             var simulation = GetComponent<TowerSimulation>();
             if (simulation?.Stars != null && !simulation.Stars.CanBuild(SelectedRoomType))
+            {
+                HelpText = $"Needs {SelectedRoomType.requiredStars}★.";
+                StateChanged?.Invoke();
                 return false;
+            }
 
             var cost = SelectedRoomType.buildCost *
                        (SelectedRoomType.isElevatorShaft ? SelectedRoomType.size.y : 1);
