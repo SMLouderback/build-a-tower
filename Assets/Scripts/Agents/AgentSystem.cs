@@ -39,7 +39,7 @@ namespace BuildATower
             _elevators = router.Elevators;
         }
 
-        public void SyncHomes(TowerGrid grid)
+        public void SyncHomes(TowerGrid grid, System.Action<RoomInstance> onNewCondoResident = null)
         {
             var livingRooms = new HashSet<RoomInstance>();
             foreach (var room in grid.Rooms)
@@ -80,6 +80,8 @@ namespace BuildATower
                     }
 
                     _agents.Add(agent);
+                    if (role == AgentRole.CondoResident)
+                        onNewCondoResident?.Invoke(room);
                     existing++;
                 }
             }

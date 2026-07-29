@@ -18,10 +18,15 @@ namespace BuildATower
         ElevatorSystem _elevators;
         TransitRouter _router;
         AgentSystem _agents;
+        EconomySystem _economy;
+        StarSystem _stars;
+        int _lastDayIndex;
         bool _subscribed;
 
         public GameClock Clock => _clock;
         public AgentSystem Agents => _agents;
+        public EconomySystem Economy => _economy;
+        public StarSystem Stars => _stars;
         public StairsPathfinder Pathfinder => _pathfinder;
         public ElevatorSystem Elevators => _elevators;
         public TransitRouter Router => _router;
@@ -36,6 +41,10 @@ namespace BuildATower
             _pathfinder = new StairsPathfinder();
             _router = new TransitRouter(_pathfinder, _elevators);
             _agents = new AgentSystem(_router);
+            _economy = new EconomySystem();
+            _stars = new StarSystem();
+            _lastDayIndex = _clock.DayIndex;
+            _clock.DayRolled += OnDayRolled;
 
             if (agentView == null)
             {
@@ -70,6 +79,12 @@ namespace BuildATower
             }
         }
 
+        void OnDestroy()
+        {
+            if (_clock != null)
+                _clock.DayRolled -= OnDayRolled;
+        }
+
         void Update()
         {
             if (build?.Grid == null || _clock == null || _agents == null) return;
@@ -91,7 +106,22 @@ namespace BuildATower
         {
             if (build?.Grid == null || _router == null || _agents == null) return;
             _router.Rebuild(build.Grid);
-            _agents.SyncHomes(build.Grid);
+            _agents.SyncHomes(build.Grid, room => _economy?.TrySellCondo(room, build.Wallet));
+        }
+
+        void OnDayRolled()
+        {
+            if (build?.Grid == null || _agents == null || _economy == null || _stars == null)
+                return;
+
+            for (var day = _lastDayIndex + 1; day <= _clock.DayIndex; day++)
+            {
+                _economy.OnNewDay(build.Grid, _agents.Agents, build.Wallet);
+                if (day > 0 && day % StarSystem.QuarterDays == 0)
+                    _stars.Evaluate(build.Grid, _agents.AverageStress, _agents.Agents.Count);
+            }
+
+            _lastDayIndex = _clock.DayIndex;
         }
     }
 }
