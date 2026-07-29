@@ -248,5 +248,14 @@ namespace BuildATower.Tests
             // Office starting at 10 on floor 1 is fine (lobby below).
             Assert.IsTrue(grid.CanPlace(Office(), new Vector2Int(10, 1)));
         }
+
+        [Test]
+        public void Scrollbar_center_range_keeps_camera_view_inside_padded_bounds()
+        {
+            var range = CutawayCamera.GetScrollableCenterRange(-5f, 40f, 20f);
+
+            Assert.AreEqual(5f, range.x);
+            Assert.AreEqual(30f, range.y);
+        }
     }
 }

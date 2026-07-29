@@ -875,9 +875,10 @@ namespace BuildATower
 
         bool IsPointerOverHud(Vector3 screen)
         {
-            if (hud == null) return false;
             var guiPoint = new Vector2(screen.x, Screen.height - screen.y);
-            return hud.PanelScreenRect.Contains(guiPoint);
+            return (hud != null && hud.PanelScreenRect.Contains(guiPoint)) ||
+                   CutawayCamera.HorizontalScrollbarScreenRect.Contains(guiPoint) ||
+                   CutawayCamera.VerticalScrollbarScreenRect.Contains(guiPoint);
         }
 
         Vector2Int ScreenToCell(Vector3 screen)
