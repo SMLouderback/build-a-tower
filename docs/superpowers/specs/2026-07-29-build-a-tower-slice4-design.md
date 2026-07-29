@@ -20,6 +20,7 @@ In Play mode a player can:
 4. Lose a star on a failed quarterly check for the current tier.
 5. Be **blocked** from placing elevators (and other `requiredStars ≥ 1` content) until 1★; blocked from 2★ premium variants until 2★.
 6. See ★, population, average stress, and last income/expense summary on the HUD.
+7. **Control time** with preset speed buttons and **pan** the view with scrollbars to build/test wider and taller towers.
 
 ## 2. Product decisions (locked)
 
@@ -37,6 +38,8 @@ In Play mode a player can:
 | Multi-car / express / research / parking / casinos | Out of scope |
 | Full income/expense ledgers / rent-tier UI | Out of scope |
 | Retail `TrafficVariable` payouts | Out of scope (rooms may exist but pay $0) |
+| Sandbox time control | Preset buttons: Pause · 1x · 2x · 5x · 10x · 60x |
+| Sandbox camera | Horizontal + vertical scrollbars to pan; keep existing RMB/MMB drag + scroll zoom |
 
 ## 3. Economy
 
@@ -172,6 +175,26 @@ Show:
 
 Help text when a locked tool is clicked: `Needs N★`.
 
+## 6b. Sandbox controls (time + camera)
+
+Required so quarterly stars and tall/wide towers are testable in Play Mode.
+
+### Time speed
+
+- HUD buttons: **Pause · 1x · 2x · 5x · 10x · 60x**
+- Pause sets `GameClock.Paused = true` (already exists).
+- Speeds set a mutable `MinutesPerRealSecond` on `GameClock` (today the field is constructor-readonly — expose a setter; base 1x = current default `1` game minute per real second).
+- 60x is for jumping through nights/quarters while watching HUD income/stars.
+- Active speed highlighted on the HUD.
+
+### Camera pan scrollbars
+
+- Add **horizontal** scrollbar (bottom) and **vertical** scrollbar (right edge of Game view, clear of the left HUD panel).
+- Scrollbars pan the orthographic `worldCamera` used by `BuildController`.
+- Pan range expands with tower bounds: at least lobby `MinX..MaxX` plus padding, and floors from deepest basement to highest room + padding (fallback guide range if empty).
+- Keep existing RMB/MMB drag pan and scroll-zoom if already present; scrollbars are the reliable testing affordance for large towers.
+- Zoom unchanged by scrollbars (scroll wheel still zooms if implemented).
+
 ## 7. Files (expected)
 
 | File | Role |
@@ -182,9 +205,11 @@ Help text when a locked tool is clicked: `Needs N★`.
 | `Assets/Scripts/Core/RoomInstance.cs` | Optional `CondoSold` flag |
 | `Assets/Scripts/Simulation/TowerSimulation.cs` | Wire day/quarter hooks |
 | `Assets/Scripts/Build/BuildController.cs` | Gate placement |
-| `Assets/Scripts/UI/TowerHudController.cs` | ★ / pop / stress / net |
+| `Assets/Scripts/UI/TowerHudController.cs` | ★ / pop / stress / net + time speed buttons |
+| `Assets/Scripts/Camera/TowerCameraController.cs` | Scrollbar pan + optional drag/zoom glue |
+| `Assets/Scripts/Time/GameClock.cs` | Mutable speed + pause wiring |
 | `Assets/Scripts/Agents/AgentSystem.cs` | Notify condo sale |
-| Tests under `Assets/Tests/EditMode/` | Economy + stars + gate |
+| Tests under `Assets/Tests/EditMode/` | Economy + stars + gate + clock speed |
 | Spec / README | This doc + play steps |
 
 ## 8. Testing
@@ -192,7 +217,9 @@ Help text when a locked tool is clicked: `Needs N★`.
 - EditMode: midnight income for occupied office; elevator upkeep; condo sale once only.
 - EditMode: day 90 grants 1★ with pop/stress/lobby; fails without; demotes when stress too high.
 - EditMode: cannot place elevator at 0★; can at 1★.
+- EditMode: GameClock speed presets change minutes advanced per real second; pause stops advance.
 - PlayMode smoke: advance clock across midnight → balance changes; optional star bump when thresholds forced in test setup.
+- Manual: time buttons + scrollbars let you reach a tall wide tower and a quarterly star check.
 
 ## 9. Non-goals
 
