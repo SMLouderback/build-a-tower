@@ -16,10 +16,10 @@ MonoBehaviour:
   displayName: Premium Hotel
   category: 3
   size: {x: 4, y: 1}
-  buildCost: 40000
+  buildCost: 50000
   placeholderColor: {r: 0.78039217, g: 0.2509804, b: 0.32156864, a: 1}
   incomeModel: 2
-  baseIncome: 4000
+  baseIncome: 4500
   noiseOutput: 0
   noiseSensitivity: 0
   requiresHousekeeping: 1

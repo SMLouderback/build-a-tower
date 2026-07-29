@@ -238,5 +238,7 @@ Required so quarterly stars and tall/wide towers are testable in Play Mode.
 | 1★ max avg stress | 40 |
 | 2★ population | 30 |
 | 2★ max avg stress | 25 |
-| Elevator daily upkeep | 10_000 |
+| Elevator daily upkeep | 10_000 (retuned to 3_000 — see below) |
 | Quarter length days | 90 |
+
+**Superseded by:** `2026-07-29-star-goals-economy-hud-design.md` retunes build costs, incomes, and elevator upkeep, and changes star timing to instant promote / quarterly-only demote.

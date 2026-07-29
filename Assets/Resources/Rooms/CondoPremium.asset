@@ -16,10 +16,10 @@ MonoBehaviour:
   displayName: Premium Condo
   category: 2
   size: {x: 16, y: 1}
-  buildCost: 160000
+  buildCost: 120000
   placeholderColor: {r: 0.2509804, g: 0.5686275, b: 0.32156864, a: 1}
   incomeModel: 3
-  baseIncome: 500000
+  baseIncome: 200000
   noiseOutput: 0
   noiseSensitivity: 0.8
   requiresHousekeeping: 0

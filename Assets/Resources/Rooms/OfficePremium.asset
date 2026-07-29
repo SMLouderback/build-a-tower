@@ -16,10 +16,10 @@ MonoBehaviour:
   displayName: Premium Office
   category: 1
   size: {x: 9, y: 1}
-  buildCost: 80000
+  buildCost: 60000
   placeholderColor: {r: 0.18039216, g: 0.41960785, b: 0.6784314, a: 1}
   incomeModel: 1
-  baseIncome: 12000
+  baseIncome: 5000
   noiseOutput: 0
   noiseSensitivity: 0
   requiresHousekeeping: 0

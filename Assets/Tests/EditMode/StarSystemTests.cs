@@ -34,36 +34,60 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void Evaluate_grants_one_star_when_thresholds_met()
+        public void TryPromote_grants_one_star_when_thresholds_met()
         {
             var stars = new StarSystem();
 
-            stars.Evaluate(GridWithLobby(), averageStress: 10f, population: 10);
+            Assert.IsTrue(stars.TryPromote(GridWithLobby(), averageStress: 10f, population: 10));
 
             Assert.AreEqual(1, stars.CurrentStars);
         }
 
         [Test]
-        public void Evaluate_demotes_when_current_tier_fails()
+        public void TryPromote_never_demotes_when_current_tier_fails()
         {
             var stars = new StarSystem();
             var grid = GridWithLobby();
-            stars.Evaluate(grid, averageStress: 10f, population: 10);
+            stars.TryPromote(grid, averageStress: 10f, population: 10);
 
-            stars.Evaluate(grid, averageStress: 50f, population: 10);
+            Assert.IsFalse(stars.TryPromote(grid, averageStress: 90f, population: 1));
+
+            Assert.AreEqual(1, stars.CurrentStars);
+        }
+
+        [Test]
+        public void EvaluateQuarterly_demotes_when_current_tier_fails()
+        {
+            var stars = new StarSystem();
+            var grid = GridWithLobby();
+            stars.TryPromote(grid, averageStress: 10f, population: 10);
+
+            stars.EvaluateQuarterly(grid, averageStress: 50f, population: 10);
 
             Assert.AreEqual(0, stars.CurrentStars);
         }
 
         [Test]
-        public void Evaluate_promotes_to_two_stars_when_elevator_thresholds_met()
+        public void EvaluateQuarterly_keeps_tier_when_criteria_still_met()
+        {
+            var stars = new StarSystem();
+            var grid = GridWithLobby();
+            stars.TryPromote(grid, averageStress: 10f, population: 10);
+
+            stars.EvaluateQuarterly(grid, averageStress: 10f, population: 10);
+
+            Assert.AreEqual(1, stars.CurrentStars);
+        }
+
+        [Test]
+        public void TryPromote_reaches_two_stars_when_elevator_thresholds_met()
         {
             var stars = new StarSystem();
             var grid = GridWithLobby();
             Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out _));
-            stars.Evaluate(grid, averageStress: 10f, population: 10);
+            stars.TryPromote(grid, averageStress: 10f, population: 10);
 
-            stars.Evaluate(grid, averageStress: 25f, population: 30);
+            stars.TryPromote(grid, averageStress: 25f, population: 30);
 
             Assert.AreEqual(2, stars.CurrentStars);
         }
@@ -76,9 +100,43 @@ namespace BuildATower.Tests
 
             Assert.IsFalse(stars.CanBuild(elevator));
 
-            stars.Evaluate(GridWithLobby(), averageStress: 10f, population: 10);
+            stars.TryPromote(GridWithLobby(), averageStress: 10f, population: 10);
 
             Assert.IsTrue(stars.CanBuild(elevator));
+        }
+
+        [Test]
+        public void FormatNextStarGoal_shows_progress_toward_next_tier()
+        {
+            var stars = new StarSystem();
+
+            var goal = stars.FormatNextStarGoal(GridWithLobby(), averageStress: 12f, population: 4);
+
+            StringAssert.Contains("1★", goal);
+            StringAssert.Contains($"Pop 4/{StarSystem.OneStarPopulation}", goal);
+            StringAssert.Contains("Stress 12/40", goal);
+        }
+
+        [Test]
+        public void FormatNextStarGoal_lists_elevator_for_two_star_tier()
+        {
+            var stars = new StarSystem();
+            stars.ForceStars(1);
+
+            var goal = stars.FormatNextStarGoal(GridWithLobby(), averageStress: 10f, population: 10);
+
+            StringAssert.Contains("Elevator", goal);
+        }
+
+        [Test]
+        public void FormatNextStarGoal_reports_max_tier()
+        {
+            var stars = new StarSystem();
+            stars.ForceStars(StarSystem.MaxStars);
+
+            StringAssert.Contains(
+                "max tier",
+                stars.FormatNextStarGoal(GridWithLobby(), averageStress: 0f, population: 100));
         }
 
         [TestCase(-1, 0)]

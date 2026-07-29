@@ -105,6 +105,22 @@ namespace BuildATower
                 row,
                 row * 3f);
 
+            var roomButton = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = 10,
+                alignment = TextAnchor.MiddleCenter
+            };
+            const float roomBtnH = 34f;
+
+            var stars = simulation?.Stars;
+            var agents = simulation?.Agents;
+            var population = agents != null ? agents.Agents.Count : 0;
+            var averageStress = agents != null ? agents.AverageStress : 0f;
+            var starGoalLines = stars != null
+                ? stars.FormatNextStarGoal(build.Grid, averageStress, population).Split('\n')
+                : new[] { "Next ★: —" };
+            var economyLines = SelectedEconomyLines(build.SelectedRoomType);
+
             var roomCount = _roomButtons.Count;
             var roomRows = Mathf.Max(1, (roomCount + 1) / 2);
             var selection = build.GetSelectionSummary();
@@ -122,10 +138,12 @@ namespace BuildATower
                 row +
                 helpHeight + 4f +
                 row * 7f +
+                row * starGoalLines.Length +
+                row * economyLines.Count +
                 btnH + 4f +
                 selectionExtra +
                 4f + row +
-                roomRows * (btnH + 4f) +
+                roomRows * (roomBtnH + 4f) +
                 4f + row +
                 btnH + // Selector
                 4f + btnH + // Stairs tool
@@ -149,12 +167,17 @@ namespace BuildATower
             GUI.Label(new Rect(cx, cy, inner, row), $"Funds: ${build.Wallet.Balance:N0}", label);
             cy += row;
 
-            var stars = simulation?.Stars;
             GUI.Label(
                 new Rect(cx, cy, inner, row),
-                stars != null ? $"Stars: {stars.CurrentStars}/2" : "Stars: —",
+                stars != null ? $"Stars: {stars.CurrentStars}/{StarSystem.MaxStars}" : "Stars: —",
                 label);
             cy += row;
+
+            foreach (var goalLine in starGoalLines)
+            {
+                GUI.Label(new Rect(cx, cy, inner, row), goalLine, label);
+                cy += row;
+            }
 
             var clockText = simulation?.Clock != null ? simulation.Clock.FormatHud() : "—";
             GUI.Label(new Rect(cx, cy, inner, row), $"Time: {clockText}", label);
@@ -189,6 +212,12 @@ namespace BuildATower
             var roomName = build.SelectedRoomType != null ? build.SelectedRoomType.displayName : "—";
             GUI.Label(new Rect(cx, cy, inner, row), $"Tool: {build.CurrentTool} / {roomName}", label);
             cy += row;
+
+            foreach (var economyLine in economyLines)
+            {
+                GUI.Label(new Rect(cx, cy, inner, row), economyLine, label);
+                cy += row;
+            }
 
             if (build.HoverCell.HasValue)
             {
@@ -236,15 +265,16 @@ namespace BuildATower
                 if (room == null) continue;
                 // Stairs also has a Tools button; keep it in Rooms grid too for discoverability.
                 var captured = room;
-                var labelText = ShortLabel(room.displayName);
+                var nameText = ShortLabel(room.displayName);
                 var bw = (inner - 4f) * 0.5f;
                 var bx = cx + col * (bw + 4f);
                 var canBuild = stars == null || stars.CanBuild(room);
                 if (!canBuild)
-                    labelText = $"{labelText} ({room.requiredStars}★)";
+                    nameText = $"{nameText} ({room.requiredStars}★)";
+                var labelText = $"{nameText}\n{RoomEconomyFormat.ButtonTag(room)}";
                 var wasEnabled = GUI.enabled;
                 GUI.enabled = wasEnabled && canBuild;
-                if (GUI.Button(new Rect(bx, rowY, bw, btnH), labelText))
+                if (GUI.Button(new Rect(bx, rowY, bw, roomBtnH), labelText, roomButton))
                     build.SetRoomType(captured);
                 GUI.enabled = wasEnabled;
 
@@ -252,11 +282,11 @@ namespace BuildATower
                 if (col >= 2)
                 {
                     col = 0;
-                    rowY += btnH + 4f;
+                    rowY += roomBtnH + 4f;
                 }
             }
 
-            if (col != 0) rowY += btnH + 4f;
+            if (col != 0) rowY += roomBtnH + 4f;
             cy = rowY + 4f;
 
             GUI.Label(new Rect(cx, cy, inner, row), "Tools", title);
@@ -319,6 +349,21 @@ namespace BuildATower
                 if (GUI.Toggle(rect, active, labels[i], GUI.skin.button) && !active)
                     simulation.SetSpeedPreset(speeds[i], paused: i == 0);
             }
+        }
+
+        static List<string> SelectedEconomyLines(RoomTypeSO type)
+        {
+            var lines = new List<string>();
+            if (type == null) return lines;
+
+            lines.Add(RoomEconomyFormat.CostLine(type));
+            lines.Add(RoomEconomyFormat.IncomeLine(type));
+
+            var upkeep = RoomEconomyFormat.UpkeepLine(type);
+            if (upkeep != null)
+                lines.Add(upkeep);
+
+            return lines;
         }
 
         static string ShortLabel(string displayName)

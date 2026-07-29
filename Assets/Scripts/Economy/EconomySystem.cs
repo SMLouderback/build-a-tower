@@ -4,7 +4,7 @@ namespace BuildATower
 {
     public sealed class EconomySystem
     {
-        public const int ElevatorDailyUpkeep = 10_000;
+        public const int ElevatorDailyUpkeep = 3_000;
 
         public int LastIncome { get; private set; }
         public int LastExpense { get; private set; }

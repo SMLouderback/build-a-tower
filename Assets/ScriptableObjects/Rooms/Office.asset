@@ -19,7 +19,7 @@ MonoBehaviour:
   buildCost: 40000
   placeholderColor: {r: 0.23921569, g: 0.5529412, b: 0.8901961, a: 1}
   incomeModel: 1
-  baseIncome: 5000
+  baseIncome: 3000
   noiseOutput: 0
   noiseSensitivity: 0
   requiresHousekeeping: 0

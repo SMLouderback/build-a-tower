@@ -6,6 +6,7 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 - Slice #3: `docs/superpowers/specs/2026-07-28-build-a-tower-slice3-design.md`
 - Slice #4: `docs/superpowers/specs/2026-07-29-build-a-tower-slice4-design.md`
 - Selector + elevator maintenance resize: `docs/superpowers/specs/2026-07-29-selector-elevator-maintenance-design.md`
+- Star goals + economy HUD retune: `docs/superpowers/specs/2026-07-29-star-goals-economy-hud-design.md`
 - SimTower behavior reference (tower-together): `docs/reference/tower-together/`
 - Slice #3 elevators checklist: `docs/reference/tower-together/SLICE3-ELEVATORS-CHECKLIST.md`
 
@@ -27,13 +28,14 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 14. Outside that window, open **Enter Maintenance** on the selected elevator. Existing queues/passengers finish; new agents will not board. When status is **Ready to shorten**, drag an edge inward (no refund; min height 2 floors), then **Exit Maintenance**.
 15. Elevator shafts span at most **30 floors** and cannot overlap stairs. Watch the gold car marker move as agents call and ride the elevator. Waiting agents form a **visible line beside the shaft** (on the side they walked in from), so long queues are easy to spot; they only enter the shaft once they board.
 16. (Optional) With the Elevator place tool still selected, drag vertically from a shaft cell to extend — same as edge handles.
-17. HUD (top-left): **Stars (0/2)**, **population**, **average stress**, and **Last Net** (yesterday income / expense summary).
-18. Each **midnight**, occupied offices and hotels pay daily rent; each elevator shaft costs **$10,000/day** upkeep — watch funds and Last Net change.
+17. HUD (top-left): **Stars (0/2)** plus a **Next ★** checklist (population / stress / facilities with ✓ or ✗), **population**, **average stress**, and **Last Net** (yesterday income / expense summary).
+18. Each **midnight**, occupied offices and hotels pay daily rent; each elevator shaft costs **$3,000/day** upkeep — watch funds and Last Net change.
 19. When a **condo** first gains a resident, you receive a **one-time sale** payout (no repeat if they move out).
-20. Every **90 game days**, a quarterly star check runs: start at **0★**; earn **1★** with ≥10 population, ≤40 avg stress, and a lobby; earn **2★** with ≥30 population, ≤25 avg stress, and at least one elevator. Failing the current tier can **demote** a star.
+20. Stars are **earned as soon as requirements are met** (start at **0★**): **1★** needs ≥10 population, ≤40 avg stress, and a lobby; **2★** needs ≥30 population, ≤25 avg stress, and at least one elevator. A star can only be **lost** at the **90-day quarterly review** if the current tier no longer qualifies.
 21. **Elevators** need **1★**; premium Office / Hotel / Condo variants need **2★** — locked buttons show the star requirement and stay grey until earned.
 22. Time presets under the clock: **|| · 1x · 2x · 5x · 10x · 60x** (pause or fast-forward; 60x helps reach midnight and quarterly checks).
 23. Pan with the **bottom horizontal** and **right vertical scrollbars** (RMB/MMB drag and scroll zoom still work) to build and inspect tall, wide towers.
+24. Room buttons show a compact **cost · income** tag (e.g. `Office $40k · $3k/d`, `Condo $80k · $150k once`, `Elevator $100k/fl · -$3k/d`); the selected tool spells out full cost, income model, and any daily upkeep.
 
 ### Important: Game view Scale
 

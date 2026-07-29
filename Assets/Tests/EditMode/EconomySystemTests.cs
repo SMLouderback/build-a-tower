@@ -44,7 +44,7 @@ namespace BuildATower.Tests
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
             so.id = "condo";
-            so.category = RoomCategory.Residential;
+            so.category = RoomCategory.Condo;
             so.size = Vector2Int.one;
             so.incomeModel = IncomeModel.UpfrontSale;
             so.baseIncome = baseIncome;
@@ -56,17 +56,17 @@ namespace BuildATower.Tests
         {
             var grid = new TowerGrid();
             grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
-            Assert.IsTrue(grid.TryPlace(Office(baseIncome: 5000), new Vector2Int(0, 1), out var office));
+            Assert.IsTrue(grid.TryPlace(Office(baseIncome: 3000), new Vector2Int(0, 1), out var office));
             var agents = new List<Agent> { new Agent(1, AgentRole.OfficeWorker, office, office.Origin) };
             var wallet = new FundsWallet(100_000);
             var economy = new EconomySystem();
 
             economy.OnNewDay(grid, agents, wallet);
 
-            Assert.AreEqual(105_000, wallet.Balance);
-            Assert.AreEqual(5000, economy.LastIncome);
+            Assert.AreEqual(103_000, wallet.Balance);
+            Assert.AreEqual(3000, economy.LastIncome);
             Assert.AreEqual(0, economy.LastExpense);
-            Assert.AreEqual(5000, economy.LastNet);
+            Assert.AreEqual(3000, economy.LastNet);
         }
 
         [Test]
@@ -80,7 +80,7 @@ namespace BuildATower.Tests
 
             economy.OnNewDay(grid, new List<Agent>(), wallet);
 
-            Assert.AreEqual(40_000, wallet.Balance);
+            Assert.AreEqual(50_000 - EconomySystem.ElevatorDailyUpkeep, wallet.Balance);
             Assert.AreEqual(0, economy.LastIncome);
             Assert.AreEqual(EconomySystem.ElevatorDailyUpkeep, economy.LastExpense);
             Assert.AreEqual(-EconomySystem.ElevatorDailyUpkeep, economy.LastNet);
@@ -89,14 +89,14 @@ namespace BuildATower.Tests
         [Test]
         public void Condo_sale_pays_once()
         {
-            var condoRoom = new RoomInstance(1, Condo(200_000), Vector2Int.zero, Vector2Int.one);
+            var condoRoom = new RoomInstance(1, Condo(150_000), Vector2Int.zero, Vector2Int.one);
             var wallet = new FundsWallet(0);
             var economy = new EconomySystem();
 
             Assert.IsTrue(economy.TrySellCondo(condoRoom, wallet));
             Assert.IsFalse(economy.TrySellCondo(condoRoom, wallet));
 
-            Assert.AreEqual(200_000, wallet.Balance);
+            Assert.AreEqual(150_000, wallet.Balance);
             Assert.IsTrue(condoRoom.CondoSold);
         }
     }

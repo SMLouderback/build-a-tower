@@ -16,7 +16,7 @@ MonoBehaviour:
   displayName: Elevator
   category: 5
   size: {x: 1, y: 2}
-  buildCost: 20000
+  buildCost: 100000
   placeholderColor: {r: 0.2, g: 0.25, b: 0.35, a: 1}
   incomeModel: 0
   baseIncome: 0
