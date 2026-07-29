@@ -43,5 +43,22 @@ namespace BuildATower.Tests
             clock.Tick(1f);
             Assert.AreEqual(5f, clock.LastTickGameMinutes);
         }
+
+        [Test]
+        public void SetSpeedPreset_updates_clock_speed_and_pause_state()
+        {
+            var gameObject = new GameObject("Simulation");
+            var simulation = gameObject.AddComponent<TowerSimulation>();
+
+            simulation.SetSpeedPreset(10f, paused: false);
+
+            Assert.IsFalse(simulation.Clock.Paused);
+            Assert.AreEqual(10f, simulation.Clock.MinutesPerRealSecond);
+
+            simulation.SetSpeedPreset(1f, paused: true);
+
+            Assert.IsTrue(simulation.Clock.Paused);
+            Object.DestroyImmediate(gameObject);
+        }
     }
 }

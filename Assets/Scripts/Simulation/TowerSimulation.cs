@@ -31,6 +31,13 @@ namespace BuildATower
         public ElevatorSystem Elevators => _elevators;
         public TransitRouter Router => _router;
 
+        public void SetSpeedPreset(float minutesPerRealSecond, bool paused)
+        {
+            _clock.Paused = paused;
+            if (!paused)
+                _clock.MinutesPerRealSecond = minutesPerRealSecond;
+        }
+
         void Awake()
         {
             if (build == null)

@@ -40,9 +40,7 @@ namespace BuildATower
             _roomButtons.Clear();
             foreach (var room in placeableRooms)
             {
-                if (room == null || room.isLobby) continue;
-                if (!_roomButtons.Contains(room))
-                    _roomButtons.Add(room);
+                AddRoomButton(room);
             }
 
             // Always expose Stairs even if the scene list ref is missing.
@@ -59,6 +57,16 @@ namespace BuildATower
                 _roomButtons.RemoveAll(r => r != null && r.id == "elevator_normal");
                 _roomButtons.Add(elevatorRoom);
             }
+
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoPremium"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelPremium"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficePremium"));
+        }
+
+        void AddRoomButton(RoomTypeSO room)
+        {
+            if (room != null && !room.isLobby && !_roomButtons.Contains(room))
+                _roomButtons.Add(room);
         }
 
         void OnGUI()
@@ -113,7 +121,8 @@ namespace BuildATower
                 8f +
                 row +
                 helpHeight + 4f +
-                row * 5f +
+                row * 7f +
+                btnH + 4f +
                 selectionExtra +
                 4f + row +
                 roomRows * (btnH + 4f) +
@@ -140,22 +149,41 @@ namespace BuildATower
             GUI.Label(new Rect(cx, cy, inner, row), $"Funds: ${build.Wallet.Balance:N0}", label);
             cy += row;
 
+            var stars = simulation?.Stars;
+            GUI.Label(
+                new Rect(cx, cy, inner, row),
+                stars != null ? $"Stars: {stars.CurrentStars}/2" : "Stars: —",
+                label);
+            cy += row;
+
             var clockText = simulation?.Clock != null ? simulation.Clock.FormatHud() : "—";
             GUI.Label(new Rect(cx, cy, inner, row), $"Time: {clockText}", label);
             cy += row;
+
+            DrawTimeSpeedButtons(cx, cy, inner, btnH);
+            cy += btnH + 4f;
 
             if (simulation?.Agents != null)
             {
                 GUI.Label(
                     new Rect(cx, cy, inner, row),
-                    $"Agents: {simulation.Agents.Agents.Count} | Stress: {simulation.Agents.AverageStress:0}",
+                    $"Population: {simulation.Agents.Agents.Count} | Stress: {simulation.Agents.AverageStress:0}",
                     label);
             }
             else
             {
-                GUI.Label(new Rect(cx, cy, inner, row), "Agents: —", label);
+                GUI.Label(new Rect(cx, cy, inner, row), "Population: —", label);
             }
 
+            cy += row;
+
+            var economy = simulation?.Economy;
+            GUI.Label(
+                new Rect(cx, cy, inner, row),
+                economy != null
+                    ? $"Last Net: ${economy.LastNet:N0} (${economy.LastIncome:N0} / -${economy.LastExpense:N0})"
+                    : "Last Net: —",
+                label);
             cy += row;
 
             var roomName = build.SelectedRoomType != null ? build.SelectedRoomType.displayName : "—";
@@ -211,8 +239,14 @@ namespace BuildATower
                 var labelText = ShortLabel(room.displayName);
                 var bw = (inner - 4f) * 0.5f;
                 var bx = cx + col * (bw + 4f);
+                var canBuild = stars == null || stars.CanBuild(room);
+                if (!canBuild)
+                    labelText = $"{labelText} ({room.requiredStars}★)";
+                var wasEnabled = GUI.enabled;
+                GUI.enabled = wasEnabled && canBuild;
                 if (GUI.Button(new Rect(bx, rowY, bw, btnH), labelText))
                     build.SetRoomType(captured);
+                GUI.enabled = wasEnabled;
 
                 col++;
                 if (col >= 2)
@@ -232,12 +266,28 @@ namespace BuildATower
                 build.SelectTool();
             cy += btnH + 4f;
 
-            if (stairsRoom != null && GUI.Button(new Rect(cx, cy, inner, btnH), "Stairs"))
-                build.SetRoomType(stairsRoom);
+            if (stairsRoom != null)
+            {
+                var wasEnabled = GUI.enabled;
+                var canBuild = stars == null || stars.CanBuild(stairsRoom);
+                GUI.enabled = wasEnabled && canBuild;
+                var stairsLabel = canBuild ? "Stairs" : $"Stairs ({stairsRoom.requiredStars}★)";
+                if (GUI.Button(new Rect(cx, cy, inner, btnH), stairsLabel))
+                    build.SetRoomType(stairsRoom);
+                GUI.enabled = wasEnabled;
+            }
             cy += btnH + 4f;
 
-            if (elevatorRoom != null && GUI.Button(new Rect(cx, cy, inner, btnH), "Elevator"))
-                build.SetRoomType(elevatorRoom);
+            if (elevatorRoom != null)
+            {
+                var wasEnabled = GUI.enabled;
+                var canBuild = stars == null || stars.CanBuild(elevatorRoom);
+                GUI.enabled = wasEnabled && canBuild;
+                var elevatorLabel = canBuild ? "Elevator" : $"Elevator ({elevatorRoom.requiredStars}★)";
+                if (GUI.Button(new Rect(cx, cy, inner, btnH), elevatorLabel))
+                    build.SetRoomType(elevatorRoom);
+                GUI.enabled = wasEnabled;
+            }
             cy += btnH + 4f;
 
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Extend Lobby"))
@@ -248,6 +298,27 @@ namespace BuildATower
                 build.SetTool(BuildTool.Bulldoze);
 
             _panelRect = new Rect(x, y, width, cy + btnH + 8f - y);
+        }
+
+        void DrawTimeSpeedButtons(float x, float y, float width, float height)
+        {
+            if (simulation?.Clock == null) return;
+
+            var labels = new[] { "||", "1x", "2x", "5x", "10x", "60x" };
+            var speeds = new[] { 0f, 1f, 2f, 5f, 10f, 60f };
+            const float gap = 4f;
+            var buttonWidth = (width - gap * (labels.Length - 1)) / labels.Length;
+            var clock = simulation.Clock;
+
+            for (var i = 0; i < labels.Length; i++)
+            {
+                var active = i == 0
+                    ? clock.Paused
+                    : !clock.Paused && Mathf.Approximately(clock.MinutesPerRealSecond, speeds[i]);
+                var rect = new Rect(x + i * (buttonWidth + gap), y, buttonWidth, height);
+                if (GUI.Toggle(rect, active, labels[i], GUI.skin.button) && !active)
+                    simulation.SetSpeedPreset(speeds[i], paused: i == 0);
+            }
         }
 
         static string ShortLabel(string displayName)
