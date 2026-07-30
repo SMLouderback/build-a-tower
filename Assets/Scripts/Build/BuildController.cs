@@ -189,11 +189,18 @@ namespace BuildATower
             var floors = minY == maxY
                 ? FloorLabel(minY)
                 : $"{FloorLabel(minY)}–{FloorLabel(maxY)}";
-            return
+            var summary =
                 $"{room.Type.displayName} #{room.InstanceId}\n" +
                 $"Origin ({room.Origin.x}, {FloorLabel(room.Origin.y)})  " +
                 $"Size {room.Size.x}×{room.Size.y}  Floors {floors}\n" +
                 $"Condition {room.Evaluation}";
+            var now = Time.realtimeSinceStartup;
+            if (RoomInstance.IsGraceRefundEligible(room.Type) && room.IsInBuildGrace(now))
+            {
+                var secs = room.PlacedAtRealtime + RoomInstance.BuildGraceSeconds - now;
+                summary += $"\nUndo refund {secs:0.0}s (${room.GraceRefundAmount():N0})";
+            }
+            return summary;
         }
 
         public string GetElevatorStatusText()

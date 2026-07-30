@@ -1,6 +1,6 @@
 # Build-Grace Demolish Refund Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Within 10 real-time seconds of placing a demolishable room, bulldoze refunds `ConstructionSpent − (LifetimeIncome − LifetimeExpense)` so mistaken builds undo cleanly without income farming.
 
@@ -39,7 +39,7 @@
 **Interfaces:**
 - Produces: `const float BuildGraceSeconds = 10f`; `float PlacedAtRealtime`; `int ConstructionSpent`; `int LifetimeIncome`; `int LifetimeExpense`; `void RecordConstructionSpend(int amount, float nowRealtime, bool isInitialPlace)`; `void RecordLifetimeIncome(int amount)`; `void RecordLifetimeExpense(int amount)`; `bool IsInBuildGrace(float nowRealtime)`; `int GraceRefundAmount()`; `void CopyBuildGraceLedgerFrom(RoomInstance source)`; `static bool IsGraceRefundEligible(RoomTypeSO type)`
 
-- [ ] **Step 1: Write failing tests for formula and eligibility**
+- [x] **Step 1: Write failing tests for formula and eligibility**
 
 ```csharp
 using BuildATower;
@@ -108,11 +108,11 @@ namespace BuildATower.Tests
 }
 ```
 
-- [ ] **Step 2: Run tests — expect compile/fail on missing API**
+- [x] **Step 2: Run tests — expect compile/fail on missing API**
 
 Roslyn typecheck or Unity EditMode filter `BuildGraceRefundTests`. Expected: missing members.
 
-- [ ] **Step 3: Implement ledger on `RoomInstance`**
+- [x] **Step 3: Implement ledger on `RoomInstance`**
 
 ```csharp
 public const float BuildGraceSeconds = 10f;
@@ -160,9 +160,9 @@ public static bool IsGraceRefundEligible(RoomTypeSO type) =>
     type != null && !type.isLobby && !type.isScaffolding;
 ```
 
-- [ ] **Step 4: Re-run tests — expect PASS**
+- [x] **Step 4: Re-run tests — expect PASS**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Assets/Scripts/Core/RoomInstance.cs Assets/Tests/EditMode/BuildGraceRefundTests.cs Assets/Tests/EditMode/BuildGraceRefundTests.cs.meta
@@ -182,7 +182,7 @@ git commit -m "feat: add RoomInstance build-grace ledger helpers"
 - Consumes: `RoomInstance.RecordLifetimeIncome` / `RecordLifetimeExpense` / `CopyBuildGraceLedgerFrom`
 - Produces: midnight + condo sale update lifetime; elevator resize preserves ledger
 
-- [ ] **Step 1: Failing test — condo sale bumps lifetime; resize copies ledger**
+- [x] **Step 1: Failing test — condo sale bumps lifetime; resize copies ledger**
 
 ```csharp
 [Test]
@@ -210,9 +210,9 @@ public void Elevator_resize_preserves_build_grace_ledger()
 
 Implement the elevator test using the same lobby/elevator helpers as `ElevatorTests.cs` (copy minimal `Lobby()` / `Elevator()` factories).
 
-- [ ] **Step 2: Run — expect fail (LifetimeIncome still 0 / ledger wiped)**
+- [x] **Step 2: Run — expect fail (LifetimeIncome still 0 / ledger wiped)**
 
-- [ ] **Step 3: Wire `EconomySystem`**
+- [x] **Step 3: Wire `EconomySystem`**
 
 In `OnNewDay`, when assigning elevator upkeep / room income, also:
 
@@ -228,7 +228,7 @@ In `TrySellCondo` after computing `amount`:
 room.RecordLifetimeIncome(amount);
 ```
 
-- [ ] **Step 4: Wire `TowerGrid.TryResizeElevator` ledger copy**
+- [x] **Step 4: Wire `TowerGrid.TryResizeElevator` ledger copy**
 
 Before `RemoveRoom(shaft)`, capture ledger via locals or keep reference. After `PlaceElevator(...)` returns the new instance, call `elevator.CopyBuildGraceLedgerFrom(shaft)` (shaft object still holds old field values even after removal from grid).
 
@@ -241,7 +241,7 @@ elevator.CopyBuildGraceLedgerFrom(previous);
 
 Change `TryResizeElevator` to use the `PlaceElevator` return value (today it discards it).
 
-- [ ] **Step 5: Tests PASS — Commit**
+- [x] **Step 5: Tests PASS — Commit**
 
 ```bash
 git commit -m "feat: track lifetime income/expense; preserve ledger on elevator resize"
@@ -259,7 +259,7 @@ git commit -m "feat: track lifetime income/expense; preserve ledger on elevator 
 - Consumes: ledger helpers; `Time.realtimeSinceStartup`
 - Produces: `TryPlaceSelected` / elevator grow paths stamp spend; `TryDemolishAt` pays grace refund
 
-- [ ] **Step 1: Failing integration-style tests**
+- [x] **Step 1: Failing integration-style tests**
 
 Prefer testing through `BuildController` if EditMode can construct it with a stub view; if MonoBehaviour wiring is heavy, extract a small static/helper used by controller:
 
@@ -294,7 +294,7 @@ public void Demolish_after_grace_refunds_zero()
 }
 ```
 
-- [ ] **Step 2: Implement `BuildGraceRefund.WalletDelta` + wire controller**
+- [x] **Step 2: Implement `BuildGraceRefund.WalletDelta` + wire controller**
 
 After successful `Grid.TryDemolishAt` in `TryDemolishAt`, before visuals:
 
@@ -304,7 +304,7 @@ if (delta > 0) Wallet.Add(delta);
 else if (delta < 0) Wallet.Subtract(-delta); // Add() ignores negatives; Subtract floors at 0
 ```
 
-- [ ] **Step 3: Stamp construction on place**
+- [x] **Step 3: Stamp construction on place**
 
 In `TryPlaceSelected` after successful `TryPlace`:
 
@@ -320,7 +320,7 @@ shaft.RecordConstructionSpend(cost, Time.realtimeSinceStartup, isInitialPlace: f
 
 (Do **not** stamp lobby place/extend for refund eligibility.)
 
-- [ ] **Step 4: Tests PASS — Commit**
+- [x] **Step 4: Tests PASS — Commit**
 
 ```bash
 git commit -m "feat: grace demolish refund and construction spend stamping"
@@ -335,7 +335,7 @@ git commit -m "feat: grace demolish refund and construction spend stamping"
 - Modify: `Assets/Scripts/UI/TowerHudController.cs` only if summary is insufficient
 - Modify: `README.md`
 
-- [ ] **Step 1: When selected room in grace, append undo line**
+- [x] **Step 1: When selected room in grace, append undo line**
 
 In `GetSelectionSummary`, after condition line:
 
@@ -350,11 +350,11 @@ if (RoomInstance.IsGraceRefundEligible(room.Type) && room.IsInBuildGrace(now))
 
 Bulldoze help when a room is selected is optional; at minimum Selection shows the line.
 
-- [ ] **Step 2: README play bullet**
+- [x] **Step 2: README play bullet**
 
 Add after bulldoze / place steps: within **10 real-time seconds** of placing a room, bulldoze refunds build cost minus that room’s net earnings/upkeep; after the window, demolish stays $0.
 
-- [ ] **Step 3: Roslyn typecheck Scripts + EditMode — Commit**
+- [x] **Step 3: Roslyn typecheck Scripts + EditMode — Commit**
 
 ```bash
 git commit -m "docs: build-grace undo hint and README"
@@ -364,9 +364,9 @@ git commit -m "docs: build-grace undo hint and README"
 
 ### Task 5: Closeout
 
-- [ ] Roslyn typecheck clean (exclude `UnityEngine.dll` when referencing modules)
-- [ ] Focused EditMode coverage: formula, timer, extension non-refresh, lifetime bumps, resize copy, wallet delta
-- [ ] Final commit if needed; push only when asked
+- [x] Roslyn typecheck clean (exclude `UnityEngine.dll` when referencing modules)
+- [x] Focused EditMode coverage: formula, timer, extension non-refresh, lifetime bumps, resize copy, wallet delta
+- [x] Final commit if needed; push only when asked
 
 ## Spec coverage checklist
 
