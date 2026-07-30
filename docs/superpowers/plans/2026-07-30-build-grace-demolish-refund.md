@@ -300,11 +300,9 @@ After successful `Grid.TryDemolishAt` in `TryDemolishAt`, before visuals:
 
 ```csharp
 var delta = BuildGraceRefund.WalletDelta(removed, Time.realtimeSinceStartup);
-if (delta != 0)
-    Wallet.Add(delta);
+if (delta > 0) Wallet.Add(delta);
+else if (delta < 0) Wallet.Subtract(-delta); // Add() ignores negatives; Subtract floors at 0
 ```
-
-Note: `Wallet.Add` must accept negative amounts (clawback). If `Add` rejects negatives, use `Subtract` when `delta < 0` or fix `FundsWallet` to allow signed adjust — check existing `FundsWallet` API and use the method that can reduce balance (condo clawback can make delta negative).
 
 - [ ] **Step 3: Stamp construction on place**
 
