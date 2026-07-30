@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace BuildATower
 {
     /// <summary>
@@ -24,9 +26,80 @@ namespace BuildATower
                 case IncomeModel.QuarterlyRent when type.baseIncome > 0:
                 case IncomeModel.NightlyRate when type.baseIncome > 0:
                     return $"Income: ${type.baseIncome:N0} / day occupied";
+                case IncomeModel.TrafficVariable:
+                    return "Income: Traffic-based (not active yet)";
                 default:
                     return "Income: —";
             }
+        }
+
+        public static List<string> SelectedUnitLines(
+            RoomInstance room,
+            IReadOnlyList<Agent> agents,
+            EconomySystem economy)
+        {
+            var lines = new List<string>();
+            if (room?.Type == null) return lines;
+
+            var type = room.Type;
+            lines.Add($"Built cost: ${ConstructionCost(room):N0}");
+            lines.Add(IncomeLine(type));
+
+            var upkeep = UpkeepLine(type);
+            if (upkeep != null)
+                lines.Add(upkeep);
+
+            switch (type.incomeModel)
+            {
+                case IncomeModel.QuarterlyRent:
+                case IncomeModel.NightlyRate:
+                    var occupants = CountHomeAgents(room, agents);
+                    lines.Add(occupants > 0
+                        ? $"Status: Occupied ({occupants})"
+                        : "Status: Vacant — no income");
+                    break;
+                case IncomeModel.UpfrontSale:
+                    lines.Add(room.CondoSold
+                        ? "Status: Sold"
+                        : CountHomeAgents(room, agents) > 0
+                            ? "Status: Buyer moving in — no payout yet"
+                            : "Status: For sale — no payout yet");
+                    break;
+                case IncomeModel.TrafficVariable:
+                    lines.Add("Status: Traffic income inactive ($0)");
+                    break;
+                default:
+                    lines.Add("Status: Non-revenue unit");
+                    break;
+            }
+
+            var income = economy?.GetLastRoomIncome(room) ?? 0;
+            var expense = economy?.GetLastRoomExpense(room) ?? 0;
+            lines.Add($"Last contribution: +${income:N0} / -${expense:N0} = ${income - expense:N0}");
+            return lines;
+        }
+
+        static int ConstructionCost(RoomInstance room)
+        {
+            if (room.Type.isElevatorShaft)
+                return room.Type.buildCost * room.Size.y;
+            if (room.Type.isLobby)
+                return room.Type.buildCost * room.Size.x;
+            return room.Type.buildCost;
+        }
+
+        static int CountHomeAgents(RoomInstance room, IReadOnlyList<Agent> agents)
+        {
+            if (agents == null) return 0;
+
+            var count = 0;
+            foreach (var agent in agents)
+            {
+                if (agent.HomeRoom == room)
+                    count++;
+            }
+
+            return count;
         }
 
         /// <summary>Returns null for room types that carry no recurring upkeep.</summary>

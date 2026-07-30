@@ -19,6 +19,7 @@ namespace BuildATower
         public int WorkedMinutes { get; set; }
         public int CheckInDay { get; set; } = -1;
         public bool CheckedOutToday { get; set; }
+        public bool HasMovedIn { get; set; }
 
         public List<Vector2Int> Path { get; set; }
         public int PathIndex { get; set; }

@@ -7,6 +7,10 @@ namespace BuildATower
     {
         public const float StressGainPerSecond = 12f;
         public const float StressDecayPerSecond = 4f;
+        /// <summary>
+        /// Walk speed in cells per game minute. At 1x (1 game minute / real second) this
+        /// matches the old cells-per-real-second feel; faster presets scale movement with the clock.
+        /// </summary>
         public const float MoveCellsPerSecond = 2.5f;
 
         /// <summary>Distance from shaft centre to the first waiter, so the line starts outside the shaft cell.</summary>
@@ -17,10 +21,26 @@ namespace BuildATower
         readonly TransitRouter _router;
         readonly ElevatorSystem _elevators;
         readonly System.Random _rng = new(42);
+        readonly HashSet<int> _condoMoveInsNotified = new();
+        System.Action<RoomInstance> _onCondoResidentMovedIn;
         int _nextId = 1;
         int _lastTotalMinutes = int.MinValue;
 
         public IReadOnlyList<Agent> Agents => _agents;
+        public int Population
+        {
+            get
+            {
+                var count = 0;
+                foreach (var agent in _agents)
+                {
+                    if (agent.Role != AgentRole.CondoResident || agent.HasMovedIn)
+                        count++;
+                }
+
+                return count;
+            }
+        }
 
         public float AverageStress
         {
@@ -41,6 +61,7 @@ namespace BuildATower
 
         public void SyncHomes(TowerGrid grid, System.Action<RoomInstance> onNewCondoResident = null)
         {
+            _onCondoResidentMovedIn = onNewCondoResident;
             var livingRooms = new HashSet<RoomInstance>();
             foreach (var room in grid.Rooms)
             {
@@ -65,29 +86,43 @@ namespace BuildATower
                 foreach (var a in _agents)
                     if (ReferenceEquals(a.HomeRoom, room)) existing++;
 
+                if (role == AgentRole.CondoResident &&
+                    !room.CondoSold &&
+                    existing == 0 &&
+                    !CanReachCondoFromLobby(grid, room))
+                    continue;
+
                 var want = Mathf.Max(1, room.Type.maxOccupants);
                 while (existing < want)
                 {
                     var homeCell = HomeCell(room, existing);
                     var agent = new Agent(_nextId++, role, room, homeCell);
                     ConfigureSchedule(agent);
-                    if (role == AgentRole.CondoResident)
-                    {
-                        agent.Phase = AgentPhase.AtHome;
-                        agent.Visible = true;
-                        agent.Cell = homeCell;
-                        agent.WorldPosition = new Vector2(homeCell.x + 0.5f, homeCell.y + 0.5f);
-                    }
-
                     _agents.Add(agent);
-                    if (role == AgentRole.CondoResident)
-                        onNewCondoResident?.Invoke(room);
                     existing++;
+                }
+
+                if (role == AgentRole.CondoResident && !room.CondoSold)
+                {
+                    foreach (var agent in _agents)
+                    {
+                        if (!ReferenceEquals(agent.HomeRoom, room) ||
+                            agent.Phase != AgentPhase.Moving ||
+                            agent.Path == null ||
+                            agent.Path.Count > 0)
+                            continue;
+
+                        ReplanTrip(agent, allowReplan: true);
+                    }
                 }
             }
         }
 
-        public void Tick(float deltaTime, GameClock clock, TowerGrid grid)
+        /// <param name="deltaGameMinutes">
+        /// Game minutes advanced this frame (typically <see cref="GameClock.LastTickGameMinutes"/>).
+        /// Walking and stress scale with this so agents keep up when time speed changes.
+        /// </param>
+        public void Tick(float deltaGameMinutes, GameClock clock, TowerGrid grid)
         {
             if (grid == null || clock == null) return;
 
@@ -105,14 +140,14 @@ namespace BuildATower
                 UpdateSchedule(agent, clock, grid);
                 if (agent.Phase == AgentPhase.WaitingAtElevator)
                 {
-                    agent.ElevatorWaitMinutes += clock.LastTickGameMinutes;
+                    agent.ElevatorWaitMinutes += deltaGameMinutes;
                     // Watchdog: covers maintenance toggles, shortening, and demolition.
                     if (IsElevatorWaitOrphaned(agent))
                         ReplanTrip(agent, allowReplan: true);
                 }
 
-                StepMovement(agent, deltaTime);
-                UpdateStress(agent, deltaTime);
+                StepMovement(agent, deltaGameMinutes);
+                UpdateStress(agent, deltaGameMinutes);
             }
         }
 
@@ -127,17 +162,27 @@ namespace BuildATower
                     UpdateHotel(agent, clock, grid);
                     break;
                 case AgentRole.CondoResident:
-                    if (agent.Phase != AgentPhase.AtHome || !agent.Visible)
-                    {
-                        agent.Phase = AgentPhase.AtHome;
-                        agent.Visible = true;
-                        agent.Cell = HomeCell(agent.HomeRoom, 0);
-                        agent.WorldPosition = new Vector2(agent.Cell.x + 0.5f, agent.Cell.y + 0.5f);
-                        agent.Path.Clear();
-                    }
-
+                    UpdateCondo(agent, grid);
                     break;
             }
+        }
+
+        void UpdateCondo(Agent agent, TowerGrid grid)
+        {
+            if (agent.HasMovedIn || agent.Phase == AgentPhase.AtHome)
+                return;
+
+            var home = HomeCell(agent.HomeRoom, 0);
+            if (agent.Phase == AgentPhase.Outside)
+            {
+                BeginTrip(agent, LobbyExitCell(grid), home, AgentPhase.AtHome, grid);
+                return;
+            }
+
+            if (agent.Phase == AgentPhase.Moving &&
+                (agent.Path == null || agent.Path.Count == 0) &&
+                agent.GoalCell.HasValue)
+                ReplanTrip(agent, allowReplan: true);
         }
 
         void UpdateOffice(Agent agent, GameClock clock, TowerGrid grid)
@@ -222,7 +267,7 @@ namespace BuildATower
             }
         }
 
-        void StepMovement(Agent agent, float deltaTime)
+        void StepMovement(Agent agent, float deltaGameMinutes)
         {
             if (agent.Phase == AgentPhase.WaitingAtElevator)
             {
@@ -262,33 +307,46 @@ namespace BuildATower
                 agent.WorldPosition = new Vector2(agent.Cell.x + 0.5f, agent.Cell.y + 0.5f);
                 AdvanceLeg(agent);
                 if (agent.Phase == AgentPhase.Moving)
-                    StepMovement(agent, deltaTime);
+                    StepMovement(agent, deltaGameMinutes);
                 return;
             }
 
             if (agent.Phase != AgentPhase.Moving) return;
 
-            if (agent.Path == null || agent.Path.Count == 0)
-                return;
+            var remaining = deltaGameMinutes;
+            while (remaining > 0.0001f &&
+                   agent.Phase == AgentPhase.Moving &&
+                   agent.Path != null &&
+                   agent.Path.Count > 0 &&
+                   agent.PathIndex < agent.Path.Count)
+            {
+                var target = agent.Path[agent.PathIndex];
+                var targetPos = new Vector2(target.x + 0.5f, target.y + 0.5f);
+                var distance = Vector2.Distance(agent.WorldPosition, targetPos);
+                var maxStep = MoveCellsPerSecond * remaining;
 
-            var target = agent.Path[Mathf.Min(agent.PathIndex, agent.Path.Count - 1)];
-            var targetPos = new Vector2(target.x + 0.5f, target.y + 0.5f);
-            agent.WorldPosition = Vector2.MoveTowards(
-                agent.WorldPosition,
-                targetPos,
-                MoveCellsPerSecond * deltaTime);
+                if (distance <= maxStep)
+                {
+                    agent.WorldPosition = targetPos;
+                    agent.Cell = target;
+                    agent.PathIndex++;
+                    remaining -= MoveCellsPerSecond > 0f ? distance / MoveCellsPerSecond : remaining;
+                    if (agent.PathIndex < agent.Path.Count) continue;
 
-            if ((agent.WorldPosition - targetPos).sqrMagnitude > 0.0001f) return;
+                    agent.Path.Clear();
+                    AdvanceLeg(agent);
+                    continue;
+                }
 
-            agent.Cell = target;
-            agent.PathIndex++;
-            if (agent.PathIndex < agent.Path.Count) return;
-
-            agent.Path.Clear();
-            AdvanceLeg(agent);
+                agent.WorldPosition = Vector2.MoveTowards(
+                    agent.WorldPosition,
+                    targetPos,
+                    maxStep);
+                break;
+            }
         }
 
-        void UpdateStress(Agent agent, float deltaTime)
+        void UpdateStress(Agent agent, float deltaGameMinutes)
         {
             var stuck = (agent.Phase == AgentPhase.Moving &&
                          (agent.Path == null || agent.Path.Count == 0) &&
@@ -296,9 +354,9 @@ namespace BuildATower
                         (agent.Phase == AgentPhase.WaitingAtElevator &&
                          agent.ElevatorWaitMinutes > 10f);
             if (stuck)
-                agent.Stress = Mathf.Min(100f, agent.Stress + StressGainPerSecond * deltaTime);
+                agent.Stress = Mathf.Min(100f, agent.Stress + StressGainPerSecond * deltaGameMinutes);
             else
-                agent.Stress = Mathf.Max(0f, agent.Stress - StressDecayPerSecond * deltaTime);
+                agent.Stress = Mathf.Max(0f, agent.Stress - StressDecayPerSecond * deltaGameMinutes);
         }
 
         void StartLeg(Agent agent, TransitLeg leg, bool allowReplan = true)
@@ -392,6 +450,12 @@ namespace BuildATower
             agent.Phase = agent.PhaseAfterMove;
             agent.GoalCell = null;
             ClearElevatorTripState(agent);
+            if (agent.Role == AgentRole.CondoResident && agent.Phase == AgentPhase.AtHome)
+            {
+                agent.HasMovedIn = true;
+                if (_condoMoveInsNotified.Add(agent.HomeRoom.InstanceId))
+                    _onCondoResidentMovedIn?.Invoke(agent.HomeRoom);
+            }
             if (agent.Phase == AgentPhase.Outside)
                 agent.Visible = false;
         }
@@ -503,6 +567,15 @@ namespace BuildATower
         {
             agent.Cell = new Vector2Int(shaft.X, shaft.Car.Floor);
             agent.WorldPosition = new Vector2(shaft.X + 0.5f, shaft.Car.Floor + 0.5f);
+        }
+
+        bool CanReachCondoFromLobby(TowerGrid grid, RoomInstance room)
+        {
+            return _router.TryPlanTrip(
+                       LobbyExitCell(grid),
+                       HomeCell(room, 0),
+                       out var legs) &&
+                   legs.Count > 0;
         }
 
         void ConfigureSchedule(Agent agent)

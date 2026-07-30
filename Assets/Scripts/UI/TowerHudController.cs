@@ -114,7 +114,7 @@ namespace BuildATower
 
             var stars = simulation?.Stars;
             var agents = simulation?.Agents;
-            var population = agents != null ? agents.Agents.Count : 0;
+            var population = agents != null ? agents.Population : 0;
             var averageStress = agents != null ? agents.AverageStress : 0f;
             var starGoalLines = stars != null
                 ? stars.FormatNextStarGoal(build.Grid, averageStress, population).Split('\n')
@@ -124,11 +124,16 @@ namespace BuildATower
             var roomCount = _roomButtons.Count;
             var roomRows = Mathf.Max(1, (roomCount + 1) / 2);
             var selection = build.GetSelectionSummary();
+            var unitEconomyLines = RoomEconomyFormat.SelectedUnitLines(
+                build.SelectedRoom,
+                agents?.Agents,
+                simulation?.Economy);
             var elevStatus = build.GetElevatorStatusText();
             var selectionExtra = 0f;
             if (selection != null)
             {
                 selectionExtra += 4f + row * selection.Split('\n').Length;
+                selectionExtra += row * unitEconomyLines.Count;
                 if (elevStatus != null)
                     selectionExtra += row + btnH;
             }
@@ -190,7 +195,7 @@ namespace BuildATower
             {
                 GUI.Label(
                     new Rect(cx, cy, inner, row),
-                    $"Population: {simulation.Agents.Agents.Count} | Stress: {simulation.Agents.AverageStress:0}",
+                    $"Population: {simulation.Agents.Population} | Stress: {simulation.Agents.AverageStress:0}",
                     label);
             }
             else
@@ -236,6 +241,12 @@ namespace BuildATower
             {
                 cy += 4f;
                 foreach (var line in selection.Split('\n'))
+                {
+                    GUI.Label(new Rect(cx, cy, inner, row), line, label);
+                    cy += row;
+                }
+
+                foreach (var line in unitEconomyLines)
                 {
                     GUI.Label(new Rect(cx, cy, inner, row), line, label);
                     cy += row;

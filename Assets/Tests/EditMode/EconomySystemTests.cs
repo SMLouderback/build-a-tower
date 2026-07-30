@@ -67,6 +67,9 @@ namespace BuildATower.Tests
             Assert.AreEqual(3000, economy.LastIncome);
             Assert.AreEqual(0, economy.LastExpense);
             Assert.AreEqual(3000, economy.LastNet);
+            Assert.AreEqual(3000, economy.GetLastRoomIncome(office));
+            Assert.AreEqual(0, economy.GetLastRoomExpense(office));
+            Assert.AreEqual(3000, economy.GetLastRoomNet(office));
         }
 
         [Test]
@@ -74,7 +77,7 @@ namespace BuildATower.Tests
         {
             var grid = new TowerGrid();
             grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
-            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out _));
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
             var wallet = new FundsWallet(50_000);
             var economy = new EconomySystem();
 
@@ -84,6 +87,8 @@ namespace BuildATower.Tests
             Assert.AreEqual(0, economy.LastIncome);
             Assert.AreEqual(EconomySystem.ElevatorDailyUpkeep, economy.LastExpense);
             Assert.AreEqual(-EconomySystem.ElevatorDailyUpkeep, economy.LastNet);
+            Assert.AreEqual(EconomySystem.ElevatorDailyUpkeep, economy.GetLastRoomExpense(elevator));
+            Assert.AreEqual(-EconomySystem.ElevatorDailyUpkeep, economy.GetLastRoomNet(elevator));
         }
 
         [Test]
@@ -98,6 +103,7 @@ namespace BuildATower.Tests
 
             Assert.AreEqual(150_000, wallet.Balance);
             Assert.IsTrue(condoRoom.CondoSold);
+            Assert.AreEqual(150_000, economy.GetLastRoomIncome(condoRoom));
         }
     }
 }

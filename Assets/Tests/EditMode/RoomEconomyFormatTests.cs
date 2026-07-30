@@ -1,4 +1,5 @@
 using BuildATower;
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -47,11 +48,47 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void Room_without_income_reports_dash()
+        public void Traffic_room_reports_that_income_is_not_active_yet()
         {
             var retail = Room(100_000, IncomeModel.TrafficVariable, 0);
 
-            Assert.AreEqual("Income: —", RoomEconomyFormat.IncomeLine(retail));
+            Assert.AreEqual(
+                "Income: Traffic-based (not active yet)",
+                RoomEconomyFormat.IncomeLine(retail));
+        }
+
+        [Test]
+        public void Selected_traffic_room_explicitly_reports_zero_income()
+        {
+            var retail = Room(100_000, IncomeModel.TrafficVariable, 0);
+            var instance = new RoomInstance(7, retail, Vector2Int.zero, Vector2Int.one);
+
+            var lines = RoomEconomyFormat.SelectedUnitLines(instance, null, new EconomySystem());
+
+            CollectionAssert.Contains(lines, "Built cost: $100,000");
+            CollectionAssert.Contains(lines, "Status: Traffic income inactive ($0)");
+            CollectionAssert.Contains(lines, "Last contribution: +$0 / -$0 = $0");
+        }
+
+        [Test]
+        public void Selected_condo_reports_sale_state()
+        {
+            var condo = Room(80_000, IncomeModel.UpfrontSale, 150_000);
+            var instance = new RoomInstance(8, condo, Vector2Int.zero, Vector2Int.one);
+
+            var beforeSale = RoomEconomyFormat.SelectedUnitLines(instance, null, new EconomySystem());
+            CollectionAssert.Contains(beforeSale, "Status: For sale — no payout yet");
+
+            var buyer = new Agent(1, AgentRole.CondoResident, instance, Vector2Int.zero);
+            var duringMove = RoomEconomyFormat.SelectedUnitLines(
+                instance,
+                new List<Agent> { buyer },
+                new EconomySystem());
+            CollectionAssert.Contains(duringMove, "Status: Buyer moving in — no payout yet");
+
+            instance.CondoSold = true;
+            var afterSale = RoomEconomyFormat.SelectedUnitLines(instance, null, new EconomySystem());
+            CollectionAssert.Contains(afterSale, "Status: Sold");
         }
 
         [TestCase(500, "$500")]

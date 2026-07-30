@@ -6,6 +6,9 @@ namespace BuildATower
     {
         public const int ElevatorDailyUpkeep = 3_000;
 
+        readonly Dictionary<int, int> _lastIncomeByRoom = new();
+        readonly Dictionary<int, int> _lastExpenseByRoom = new();
+
         public int LastIncome { get; private set; }
         public int LastExpense { get; private set; }
         public int LastNet { get; private set; }
@@ -14,16 +17,22 @@ namespace BuildATower
         {
             LastIncome = 0;
             LastExpense = 0;
+            _lastIncomeByRoom.Clear();
+            _lastExpenseByRoom.Clear();
 
             foreach (var room in grid.Rooms)
             {
                 if (room.Type.isElevatorShaft)
+                {
                     LastExpense += ElevatorDailyUpkeep;
+                    _lastExpenseByRoom[room.InstanceId] = ElevatorDailyUpkeep;
+                }
 
                 if (!IsRecurringIncomeRoom(room) || !HasHomeAgent(room, agents))
                     continue;
 
                 LastIncome += room.Type.baseIncome;
+                _lastIncomeByRoom[room.InstanceId] = room.Type.baseIncome;
             }
 
             wallet.Add(LastIncome);
@@ -41,8 +50,18 @@ namespace BuildATower
 
             wallet.Add(room.Type.baseIncome);
             room.CondoSold = true;
+            _lastIncomeByRoom[room.InstanceId] = room.Type.baseIncome;
             return true;
         }
+
+        public int GetLastRoomIncome(RoomInstance room) =>
+            room != null && _lastIncomeByRoom.TryGetValue(room.InstanceId, out var value) ? value : 0;
+
+        public int GetLastRoomExpense(RoomInstance room) =>
+            room != null && _lastExpenseByRoom.TryGetValue(room.InstanceId, out var value) ? value : 0;
+
+        public int GetLastRoomNet(RoomInstance room) =>
+            GetLastRoomIncome(room) - GetLastRoomExpense(room);
 
         static bool IsRecurringIncomeRoom(RoomInstance room)
         {

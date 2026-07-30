@@ -30,7 +30,7 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 16. (Optional) With the Elevator place tool still selected, drag vertically from a shaft cell to extend — same as edge handles.
 17. HUD (top-left): **Stars (0/2)** plus a **Next ★** checklist (population / stress / facilities with ✓ or ✗), **population**, **average stress**, and **Last Net** (yesterday income / expense summary).
 18. Each **midnight**, occupied offices and hotels pay daily rent; each elevator shaft costs **$3,000/day** upkeep — watch funds and Last Net change.
-19. When a **condo** first gains a resident, you receive a **one-time sale** payout (no repeat if they move out).
+19. A new **condo** stays vacant until it has a valid route from the lobby. Buyers then travel to it; you receive the **one-time sale** payout only when the first resident arrives (no payout for inaccessible condos).
 20. Stars are **earned as soon as requirements are met** (start at **0★**): **1★** needs ≥10 population, ≤40 avg stress, and a lobby; **2★** needs ≥30 population, ≤25 avg stress, and at least one elevator. A star can only be **lost** at the **90-day quarterly review** if the current tier no longer qualifies.
 21. **Elevators** need **1★**; premium Office / Hotel / Condo variants need **2★** — locked buttons show the star requirement and stay grey until earned.
 22. Time presets under the clock: **|| · 1x · 2x · 5x · 10x · 60x** (pause or fast-forward; 60x helps reach midnight and quarterly checks).

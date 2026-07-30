@@ -97,7 +97,7 @@ namespace BuildATower
             if (build?.Grid == null || _clock == null || _agents == null) return;
             _clock.Tick(Time.deltaTime);
             _elevators.Tick(_clock.LastTickGameMinutes);
-            _agents.Tick(Time.deltaTime, _clock, build.Grid);
+            _agents.Tick(_clock.LastTickGameMinutes, _clock, build.Grid);
             if (agentView != null)
                 agentView.Sync(_agents.Agents);
         }
@@ -114,7 +114,7 @@ namespace BuildATower
             if (build?.Grid == null || _router == null || _agents == null) return;
             _router.Rebuild(build.Grid);
             _agents.SyncHomes(build.Grid, room => _economy?.TrySellCondo(room, build.Wallet));
-            _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Agents.Count);
+            _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
         }
 
         void OnDayRolled()
@@ -127,9 +127,9 @@ namespace BuildATower
                 _economy.OnNewDay(build.Grid, _agents.Agents, build.Wallet);
 
                 if (day > 0 && day % StarSystem.QuarterDays == 0)
-                    _stars.EvaluateQuarterly(build.Grid, _agents.AverageStress, _agents.Agents.Count);
+                    _stars.EvaluateQuarterly(build.Grid, _agents.AverageStress, _agents.Population);
                 else
-                    _stars.TryPromote(build.Grid, _agents.AverageStress, _agents.Agents.Count);
+                    _stars.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
             }
 
             _lastDayIndex = _clock.DayIndex;
