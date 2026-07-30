@@ -37,6 +37,7 @@ namespace BuildATower
                 {
                     LastExpense += ElevatorDailyUpkeep;
                     _lastExpenseByRoom[room.InstanceId] = ElevatorDailyUpkeep;
+                    room.RecordLifetimeExpense(ElevatorDailyUpkeep);
                 }
 
                 if (!IsRecurringIncomeRoom(room) || !HasHomeAgent(room, agents))
@@ -48,6 +49,7 @@ namespace BuildATower
                 var amount = PricePricing.ScaledIncome(room.Type.baseIncome, room.PriceTier);
                 LastIncome += amount;
                 _lastIncomeByRoom[room.InstanceId] = amount;
+                room.RecordLifetimeIncome(amount);
             }
 
             wallet.Add(LastIncome);
@@ -68,6 +70,7 @@ namespace BuildATower
             var amount = PricePricing.ScaledIncome(room.Type.baseIncome, room.PriceTier);
             wallet.Add(amount);
             room.CondoSold = true;
+            room.RecordLifetimeIncome(amount);
             _lastIncomeByRoom[room.InstanceId] = amount;
             HasRecordedEconomyEvent = true;
             return true;

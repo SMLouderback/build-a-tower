@@ -668,6 +668,7 @@ namespace BuildATower
             deltaCells = 0;
             if (!CanResizeElevator(shaft, newMinY, newMaxY)) return false;
 
+            var previous = shaft;
             var oldSpan = shaft.Size.y;
             var oldCells = new List<Vector2Int>(shaft.OccupiedCells());
             var instanceId = shaft.InstanceId;
@@ -685,7 +686,8 @@ namespace BuildATower
             var span = newMaxY - newMinY + 1;
             var origin = new Vector2Int(x, newMinY);
             var footprint = BuildFootprint(origin, new Vector2Int(1, span));
-            PlaceElevator(type, origin, footprint, new List<RoomInstance>(), instanceId);
+            var elevator = PlaceElevator(type, origin, footprint, new List<RoomInstance>(), instanceId);
+            elevator.CopyBuildGraceLedgerFrom(previous);
 
             // Vacated shaft cells with nothing under them may still need structural fill.
             foreach (var cell in oldCells)

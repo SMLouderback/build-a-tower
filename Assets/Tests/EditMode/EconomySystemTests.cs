@@ -70,6 +70,8 @@ namespace BuildATower.Tests
             Assert.AreEqual(3000, economy.GetLastRoomIncome(office));
             Assert.AreEqual(0, economy.GetLastRoomExpense(office));
             Assert.AreEqual(3000, economy.GetLastRoomNet(office));
+            Assert.AreEqual(3000, office.LifetimeIncome);
+            Assert.AreEqual(0, office.LifetimeExpense);
         }
 
         [Test]
@@ -89,6 +91,8 @@ namespace BuildATower.Tests
             Assert.AreEqual(-EconomySystem.ElevatorDailyUpkeep, economy.LastNet);
             Assert.AreEqual(EconomySystem.ElevatorDailyUpkeep, economy.GetLastRoomExpense(elevator));
             Assert.AreEqual(-EconomySystem.ElevatorDailyUpkeep, economy.GetLastRoomNet(elevator));
+            Assert.AreEqual(0, elevator.LifetimeIncome);
+            Assert.AreEqual(EconomySystem.ElevatorDailyUpkeep, elevator.LifetimeExpense);
         }
 
         [Test]
@@ -104,6 +108,7 @@ namespace BuildATower.Tests
             Assert.AreEqual(150_000, wallet.Balance);
             Assert.IsTrue(condoRoom.CondoSold);
             Assert.AreEqual(150_000, economy.GetLastRoomIncome(condoRoom));
+            Assert.AreEqual(150_000, condoRoom.LifetimeIncome);
             Assert.IsTrue(economy.HasRecordedEconomyEvent);
         }
 

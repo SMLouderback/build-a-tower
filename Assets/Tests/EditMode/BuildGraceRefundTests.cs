@@ -1,3 +1,4 @@
+using System.Linq;
 using BuildATower;
 using NUnit.Framework;
 using UnityEngine;
@@ -16,6 +17,30 @@ namespace BuildATower.Tests
             so.baseIncome = 3000;
             so.size = new Vector2Int(9, 1);
             so.allowAboveGround = true;
+            return so;
+        }
+
+        static RoomTypeSO Lobby()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "lobby";
+            so.isLobby = true;
+            so.allowAboveGround = true;
+            so.size = Vector2Int.one;
+            return so;
+        }
+
+        static RoomTypeSO Elevator()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "elevator_normal";
+            so.displayName = "Elevator";
+            so.category = RoomCategory.Transit;
+            so.size = new Vector2Int(1, 2);
+            so.buildCost = 20000;
+            so.isElevatorShaft = true;
+            so.allowAboveGround = true;
+            so.allowBasement = true;
             return so;
         }
 
@@ -59,6 +84,40 @@ namespace BuildATower.Tests
             Assert.IsFalse(RoomInstance.IsGraceRefundEligible(lobby));
             Assert.IsFalse(RoomInstance.IsGraceRefundEligible(scaffold));
             Assert.IsTrue(RoomInstance.IsGraceRefundEligible(Office()));
+        }
+
+        [Test]
+        public void Condo_sale_increments_LifetimeIncome()
+        {
+            var condo = ScriptableObject.CreateInstance<RoomTypeSO>();
+            condo.incomeModel = IncomeModel.UpfrontSale;
+            condo.baseIncome = 150_000;
+            var room = new RoomInstance(1, condo, Vector2Int.zero, Vector2Int.one);
+            var economy = new EconomySystem();
+            var wallet = new FundsWallet(0);
+            Assert.IsTrue(economy.TrySellCondo(room, wallet));
+            Assert.AreEqual(150_000, room.LifetimeIncome);
+        }
+
+        [Test]
+        public void Elevator_resize_preserves_build_grace_ledger()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var shaft));
+            shaft.RecordConstructionSpend(20_000, nowRealtime: 100f, isInitialPlace: true);
+            shaft.RecordLifetimeIncome(1_000);
+            shaft.RecordLifetimeExpense(500);
+            var instanceId = shaft.InstanceId;
+
+            Assert.IsTrue(grid.TryResizeElevator(shaft, 0, 3, out var delta));
+            Assert.AreEqual(2, delta);
+
+            var resized = grid.Rooms.First(r => r.InstanceId == instanceId);
+            Assert.AreEqual(20_000, resized.ConstructionSpent);
+            Assert.AreEqual(100f, resized.PlacedAtRealtime);
+            Assert.AreEqual(1_000, resized.LifetimeIncome);
+            Assert.AreEqual(500, resized.LifetimeExpense);
         }
     }
 }
