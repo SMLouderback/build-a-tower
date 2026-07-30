@@ -71,6 +71,17 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Selected_unit_shows_tier_scaled_income()
+        {
+            var office = Room(40_000, IncomeModel.QuarterlyRent, 3000);
+            var instance = new RoomInstance(9, office, Vector2Int.zero, Vector2Int.one);
+            instance.PriceTier = PricePricing.TierHigh;
+
+            var lines = RoomEconomyFormat.SelectedUnitLines(instance, null, new EconomySystem());
+            CollectionAssert.Contains(lines, "Income: $3,900 / day occupied");
+        }
+
+        [Test]
         public void Selected_condo_reports_sale_state()
         {
             var condo = Room(80_000, IncomeModel.UpfrontSale, 150_000);

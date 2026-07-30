@@ -104,6 +104,54 @@ namespace BuildATower.Tests
             Assert.AreEqual(150_000, wallet.Balance);
             Assert.IsTrue(condoRoom.CondoSold);
             Assert.AreEqual(150_000, economy.GetLastRoomIncome(condoRoom));
+            Assert.IsTrue(economy.HasRecordedEconomyEvent);
+        }
+
+        [Test]
+        public void Midnight_scales_income_by_price_tier()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Office(baseIncome: 3000), new Vector2Int(0, 1), out var office));
+            office.PriceTier = PricePricing.TierHigh;
+            var agents = new List<Agent> { new Agent(1, AgentRole.OfficeWorker, office, office.Origin) };
+            var wallet = new FundsWallet(100_000);
+            var economy = new EconomySystem(seed: 1);
+
+            economy.OnNewDay(grid, agents, wallet, currentStars: 3);
+
+            Assert.AreEqual(3900, economy.LastIncome);
+            Assert.AreEqual(103_900, wallet.Balance);
+        }
+
+        [Test]
+        public void Condo_sale_scales_by_price_tier()
+        {
+            var condoRoom = new RoomInstance(1, Condo(150_000), Vector2Int.zero, Vector2Int.one);
+            condoRoom.PriceTier = PricePricing.TierLow;
+            var wallet = new FundsWallet(0);
+            var economy = new EconomySystem();
+
+            Assert.IsTrue(economy.TrySellCondo(condoRoom, wallet));
+            Assert.AreEqual(105_000, wallet.Balance);
+        }
+
+        [Test]
+        public void Overpriced_office_can_skip_income_under_seeded_rng()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Office(baseIncome: 3000), new Vector2Int(0, 1), out var office));
+            office.PriceTier = PricePricing.TierMax;
+            var agents = new List<Agent> { new Agent(1, AgentRole.OfficeWorker, office, office.Origin) };
+            var wallet = new FundsWallet(100_000);
+            var economy = new EconomySystem(seed: 7);
+
+            economy.OnNewDay(grid, agents, wallet, currentStars: 0);
+
+            // Max at 0★ → 10% demand; seed 7 first roll is ~0.38 so income is skipped.
+            Assert.AreEqual(0, economy.LastIncome);
+            Assert.AreEqual(100_000, wallet.Balance);
         }
     }
 }

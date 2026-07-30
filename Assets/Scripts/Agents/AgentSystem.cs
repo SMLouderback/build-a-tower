@@ -59,7 +59,10 @@ namespace BuildATower
             _elevators = router.Elevators;
         }
 
-        public void SyncHomes(TowerGrid grid, System.Action<RoomInstance> onNewCondoResident = null)
+        public void SyncHomes(
+            TowerGrid grid,
+            System.Action<RoomInstance> onNewCondoResident = null,
+            int currentStars = 0)
         {
             _onCondoResidentMovedIn = onNewCondoResident;
             var livingRooms = new HashSet<RoomInstance>();
@@ -92,6 +95,12 @@ namespace BuildATower
                     !CanReachCondoFromLobby(grid, room))
                     continue;
 
+                if (role == AgentRole.CondoResident &&
+                    !room.CondoSold &&
+                    existing == 0 &&
+                    !PassesCondoDemand(room, currentStars))
+                    continue;
+
                 var want = Mathf.Max(1, room.Type.maxOccupants);
                 while (existing < want)
                 {
@@ -116,6 +125,14 @@ namespace BuildATower
                     }
                 }
             }
+        }
+
+        bool PassesCondoDemand(RoomInstance room, int currentStars)
+        {
+            var chance = PricePricing.DemandChance(room.PriceTier, currentStars);
+            if (chance >= 1f) return true;
+            if (chance <= 0f) return false;
+            return _rng.NextDouble() < chance;
         }
 
         /// <param name="deltaGameMinutes">

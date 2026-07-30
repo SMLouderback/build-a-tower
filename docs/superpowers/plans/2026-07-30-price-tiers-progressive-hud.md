@@ -26,11 +26,11 @@
 - Modify: `Assets/Scripts/UI/RoomEconomyFormat.cs`
 - Test: `Assets/Tests/EditMode/PricePricingTests.cs`, update `EconomySystemTests.cs`
 
-- [ ] Failing tests for multipliers (0.7/1/1.3/1.6) and comfort max tier by stars
-- [ ] Implement `PricePricing` + `PriceTier` (default 1)
-- [ ] Apply rounded payout in `OnNewDay` / `TrySellCondo`
-- [ ] Format effective income at current tier in selection lines
-- [ ] Commit
+- [x] Failing tests for multipliers (0.7/1/1.3/1.6) and comfort max tier by stars
+- [x] Implement `PricePricing` + `PriceTier` (default 1)
+- [x] Apply rounded payout in `OnNewDay` / `TrySellCondo`
+- [x] Format effective income at current tier in selection lines
+- [x] Commit
 
 ### Task 2: Light demand vs comfort band
 
@@ -40,10 +40,10 @@
 - Modify: `Assets/Scripts/Agents/AgentSystem.cs` (condo buyer spawn gate)
 - Test: demand / spawn tests
 
-- [ ] Deterministic chance table: at/under comfort = 1.0; +1 = 0.4; +2 or more = 0.1
-- [ ] Recurring rooms skip income when demand roll fails (seeded RNG on EconomySystem)
-- [ ] Condo SyncHomes skips buyer create when spawn roll fails (seeded RNG)
-- [ ] Commit
+- [x] Deterministic chance table: at/under comfort = 1.0; +1 = 0.4; +2 or more = 0.1
+- [x] Recurring rooms skip income when demand roll fails (seeded RNG on EconomySystem)
+- [x] Condo SyncHomes skips buyer create when spawn roll fails (seeded RNG)
+- [x] Commit
 
 ### Task 3: Build family metadata + catalog grouping
 
@@ -54,10 +54,10 @@
 - Update room `.asset` YAML for family/subgroup where needed
 - Test: `BuildCatalogTests.cs`
 
-- [ ] Enums `BuildFamily`, `BuildSubgroup`
-- [ ] Fields on `RoomTypeSO`; infer from category/id if unset
-- [ ] `BuildCatalog.Group(rooms)` → families → optional subgroups → types
-- [ ] Commit
+- [x] Enums `BuildFamily`, `BuildSubgroup`
+- [x] Fields on `RoomTypeSO`; infer from category/id if unset
+- [x] `BuildCatalog.Group(rooms)` → families → optional subgroups → types
+- [x] Commit
 
 ### Task 4: Progressive HUD + price buttons + nested Build
 
@@ -67,15 +67,15 @@
 - Modify: `Assets/Scripts/Build/BuildController.cs` if needed for SetPriceTier
 - Modify: `README.md`
 
-- [ ] Core strip: funds, time/speeds, stars, help
-- [ ] Foldouts: Goals (lobby), Economy (income event), Build (always, start expanded), Selection (when selected)
-- [ ] Selection: Low/Normal/High/Max + market hint
-- [ ] Nested Build families; Shops → Food/Retail; omit empty Utility
-- [ ] Tools flat: Selector, Extend Lobby, Bulldoze (Transit under family)
-- [ ] README play steps
-- [ ] Commit
+- [x] Core strip: funds, time/speeds, stars, help
+- [x] Foldouts: Goals (lobby), Economy (income event), Build (always, start expanded), Selection (when selected)
+- [x] Selection: Low/Normal/High/Max + market hint
+- [x] Nested Build families; Shops → Food/Retail; omit empty Utility
+- [x] Tools flat: Selector, Extend Lobby, Bulldoze (Transit under family)
+- [x] README play steps
+- [x] Commit
 
 ### Task 5: Closeout
 
-- [ ] Roslyn typecheck Scripts + EditMode
-- [ ] Final commit if needed / push when asked
+- [x] Roslyn typecheck Scripts + EditMode
+- [x] Final commit if needed / push when asked

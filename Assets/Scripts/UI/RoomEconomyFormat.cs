@@ -15,17 +15,18 @@ namespace BuildATower
             return $"Cost: ${type.buildCost:N0}";
         }
 
-        public static string IncomeLine(RoomTypeSO type)
+        public static string IncomeLine(RoomTypeSO type, int tier = PricePricing.TierNormal)
         {
             if (type == null) return "Income: —";
 
+            var amount = PricePricing.ScaledIncome(type.baseIncome, tier);
             switch (type.incomeModel)
             {
                 case IncomeModel.UpfrontSale when type.baseIncome > 0:
-                    return $"Income: ${type.baseIncome:N0} once";
+                    return $"Income: ${amount:N0} once";
                 case IncomeModel.QuarterlyRent when type.baseIncome > 0:
                 case IncomeModel.NightlyRate when type.baseIncome > 0:
-                    return $"Income: ${type.baseIncome:N0} / day occupied";
+                    return $"Income: ${amount:N0} / day occupied";
                 case IncomeModel.TrafficVariable:
                     return "Income: Traffic-based (not active yet)";
                 default:
@@ -42,8 +43,9 @@ namespace BuildATower
             if (room?.Type == null) return lines;
 
             var type = room.Type;
+            var tier = room.PriceTier;
             lines.Add($"Built cost: ${ConstructionCost(room):N0}");
-            lines.Add(IncomeLine(type));
+            lines.Add(IncomeLine(type, tier));
 
             var upkeep = UpkeepLine(type);
             if (upkeep != null)

@@ -153,6 +153,17 @@ namespace BuildATower
             return true;
         }
 
+        public bool TrySetSelectedPriceTier(int tier)
+        {
+            if (SelectedRoom?.Type == null || !PricePricing.IsPricedRoom(SelectedRoom.Type))
+                return false;
+
+            SelectedRoom.PriceTier = PricePricing.ClampTier(tier);
+            RefreshHelpText();
+            StateChanged?.Invoke();
+            return true;
+        }
+
         public bool TrySetSelectedElevatorMaintenance(bool inMaintenance)
         {
             if (SelectedRoom?.Type == null || !SelectedRoom.Type.isElevatorShaft)

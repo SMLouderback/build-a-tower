@@ -27,5 +27,37 @@ namespace BuildATower
         public bool isElevatorShaft;
         [Min(0)] public int requiredStars;
         [Min(0)] public int maxOccupants;
+        public BuildFamily buildFamily = BuildFamily.None;
+        public BuildSubgroup buildSubgroup = BuildSubgroup.None;
+
+        public BuildFamily ResolvedBuildFamily()
+        {
+            if (buildFamily != BuildFamily.None) return buildFamily;
+            if (isStairs || isElevatorShaft) return BuildFamily.Transit;
+            return category switch
+            {
+                RoomCategory.Office => BuildFamily.Office,
+                RoomCategory.Hotel => BuildFamily.Hotel,
+                RoomCategory.Condo => BuildFamily.Condo,
+                RoomCategory.Commercial => BuildFamily.Shops,
+                RoomCategory.Service => BuildFamily.Utility,
+                _ => BuildFamily.None
+            };
+        }
+
+        public BuildSubgroup ResolvedBuildSubgroup()
+        {
+            if (buildSubgroup != BuildSubgroup.None) return buildSubgroup;
+            if (ResolvedBuildFamily() != BuildFamily.Shops) return BuildSubgroup.None;
+            if (!string.IsNullOrEmpty(id) && id.IndexOf("food", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return BuildSubgroup.Food;
+            if (!string.IsNullOrEmpty(displayName) &&
+                displayName.IndexOf("restaurant", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return BuildSubgroup.Food;
+            if (!string.IsNullOrEmpty(displayName) &&
+                displayName.IndexOf("food", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return BuildSubgroup.Food;
+            return BuildSubgroup.Retail;
+        }
     }
 }

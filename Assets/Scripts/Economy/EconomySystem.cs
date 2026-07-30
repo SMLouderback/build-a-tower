@@ -8,12 +8,23 @@ namespace BuildATower
 
         readonly Dictionary<int, int> _lastIncomeByRoom = new();
         readonly Dictionary<int, int> _lastExpenseByRoom = new();
+        System.Random _rng;
 
         public int LastIncome { get; private set; }
         public int LastExpense { get; private set; }
         public int LastNet { get; private set; }
+        public bool HasRecordedEconomyEvent { get; private set; }
 
-        public void OnNewDay(TowerGrid grid, IReadOnlyList<Agent> agents, FundsWallet wallet)
+        public EconomySystem(int? seed = null)
+        {
+            _rng = seed.HasValue ? new System.Random(seed.Value) : new System.Random();
+        }
+
+        public void OnNewDay(
+            TowerGrid grid,
+            IReadOnlyList<Agent> agents,
+            FundsWallet wallet,
+            int currentStars = 0)
         {
             LastIncome = 0;
             LastExpense = 0;
@@ -31,13 +42,19 @@ namespace BuildATower
                 if (!IsRecurringIncomeRoom(room) || !HasHomeAgent(room, agents))
                     continue;
 
-                LastIncome += room.Type.baseIncome;
-                _lastIncomeByRoom[room.InstanceId] = room.Type.baseIncome;
+                if (!PassesDemand(room, currentStars))
+                    continue;
+
+                var amount = PricePricing.ScaledIncome(room.Type.baseIncome, room.PriceTier);
+                LastIncome += amount;
+                _lastIncomeByRoom[room.InstanceId] = amount;
             }
 
             wallet.Add(LastIncome);
             wallet.Subtract(LastExpense);
             LastNet = LastIncome - LastExpense;
+            if (LastIncome > 0 || LastExpense > 0)
+                HasRecordedEconomyEvent = true;
         }
 
         public bool TrySellCondo(RoomInstance room, FundsWallet wallet)
@@ -48,10 +65,20 @@ namespace BuildATower
                 room.CondoSold)
                 return false;
 
-            wallet.Add(room.Type.baseIncome);
+            var amount = PricePricing.ScaledIncome(room.Type.baseIncome, room.PriceTier);
+            wallet.Add(amount);
             room.CondoSold = true;
-            _lastIncomeByRoom[room.InstanceId] = room.Type.baseIncome;
+            _lastIncomeByRoom[room.InstanceId] = amount;
+            HasRecordedEconomyEvent = true;
             return true;
+        }
+
+        public bool PassesDemand(RoomInstance room, int currentStars)
+        {
+            var chance = PricePricing.DemandChance(room.PriceTier, currentStars);
+            if (chance >= 1f) return true;
+            if (chance <= 0f) return false;
+            return _rng.NextDouble() < chance;
         }
 
         public int GetLastRoomIncome(RoomInstance room) =>

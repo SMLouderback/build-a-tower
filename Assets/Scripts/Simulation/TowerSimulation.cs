@@ -113,7 +113,10 @@ namespace BuildATower
         {
             if (build?.Grid == null || _router == null || _agents == null) return;
             _router.Rebuild(build.Grid);
-            _agents.SyncHomes(build.Grid, room => _economy?.TrySellCondo(room, build.Wallet));
+            _agents.SyncHomes(
+                build.Grid,
+                room => _economy?.TrySellCondo(room, build.Wallet),
+                _stars?.CurrentStars ?? 0);
             _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
         }
 
@@ -124,7 +127,7 @@ namespace BuildATower
 
             for (var day = _lastDayIndex + 1; day <= _clock.DayIndex; day++)
             {
-                _economy.OnNewDay(build.Grid, _agents.Agents, build.Wallet);
+                _economy.OnNewDay(build.Grid, _agents.Agents, build.Wallet, _stars.CurrentStars);
 
                 if (day > 0 && day % StarSystem.QuarterDays == 0)
                     _stars.EvaluateQuarterly(build.Grid, _agents.AverageStress, _agents.Population);
