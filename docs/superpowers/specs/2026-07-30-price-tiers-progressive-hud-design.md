@@ -18,7 +18,8 @@ In Play Mode a player can:
 3. See a compact **core HUD** (funds, time, stars, help) that does not dump every panel at once.
 4. Expand **Goals / Economy / Build / Selection** sections; sticky open/closed for the session.
 5. Only see soft-unlocked sections after their gates (lobby → Goals; first midnight/income → Economy).
-6. Still place rooms via Build from the start.
+6. Still place rooms via Build from the start, using **nested family buttons** (Office / Hotel / Condo / …) that expand to variants.
+7. Locked or not-yet-shipped variants show as grey with ★ or “Coming soon,” without inventing full store economies yet.
 
 ## 2. Product decisions (locked)
 
@@ -26,6 +27,7 @@ In Play Mode a player can:
 |----------|--------|
 | Pricing UI | Discrete tiers now; continuous slider **after MVP** |
 | HUD layout | Hybrid: always-on core + expandable / unlockable sections |
+| Build catalog | Nested family → variant buttons; data-driven for future shops |
 | Demand this pass | Light occupancy / buyer-spawn response for office, hotel, condo |
 | Commercial traffic visits | Out of scope (still inactive; field reserved) |
 | Quality levers beyond stars | Out of scope (stress/amenities/crime later) |
@@ -100,7 +102,7 @@ Keep this short so the first viewport stays readable.
 |---------|----------|-------------|
 | **Goals** | Next ★ checklist | Lobby exists |
 | **Economy** | Last Net, population, avg stress | After first midnight sweep **or** first condo sale / income event |
-| **Build** | Room buttons + tools | Always (required to play) |
+| **Build** | Nested room catalog + tools | Always (required to play) |
 | **Selection** | Identity, economy, price tiers, elevator maintenance | Something selected |
 
 Behavior:
@@ -110,9 +112,42 @@ Behavior:
 - Hidden entirely until unlock gate trips (do not show locked empty headers).  
 - Price controls live only under Selection for priced rooms.
 
-### 4.3 Implementation sketch
+### 4.3 Nested Build catalog
+
+Top-level **family** buttons expand to **variants**. Families stay short now; new shop types plug in later via metadata without rewriting the HUD.
+
+**This pass (existing / near-term assets)**
+
+| Family button | Expands to |
+|---------------|------------|
+| **Office** | Office · Premium Office |
+| **Hotel** | Hotel · Premium Hotel |
+| **Condo** | Condo · Premium Condo |
+| **Food** | Fast Food / Restaurant stubs when present; reserved empty slots OK |
+| **Retail** | Current Retail stub; future shop types reserved |
+| **Transit** | Stairs · Elevator |
+
+**Tools** (flat row under Build, not nested): Selector · Extend Lobby · Bulldoze.
+
+**Future catalog shape** (data-driven; not all assets this slice):
+
+- **Hotels:** Standard · Mid · Premium  
+- **Offices:** Standard · Mid · Premium  
+- **Food:** Fast Food · Restaurant · Fancy Restaurant  
+- **Retail:** Convenience · Thrift · High-end Boutique  
+- **Specialty:** Grocery · Electronics · Home Goods · Hobby · Arts/Crafts  
+
+UX rules:
+
+- Family rows collapsed by default; expanded family sticky for the session.  
+- Star-locked variants grey with `(N★)`.  
+- Missing future variants may show as disabled “Coming soon” placeholders **or** be omitted until the asset exists — prefer **omit until asset exists** for this pass; reserve family ids in code/comments.  
+- Catalog grouping comes from room-type metadata (e.g. `buildFamily` / `buildSubgroup` on `RoomTypeSO`, or a small catalog SO), not hard-coded button sprawl.
+
+### 4.4 Implementation sketch
 
 - `TowerHudController`: core strip + foldout section drawing; session bools for expanded state; unlock predicates from sim/build.  
+- Build catalog helper or `RoomTypeSO` family fields driving nested buttons.  
 - Prefer IMGUI foldouts / toggle headers consistent with current HUD (no new UI framework this pass).
 
 ## 5. Systems / files (expected)
@@ -120,18 +155,20 @@ Behavior:
 | Area | Change |
 |------|--------|
 | `RoomInstance` | `PriceTier` property |
+| `RoomTypeSO` (or catalog SO) | Build family / subgroup for nested catalog |
 | `EconomySystem` | Apply tier multiplier to recurring income and condo sale |
 | `AgentSystem` / occupancy | Light demand checks for office/hotel retention and condo buyer spawn |
 | `StarSystem` or small helper | Comfort-band + market hint string |
-| `TowerHudController` | Progressive sections + selection price buttons |
+| `TowerHudController` | Progressive sections + selection price buttons + nested Build catalog |
 | `RoomEconomyFormat` | Show effective income at current tier |
-| Tests | Tier payout math; overpriced demand; HUD unlock predicates if testable |
-| README | Price tiers + HUD sections |
+| Tests | Tier payout math; overpriced demand; catalog grouping; HUD unlock predicates if testable |
+| README | Price tiers + HUD sections + nested Build |
 
 ## 6. Out of scope
 
 - Continuous rent / price slider  
 - Restaurant vs retail visit schedules and traffic income  
+- Implementing the full future shop list (Grocery, Boutique, etc.) as playable rooms  
 - Global rent board for all rooms at once  
 - Stress / amenities / crime as pricing power  
 - Full 3–5★ unlock content (band table only)  
@@ -144,5 +181,5 @@ This slice is a **UI + light demand** piece of deeper economy; visit-based comme
 
 ## 8. Verification
 
-- EditMode: tier multipliers on rent and condo sale; inaccessible condo still pays $0; overpriced reduces occupancy/buyer chance under controlled RNG or deterministic thresholds.  
-- Play Mode: select office → change tier → see status/hint; collapse Goals/Economy; Build still usable; core strip stays visible at all speeds.
+- EditMode: tier multipliers on rent and condo sale; inaccessible condo still pays $0; overpriced reduces occupancy/buyer chance under controlled RNG or deterministic thresholds; catalog groups Office/Hotel/Condo variants under one family.  
+- Play Mode: select office → change tier → see status/hint; collapse Goals/Economy; expand Office family to pick Premium; Build still usable; core strip stays visible at all speeds.
