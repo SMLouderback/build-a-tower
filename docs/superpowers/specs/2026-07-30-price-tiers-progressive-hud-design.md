@@ -18,8 +18,8 @@ In Play Mode a player can:
 3. See a compact **core HUD** (funds, time, stars, help) that does not dump every panel at once.
 4. Expand **Goals / Economy / Build / Selection** sections; sticky open/closed for the session.
 5. Only see soft-unlocked sections after their gates (lobby → Goals; first midnight/income → Economy).
-6. Still place rooms via Build from the start, using **nested family buttons** (Office / Hotel / Condo / …) that expand to variants.
-7. Locked or not-yet-shipped variants show as grey with ★ or “Coming soon,” without inventing full store economies yet.
+6. Still place rooms via Build from the start, using **nested family buttons** (Office / Hotel / Condo / Shops / Utility / Transit) that expand to variants (Shops → Food / Retail).
+7. Locked or not-yet-shipped variants show as grey with ★ or “Coming soon,” without inventing full store or utility economies yet.
 
 ## 2. Product decisions (locked)
 
@@ -123,9 +123,23 @@ Top-level **family** buttons expand to **variants**. Families stay short now; ne
 | **Office** | Office · Premium Office |
 | **Hotel** | Hotel · Premium Hotel |
 | **Condo** | Condo · Premium Condo |
-| **Food** | Fast Food / Restaurant stubs when present; reserved empty slots OK |
-| **Retail** | Current Retail stub; future shop types reserved |
+| **Shops** | Nested sub-families (see below) |
+| **Utility** | Placeholder family for support / amenity rooms (see below) |
 | **Transit** | Stairs · Elevator |
+
+**Shops** expands in two steps:
+
+1. **Food** → Fast Food / Restaurant stubs when present; future: Fancy Restaurant  
+2. **Retail** → current Retail stub; future: Convenience · Thrift · High-end Boutique · Specialty shops  
+
+**Utility / Miscellaneous** (placeholder family this pass — omit empty buttons until assets exist; reserve the family id):
+
+- Garbage / Recycling  
+- Ballroom / Party Hall  
+- Security Office  
+- Maintenance / Housekeeping  
+- Grounds Keeper  
+- Pool  
 
 **Tools** (flat row under Build, not nested): Selector · Extend Lobby · Bulldoze.
 
@@ -133,15 +147,15 @@ Top-level **family** buttons expand to **variants**. Families stay short now; ne
 
 - **Hotels:** Standard · Mid · Premium  
 - **Offices:** Standard · Mid · Premium  
-- **Food:** Fast Food · Restaurant · Fancy Restaurant  
-- **Retail:** Convenience · Thrift · High-end Boutique  
-- **Specialty:** Grocery · Electronics · Home Goods · Hobby · Arts/Crafts  
+- **Shops → Food:** Fast Food · Restaurant · Fancy Restaurant  
+- **Shops → Retail:** Convenience · Thrift · High-end Boutique · Grocery · Electronics · Home Goods · Hobby · Arts/Crafts  
+- **Utility:** Garbage/Recycling · Ballroom · Security · Maintenance/Housekeeping · Grounds · Pool  
 
 UX rules:
 
-- Family rows collapsed by default; expanded family sticky for the session.  
+- Family rows collapsed by default; expanded family (and Shops sub-family) sticky for the session.  
 - Star-locked variants grey with `(N★)`.  
-- Missing future variants may show as disabled “Coming soon” placeholders **or** be omitted until the asset exists — prefer **omit until asset exists** for this pass; reserve family ids in code/comments.  
+- Missing future variants may show as disabled “Coming soon” placeholders **or** be omitted until the asset exists — prefer **omit until asset exists** for this pass; reserve family / sub-family ids in code/comments (`Office`, `Hotel`, `Condo`, `Shops`/`Food`/`Retail`, `Utility`, `Transit`).  
 - Catalog grouping comes from room-type metadata (e.g. `buildFamily` / `buildSubgroup` on `RoomTypeSO`, or a small catalog SO), not hard-coded button sprawl.
 
 ### 4.4 Implementation sketch
@@ -168,7 +182,7 @@ UX rules:
 
 - Continuous rent / price slider  
 - Restaurant vs retail visit schedules and traffic income  
-- Implementing the full future shop list (Grocery, Boutique, etc.) as playable rooms  
+- Implementing the full future shop / utility list (Grocery, Boutique, Pool, Security, etc.) as playable rooms  
 - Global rent board for all rooms at once  
 - Stress / amenities / crime as pricing power  
 - Full 3–5★ unlock content (band table only)  
