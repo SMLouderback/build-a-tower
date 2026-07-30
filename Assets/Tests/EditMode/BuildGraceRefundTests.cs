@@ -100,6 +100,22 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Demolish_within_grace_refunds_construction_spend()
+        {
+            var room = new RoomInstance(1, Office(), Vector2Int.zero, Vector2Int.one);
+            room.RecordConstructionSpend(40_000, 0f, isInitialPlace: true);
+            Assert.AreEqual(40_000, BuildGraceRefund.WalletDelta(room, nowRealtime: 5f));
+        }
+
+        [Test]
+        public void Demolish_after_grace_refunds_zero()
+        {
+            var room = new RoomInstance(1, Office(), Vector2Int.zero, Vector2Int.one);
+            room.RecordConstructionSpend(40_000, 0f, isInitialPlace: true);
+            Assert.AreEqual(0, BuildGraceRefund.WalletDelta(room, nowRealtime: 11f));
+        }
+
+        [Test]
         public void Elevator_resize_preserves_build_grace_ledger()
         {
             var grid = new TowerGrid();

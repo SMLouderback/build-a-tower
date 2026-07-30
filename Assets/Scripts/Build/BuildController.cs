@@ -301,6 +301,8 @@ namespace BuildATower
                 return false;
             }
 
+            room.RecordConstructionSpend(cost, Time.realtimeSinceStartup, isInitialPlace: true);
+
             foreach (var scaffold in clearedScaffolding)
                 view.ClearRoom(scaffold);
             view.PaintRoom(room);
@@ -348,6 +350,9 @@ namespace BuildATower
                 return false;
             }
 
+            if (TryFindRoomById(instanceId, out var currentShaft))
+                currentShaft.RecordConstructionSpend(cost, Time.realtimeSinceStartup, isInitialPlace: false);
+
             BeginOrRefreshCorrectionWindow(instanceId, oldMin, oldMax);
             RepaintAfterElevatorResize(shaft, instanceId);
             if (SelectedRoom != null && SelectedRoom.InstanceId == instanceId)
@@ -394,15 +399,20 @@ namespace BuildATower
             }
 
             var instanceId = shaft.InstanceId;
+            var growCost = growing ? delta * shaft.Type.buildCost : 0;
             if (!Grid.TryResizeElevator(shaft, newMinY, newMaxY, out _))
             {
                 if (growing)
-                    Wallet.Add(delta * shaft.Type.buildCost);
+                    Wallet.Add(growCost);
                 return false;
             }
 
             if (growing)
+            {
+                if (TryFindRoomById(instanceId, out var currentShaft))
+                    currentShaft.RecordConstructionSpend(growCost, Time.realtimeSinceStartup, isInitialPlace: false);
                 BeginOrRefreshCorrectionWindow(instanceId, oldMin, oldMax);
+            }
             else if (ActiveCorrectionWindow != null &&
                      ActiveCorrectionWindow.ShaftInstanceId == instanceId &&
                      newMinY == ActiveCorrectionWindow.PreviousMinY &&
@@ -481,9 +491,8 @@ namespace BuildATower
 
         void ReselectById(int instanceId)
         {
-            foreach (var room in Grid.Rooms)
+            if (TryFindRoomById(instanceId, out var room))
             {
-                if (room.InstanceId != instanceId) continue;
                 SelectedRoom = room;
                 RefreshSelectionVisuals();
                 return;
@@ -492,10 +501,27 @@ namespace BuildATower
             ClearSelection();
         }
 
+        bool TryFindRoomById(int instanceId, out RoomInstance room)
+        {
+            foreach (var candidate in Grid.Rooms)
+            {
+                if (candidate.InstanceId != instanceId) continue;
+                room = candidate;
+                return true;
+            }
+
+            room = null;
+            return false;
+        }
+
         public bool TryDemolishAt(Vector2Int cell)
         {
             if (!Grid.TryDemolishAt(cell, out var removed, out var scaffoldsPlaced, out _))
                 return false;
+
+            var refundDelta = BuildGraceRefund.WalletDelta(removed, Time.realtimeSinceStartup);
+            if (refundDelta > 0) Wallet.Add(refundDelta);
+            else if (refundDelta < 0) Wallet.Subtract(-refundDelta);
 
             if (IsVisibleTransit(removed))
             {
