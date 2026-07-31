@@ -101,5 +101,48 @@ namespace BuildATower.Tests
             Assert.AreEqual(1, groups[0].Subgroups[1].Rooms.Count);
             Assert.AreEqual("shop_retail", groups[0].Subgroups[1].Rooms[0].id);
         }
+
+        [Test]
+        public void Group_includes_utility_service_rooms_and_fine_dining_food()
+        {
+            var rooms = new List<RoomTypeSO>
+            {
+                Make("service_housekeeping", "Housekeeping", RoomCategory.Service, family: BuildFamily.Utility),
+                Make("service_maintenance", "Maintenance", RoomCategory.Service, family: BuildFamily.Utility),
+                Make("service_security", "Security Post", RoomCategory.Service, family: BuildFamily.Utility),
+                Make("shop_food_fine", "Fine Dining", RoomCategory.Commercial,
+                    family: BuildFamily.Shops, subgroup: BuildSubgroup.Food)
+            };
+
+            var groups = BuildCatalog.Group(rooms);
+
+            Assert.AreEqual(2, groups.Count);
+            Assert.AreEqual(BuildFamily.Shops, groups[0].Family);
+            Assert.AreEqual(1, groups[0].Subgroups.Count);
+            Assert.AreEqual(BuildSubgroup.Food, groups[0].Subgroups[0].Subgroup);
+            Assert.AreEqual("shop_food_fine", groups[0].Subgroups[0].Rooms[0].id);
+            Assert.AreEqual(BuildFamily.Utility, groups[1].Family);
+            Assert.AreEqual(3, groups[1].Rooms.Count);
+        }
+
+        [Test]
+        public void ApplyAutoHireOnPlace_sets_staffed_workers_for_housekeeping_and_maintenance()
+        {
+            var hk = Make("service_housekeeping", "Housekeeping", RoomCategory.Service, family: BuildFamily.Utility);
+            var maint = Make("service_maintenance", "Maintenance", RoomCategory.Service, family: BuildFamily.Utility);
+            var security = Make("service_security", "Security Post", RoomCategory.Service, family: BuildFamily.Utility);
+
+            var hkRoom = new RoomInstance(1, hk, Vector2Int.zero, hk.size);
+            var maintRoom = new RoomInstance(2, maint, Vector2Int.zero, maint.size);
+            var securityRoom = new RoomInstance(3, security, Vector2Int.zero, security.size);
+
+            BuildController.ApplyAutoHireOnPlace(hkRoom);
+            BuildController.ApplyAutoHireOnPlace(maintRoom);
+            BuildController.ApplyAutoHireOnPlace(securityRoom);
+
+            Assert.AreEqual(1, hkRoom.StaffedWorkers);
+            Assert.AreEqual(1, maintRoom.StaffedWorkers);
+            Assert.AreEqual(0, securityRoom.StaffedWorkers);
+        }
     }
 }

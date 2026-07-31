@@ -67,6 +67,12 @@ namespace BuildATower
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopFastFood"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopRestaurant"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopRetail"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopFineDining"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/Housekeeping"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/Maintenance"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/SecurityPost"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ResearchLab"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/Conference"));
             _catalog = BuildCatalog.Group(_roomButtons);
         }
 

@@ -96,6 +96,16 @@ namespace BuildATower
             StateChanged?.Invoke();
         }
 
+        /// <summary>
+        /// Housekeeping and Maintenance start with one hired worker on place.
+        /// </summary>
+        public static void ApplyAutoHireOnPlace(RoomInstance room)
+        {
+            if (room?.Type == null) return;
+            if (room.Type.id is "service_housekeeping" or "service_maintenance")
+                room.SetStaffedWorkers(1);
+        }
+
         public void SetRoomType(RoomTypeSO type)
         {
             SelectedRoomType = type;
@@ -309,6 +319,7 @@ namespace BuildATower
             }
 
             room.RecordConstructionSpend(cost, Time.realtimeSinceStartup, isInitialPlace: true);
+            ApplyAutoHireOnPlace(room);
 
             foreach (var scaffold in clearedScaffolding)
                 view.ClearRoom(scaffold);
