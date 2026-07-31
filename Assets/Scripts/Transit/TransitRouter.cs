@@ -81,34 +81,69 @@ namespace BuildATower
                 return true;
             }
 
-            var shaft = _elevators.FindServing(start.y, goal.y);
-            if (shaft == null)
+            ElevatorShaftRuntime best = null;
+            var bestScore = float.MaxValue;
+            var bestExitWalk = int.MaxValue;
+            var bestEntryWalk = int.MaxValue;
+            List<Vector2Int> bestToShaft = null;
+            List<Vector2Int> bestFromShaft = null;
+
+            var direction = goal.y >= start.y ? ElevatorDirection.Up : ElevatorDirection.Down;
+            foreach (var shaft in _elevators.GetServingShafts(start.y, goal.y))
+            {
+                var entry = new Vector2Int(shaft.X, start.y);
+                var exit = new Vector2Int(shaft.X, goal.y);
+                if (!_stairs.TryFindPath(start, entry, out var toShaft) || toShaft == null)
+                    continue;
+                if (!_stairs.TryFindPath(exit, goal, out var fromShaft) || fromShaft == null)
+                    continue;
+
+                var walkCost = toShaft.Count + fromShaft.Count;
+                var wait = _elevators.EstimateWaitMinutes(shaft, start.y, direction);
+                var score = ElevatorRouting.Score(walkCost, wait);
+
+                var betterScore = score < bestScore - 1e-3f;
+                var nearTie = Mathf.Abs(score - bestScore) <= 1e-3f;
+                var betterTieBreak = nearTie && (
+                    fromShaft.Count < bestExitWalk ||
+                    (fromShaft.Count == bestExitWalk && toShaft.Count < bestEntryWalk) ||
+                    (fromShaft.Count == bestExitWalk &&
+                     toShaft.Count == bestEntryWalk &&
+                     (best == null || shaft.X < best.X)));
+
+                if (!betterScore && !betterTieBreak)
+                    continue;
+
+                best = shaft;
+                bestScore = score;
+                bestExitWalk = fromShaft.Count;
+                bestEntryWalk = toShaft.Count;
+                bestToShaft = toShaft;
+                bestFromShaft = fromShaft;
+            }
+
+            if (best == null || bestToShaft == null || bestFromShaft == null)
                 return false;
 
-            var entry = new Vector2Int(shaft.X, start.y);
-            var exit = new Vector2Int(shaft.X, goal.y);
-            if (!_stairs.TryFindPath(start, entry, out var toShaft) || toShaft == null)
-                return false;
-            if (!_stairs.TryFindPath(exit, goal, out var fromShaft) || fromShaft == null)
-                return false;
-
+            var bestEntry = new Vector2Int(best.X, start.y);
+            var bestExit = new Vector2Int(best.X, goal.y);
             legs.Add(new TransitLeg
             {
                 Kind = TransitLegKind.Walk,
-                Cells = toShaft
+                Cells = bestToShaft
             });
             legs.Add(new TransitLeg
             {
                 Kind = TransitLegKind.Elevator,
-                ElevatorX = shaft.X,
+                ElevatorX = best.X,
                 EntryFloor = start.y,
                 ExitFloor = goal.y,
-                Cells = new List<Vector2Int> { entry, exit }
+                Cells = new List<Vector2Int> { bestEntry, bestExit }
             });
             legs.Add(new TransitLeg
             {
                 Kind = TransitLegKind.Walk,
-                Cells = fromShaft
+                Cells = bestFromShaft
             });
             return true;
         }

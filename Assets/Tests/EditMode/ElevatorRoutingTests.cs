@@ -17,6 +17,28 @@ namespace BuildATower.Tests
             return so;
         }
 
+        RoomTypeSO Stairs()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "stairs";
+            so.category = RoomCategory.Transit;
+            so.isStairs = true;
+            so.size = new Vector2Int(2, 2);
+            so.allowAboveGround = true;
+            so.allowBasement = true;
+            return so;
+        }
+
+        RoomTypeSO Office()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "office";
+            so.category = RoomCategory.Office;
+            so.size = new Vector2Int(9, 1);
+            so.allowAboveGround = true;
+            return so;
+        }
+
         RoomTypeSO Elevator()
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
@@ -47,6 +69,29 @@ namespace BuildATower.Tests
             first = system.Shafts.Single(s => s.RoomInstanceId == a.InstanceId);
             second = system.Shafts.Single(s => s.RoomInstanceId == b.InstanceId);
             return system;
+        }
+
+        TowerGrid DualShaftTowerForRouting(
+            out ElevatorSystem elevators,
+            out ElevatorShaftRuntime crowded,
+            out ElevatorShaftRuntime empty)
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            for (var floor = 1; floor <= 4; floor++)
+                Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, floor), out _));
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var a));
+            Assert.IsTrue(grid.TryExtendElevator(a, 0, 4, out _));
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(5, 0), out var b));
+            Assert.IsTrue(grid.TryExtendElevator(b, 0, 4, out _));
+
+            elevators = new ElevatorSystem();
+            elevators.SyncFromGrid(grid);
+            crowded = elevators.Shafts.Single(s => s.RoomInstanceId == a.InstanceId);
+            empty = elevators.Shafts.Single(s => s.RoomInstanceId == b.InstanceId);
+            Assert.AreEqual(0, crowded.X);
+            Assert.AreEqual(5, empty.X);
+            return grid;
         }
 
         [Test]
@@ -165,6 +210,51 @@ namespace BuildATower.Tests
             Assert.AreEqual(0.25f, ElevatorRouting.SwitchImproveRatio);
             Assert.AreEqual(10f, ElevatorRouting.RescoreIntervalGameMinutes);
             Assert.AreEqual(30f, ElevatorRouting.SwitchCooldownGameMinutes);
+        }
+
+        [Test]
+        public void TryPlanTrip_picks_empty_shaft_over_crowded_first()
+        {
+            var grid = DualShaftTowerForRouting(out var elevators, out var crowded, out var empty);
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+
+            Assert.AreSame(crowded, elevators.FindServing(0, 4));
+            for (var id = 1; id <= ElevatorCar.Capacity; id++)
+                Assert.IsTrue(elevators.TryEnqueue(id, crowded.X, 0, ElevatorDirection.Up));
+
+            // Start/goal near shaft B (X=5); FindServing would still return crowded X=0.
+            Assert.IsTrue(router.TryPlanTrip(
+                new Vector2Int(7, 0),
+                new Vector2Int(7, 4),
+                out var legs));
+            Assert.AreEqual(
+                new[] { TransitLegKind.Walk, TransitLegKind.Elevator, TransitLegKind.Walk },
+                legs.Select(leg => leg.Kind));
+            Assert.AreEqual(empty.X, legs[1].ElevatorX);
+            Assert.AreNotEqual(crowded.X, legs[1].ElevatorX);
+        }
+
+        [Test]
+        public void TryPlanTrip_uses_stairs_when_span_le_3_even_with_elevators()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, 1), out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(5, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 2, out _));
+
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+
+            Assert.IsTrue(router.TryPlanTrip(
+                new Vector2Int(8, 0),
+                new Vector2Int(8, 1),
+                out var legs));
+            Assert.AreEqual(1, legs.Count);
+            Assert.AreEqual(TransitLegKind.Stairs, legs[0].Kind);
+            Assert.IsFalse(legs.Any(leg => leg.Kind == TransitLegKind.Elevator));
         }
     }
 }
