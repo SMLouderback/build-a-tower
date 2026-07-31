@@ -40,16 +40,25 @@ namespace BuildATower
                     room.RecordLifetimeExpense(ElevatorDailyUpkeep);
                 }
 
-                if (!IsRecurringIncomeRoom(room) || !HasHomeAgent(room, agents))
-                    continue;
+                if (IsRecurringIncomeRoom(room) && HasHomeAgent(room, agents) && PassesDemand(room, currentStars))
+                {
+                    var amount = PricePricing.ScaledIncome(room.Type.baseIncome, room.PriceTier);
+                    LastIncome += amount;
+                    _lastIncomeByRoom[room.InstanceId] = amount;
+                    room.RecordLifetimeIncome(amount);
+                }
 
-                if (!PassesDemand(room, currentStars))
-                    continue;
-
-                var amount = PricePricing.ScaledIncome(room.Type.baseIncome, room.PriceTier);
-                LastIncome += amount;
-                _lastIncomeByRoom[room.InstanceId] = amount;
-                room.RecordLifetimeIncome(amount);
+                if (ShopVisitRules.IsShop(room.Type) && room.VisitsToday > 0)
+                {
+                    var amount = room.VisitsToday * ShopVisitRules.PayPerVisit(room.Type);
+                    LastIncome += amount;
+                    if (_lastIncomeByRoom.TryGetValue(room.InstanceId, out var existing))
+                        _lastIncomeByRoom[room.InstanceId] = existing + amount;
+                    else
+                        _lastIncomeByRoom[room.InstanceId] = amount;
+                    room.RecordLifetimeIncome(amount);
+                    room.ResetVisitsToday();
+                }
             }
 
             wallet.Add(LastIncome);

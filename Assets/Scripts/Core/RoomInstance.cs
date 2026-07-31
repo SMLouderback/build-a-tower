@@ -21,6 +21,9 @@ namespace BuildATower
         public int LifetimeIncome { get; private set; }
         public int LifetimeExpense { get; private set; }
 
+        public int VisitsToday { get; private set; }
+        public int ConcurrentVisitors { get; private set; }
+
         public RoomInstance(int instanceId, RoomTypeSO type, Vector2Int origin, Vector2Int size)
         {
             InstanceId = instanceId;
@@ -53,6 +56,23 @@ namespace BuildATower
         public void RecordLifetimeExpense(int amount)
         {
             if (amount > 0) LifetimeExpense += amount;
+        }
+
+        public void RecordVisit() => VisitsToday++;
+
+        public void ResetVisitsToday() => VisitsToday = 0;
+
+        public bool TryOccupyVisitorSlot()
+        {
+            var cap = ShopVisitRules.SlotCount(Type);
+            if (ConcurrentVisitors >= cap) return false;
+            ConcurrentVisitors++;
+            return true;
+        }
+
+        public void ReleaseVisitorSlot()
+        {
+            if (ConcurrentVisitors > 0) ConcurrentVisitors--;
         }
 
         public bool IsInBuildGrace(float nowRealtime) =>

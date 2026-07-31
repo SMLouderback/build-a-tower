@@ -141,6 +141,43 @@ namespace BuildATower.Tests
             Assert.AreEqual(105_000, wallet.Balance);
         }
 
+        RoomTypeSO FastFoodShop(int baseIncome = 40)
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "shop_food_fast";
+            so.category = RoomCategory.Commercial;
+            so.size = Vector2Int.one;
+            so.allowAboveGround = true;
+            so.incomeModel = IncomeModel.TrafficVariable;
+            so.baseIncome = baseIncome;
+            so.maxOccupants = 4;
+            return so;
+        }
+
+        [Test]
+        public void Midnight_pays_traffic_from_visits_and_clears_counter()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(FastFoodShop(baseIncome: 40), new Vector2Int(0, 1), out var shop));
+            shop.RecordVisit();
+            shop.RecordVisit();
+            shop.RecordVisit();
+            Assert.AreEqual(3, shop.VisitsToday);
+
+            var wallet = new FundsWallet(100_000);
+            var economy = new EconomySystem();
+
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+
+            Assert.AreEqual(120, economy.LastIncome);
+            Assert.AreEqual(100_120, wallet.Balance);
+            Assert.AreEqual(0, shop.VisitsToday);
+            Assert.AreEqual(120, shop.LifetimeIncome);
+            Assert.AreEqual(120, economy.GetLastRoomIncome(shop));
+            Assert.IsTrue(economy.HasRecordedEconomyEvent);
+        }
+
         [Test]
         public void Overpriced_office_can_skip_income_under_seeded_rng()
         {

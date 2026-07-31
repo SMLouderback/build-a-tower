@@ -48,26 +48,20 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void Traffic_room_reports_that_income_is_not_active_yet()
+        public void Format_shows_per_visit_and_visits_today()
         {
-            var retail = Room(100_000, IncomeModel.TrafficVariable, 0);
+            var shop = Room(100_000, IncomeModel.TrafficVariable, 40);
+            shop.id = "shop_food_fast";
+            var instance = new RoomInstance(7, shop, Vector2Int.zero, Vector2Int.one);
+            instance.RecordVisit();
+            instance.RecordVisit();
 
-            Assert.AreEqual(
-                "Income: Traffic-based (not active yet)",
-                RoomEconomyFormat.IncomeLine(retail));
-        }
-
-        [Test]
-        public void Selected_traffic_room_explicitly_reports_zero_income()
-        {
-            var retail = Room(100_000, IncomeModel.TrafficVariable, 0);
-            var instance = new RoomInstance(7, retail, Vector2Int.zero, Vector2Int.one);
+            StringAssert.Contains("/ visit", RoomEconomyFormat.IncomeLine(shop));
+            StringAssert.Contains("batched at midnight", RoomEconomyFormat.IncomeLine(shop));
 
             var lines = RoomEconomyFormat.SelectedUnitLines(instance, null, new EconomySystem());
-
-            CollectionAssert.Contains(lines, "Built cost: $100,000");
-            CollectionAssert.Contains(lines, "Status: Traffic income inactive ($0)");
-            CollectionAssert.Contains(lines, "Last contribution: +$0 / -$0 = $0");
+            CollectionAssert.Contains(lines, "Visits today: 2");
+            StringAssert.Contains("/visit", RoomEconomyFormat.ButtonTag(shop));
         }
 
         [Test]

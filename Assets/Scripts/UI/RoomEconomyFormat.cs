@@ -27,8 +27,8 @@ namespace BuildATower
                 case IncomeModel.QuarterlyRent when type.baseIncome > 0:
                 case IncomeModel.NightlyRate when type.baseIncome > 0:
                     return $"Income: ${amount:N0} / day occupied";
-                case IncomeModel.TrafficVariable:
-                    return "Income: Traffic-based (not active yet)";
+                case IncomeModel.TrafficVariable when type.baseIncome > 0:
+                    return $"Income: ${type.baseIncome:N0} / visit (batched at midnight)";
                 default:
                     return "Income: —";
             }
@@ -68,7 +68,7 @@ namespace BuildATower
                             : "Status: For sale — no payout yet");
                     break;
                 case IncomeModel.TrafficVariable:
-                    lines.Add("Status: Traffic income inactive ($0)");
+                    lines.Add($"Visits today: {room.VisitsToday}");
                     break;
                 default:
                     lines.Add("Status: Non-revenue unit");
@@ -130,6 +130,8 @@ namespace BuildATower
                 case IncomeModel.QuarterlyRent when type.baseIncome > 0:
                 case IncomeModel.NightlyRate when type.baseIncome > 0:
                     return $"{cost} · {Abbreviate(type.baseIncome)}/d";
+                case IncomeModel.TrafficVariable when type.baseIncome > 0:
+                    return $"{cost} · {Abbreviate(type.baseIncome)}/visit";
                 default:
                     return cost;
             }
