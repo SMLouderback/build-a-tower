@@ -65,9 +65,10 @@ namespace BuildATower
                 var previousMonth = CalendarDate.Month;
                 var previousYear = CalendarDate.Year;
                 DayIndex++;
-                DayRolled?.Invoke();
+                // Month first so climate (and similar) updates before midnight DayRolled consumers.
                 if (CalendarDate.Month != previousMonth || CalendarDate.Year != previousYear)
                     MonthRolled?.Invoke();
+                DayRolled?.Invoke();
             }
         }
 
