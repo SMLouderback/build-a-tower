@@ -62,6 +62,9 @@ namespace BuildATower
         /// <summary>Day index last used to refill disposable income, or -1.</summary>
         public int DisposableDayIndex { get; set; } = -1;
 
+        /// <summary>Day index when low-condition home stress was last applied, or -1.</summary>
+        public int LowConditionStressDay { get; set; } = -1;
+
         public Agent(int id, AgentRole role, RoomInstance homeRoom, Vector2Int cell)
         {
             Id = id;

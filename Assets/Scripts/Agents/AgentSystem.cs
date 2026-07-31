@@ -7,6 +7,7 @@ namespace BuildATower
     {
         public const float StressGainPerSecond = 12f;
         public const float StressDecayPerSecond = 4f;
+        public const float LowConditionStressPerDay = 8f;
         /// <summary>
         /// Walk speed in cells per game minute. At 1x (1 game minute / real second) this
         /// matches the old cells-per-real-second feel; faster presets scale movement with the clock.
@@ -107,6 +108,9 @@ namespace BuildATower
             foreach (var room in livingRooms)
             {
                 var role = RoleFor(room.Type.category);
+                if (room.IsBroken) continue;
+                if (role == AgentRole.HotelGuest && room.Dirty) continue;
+
                 var existing = 0;
                 foreach (var a in _agents)
                     if (ReferenceEquals(a.HomeRoom, room)) existing++;
@@ -183,6 +187,7 @@ namespace BuildATower
             {
                 var agent = _agents[i];
                 EnsureDisposable(agent, clock.DayIndex);
+                ApplyLowConditionStress(agent, clock.DayIndex);
                 if (agent.Phase == AgentPhase.Working && advanced > 0)
                     agent.WorkedMinutes += advanced;
 
@@ -471,7 +476,10 @@ namespace BuildATower
 
             if (agent.Phase == AgentPhase.Outside &&
                 minute >= 16 * 60 &&
-                agent.CheckInDay != clock.DayIndex)
+                agent.CheckInDay != clock.DayIndex &&
+                agent.HomeRoom != null &&
+                !agent.HomeRoom.Dirty &&
+                !agent.HomeRoom.IsBroken)
             {
                 BeginTrip(agent, exitCell, home, AgentPhase.Staying, grid);
                 agent.CheckInDay = clock.DayIndex;
@@ -486,6 +494,7 @@ namespace BuildATower
             {
                 BeginTrip(agent, agent.Cell, exitCell, AgentPhase.Outside, grid);
                 agent.CheckedOutToday = true;
+                agent.HomeRoom?.MarkDirty();
             }
 
             if (agent.Phase == AgentPhase.Staying &&
@@ -604,6 +613,17 @@ namespace BuildATower
                     maxStep);
                 break;
             }
+        }
+
+        void ApplyLowConditionStress(Agent agent, int dayIndex)
+        {
+            if (agent == null || agent.Role == AgentRole.StreetVisitor) return;
+            if (agent.HomeRoom == null) return;
+            if (agent.HomeRoom.Condition >= RoomConditionRules.StressBelow) return;
+            if (agent.LowConditionStressDay == dayIndex) return;
+
+            agent.Stress = Mathf.Min(100f, agent.Stress + LowConditionStressPerDay);
+            agent.LowConditionStressDay = dayIndex;
         }
 
         void UpdateStress(Agent agent, float deltaGameMinutes)
