@@ -849,6 +849,10 @@ namespace BuildATower
             if (shaft == null)
                 return false;
 
+            // Same walk model as TransitRouter.TryPlanTrip (§4.3): path cell counts, skip if either walk fails.
+            if (!_router.TryShaftWalkPaths(start, goal, shaft, out var toShaft, out var fromShaft))
+                return false;
+
             float wait;
             if (isCurrent)
             {
@@ -864,8 +868,7 @@ namespace BuildATower
                 wait = _elevators.EstimateWaitMinutes(shaft, entryFloor, direction);
             }
 
-            // Same-floor Manhattan walks approximate path length for open lobby/office halls.
-            var walkCost = Mathf.Abs(shaft.X - start.x) + Mathf.Abs(shaft.X - goal.x);
+            var walkCost = toShaft.Count + fromShaft.Count;
             score = ElevatorRouting.Score(walkCost, wait);
             return true;
         }

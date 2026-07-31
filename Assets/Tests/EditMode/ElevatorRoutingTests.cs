@@ -100,6 +100,38 @@ namespace BuildATower.Tests
             return grid;
         }
 
+        /// <summary>
+        /// Near shaft at X=0 reaches the floor-4 office; far shaft at X=20 serves 0–4 but
+        /// has no horizontal walk from its exit into the office band (gap on floor 4).
+        /// </summary>
+        TowerGrid DualShaftTowerWithUnreachableAlternate(
+            out ElevatorSystem elevators,
+            out ElevatorShaftRuntime near,
+            out ElevatorShaftRuntime far)
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            for (var floor = 1; floor <= 4; floor++)
+            {
+                var office = Office();
+                office.maxOccupants = floor == 4 ? 1 : 0;
+                Assert.IsTrue(grid.TryPlace(office, new Vector2Int(0, floor), out _));
+            }
+
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var a));
+            Assert.IsTrue(grid.TryExtendElevator(a, 0, 4, out _));
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(20, 0), out var b));
+            Assert.IsTrue(grid.TryExtendElevator(b, 0, 4, out _));
+
+            elevators = new ElevatorSystem();
+            elevators.SyncFromGrid(grid);
+            near = elevators.Shafts.Single(s => s.RoomInstanceId == a.InstanceId);
+            far = elevators.Shafts.Single(s => s.RoomInstanceId == b.InstanceId);
+            Assert.AreEqual(0, near.X);
+            Assert.AreEqual(20, far.X);
+            return grid;
+        }
+
         [Test]
         public void Capacity_is_ten()
         {
@@ -324,6 +356,66 @@ namespace BuildATower.Tests
                 elevators.GetQueueIndex(crowded, 0, ElevatorDirection.Up, agent.Id),
                 0);
             Assert.AreNotEqual(empty.RoomInstanceId, agent.ElevatorShaftId);
+        }
+
+        [Test]
+        public void TryShaftWalkPaths_uses_path_cell_counts_and_fails_when_exit_unreachable()
+        {
+            var grid = DualShaftTowerWithUnreachableAlternate(
+                out var elevators,
+                out var near,
+                out var far);
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+
+            var start = new Vector2Int(near.X, 0);
+            var goal = new Vector2Int(7, 4);
+
+            Assert.IsTrue(router.TryShaftWalkPaths(start, goal, near, out var toNear, out var fromNear));
+            var walkCost = toNear.Count + fromNear.Count;
+            var manhattan = Mathf.Abs(near.X - start.x) + Mathf.Abs(near.X - goal.x);
+            Assert.AreEqual(1, toNear.Count, "Agent already at entry → single-cell path.");
+            Assert.AreEqual(8, fromNear.Count, "Office walk (0,4)→(7,4) is 8 cells.");
+            Assert.AreEqual(9, walkCost);
+            Assert.AreNotEqual(
+                manhattan,
+                walkCost,
+                "Wait/plan scoring must use path cell counts, not Manhattan-on-X.");
+
+            // Manhattan-on-X would still score the far shaft; pathfinder must reject it.
+            Assert.IsFalse(
+                router.TryShaftWalkPaths(start, goal, far, out _, out _),
+                "Exit→goal must fail when the far shaft is cut off on the destination floor.");
+        }
+
+        [Test]
+        public void TryRescoreElevatorWait_skips_alternate_without_walk_path()
+        {
+            var grid = DualShaftTowerWithUnreachableAlternate(
+                out var elevators,
+                out var crowded,
+                out var unreachableEmpty);
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router);
+            agents.SyncHomes(grid);
+            var agent = agents.Agents.Single(a => a.HomeRoom.Origin.y == 4);
+            var goal = new Vector2Int(7, 4);
+
+            // Empty unreachable shaft would win on Manhattan + wait; pathfinder must skip it.
+            for (var id = 1000; id < 1000 + 20; id++)
+                Assert.IsTrue(elevators.TryEnqueue(id, crowded.X, 0, ElevatorDirection.Up));
+
+            PutAgentWaitingOnShaft(agent, elevators, crowded, goal, AgentPhase.Working);
+
+            Assert.IsFalse(
+                agents.TryRescoreElevatorWait(agent, totalMinutes: 100f),
+                "Must not switch to a shaft with no StairsPathfinder exit→goal walk.");
+            Assert.GreaterOrEqual(
+                elevators.GetQueueIndex(crowded, 0, ElevatorDirection.Up, agent.Id),
+                0);
+            Assert.AreEqual(crowded.RoomInstanceId, agent.ElevatorShaftId);
+            Assert.AreNotEqual(unreachableEmpty.RoomInstanceId, agent.ElevatorShaftId);
         }
 
         static void PutAgentWaitingOnShaft(

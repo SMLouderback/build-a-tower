@@ -38,6 +38,31 @@ namespace BuildATower
             _elevators.SyncFromGrid(grid);
         }
 
+        /// <summary>
+        /// Pathfinder walks for a shaft candidate (start→entry, exit→goal).
+        /// Returns false when either walk fails — same gate as elevator planning / wait rescoring.
+        /// </summary>
+        public bool TryShaftWalkPaths(
+            Vector2Int start,
+            Vector2Int goal,
+            ElevatorShaftRuntime shaft,
+            out List<Vector2Int> toShaft,
+            out List<Vector2Int> fromShaft)
+        {
+            toShaft = null;
+            fromShaft = null;
+            if (shaft == null)
+                return false;
+
+            var entry = new Vector2Int(shaft.X, start.y);
+            var exit = new Vector2Int(shaft.X, goal.y);
+            if (!_stairs.TryFindPath(start, entry, out toShaft) || toShaft == null)
+                return false;
+            if (!_stairs.TryFindPath(exit, goal, out fromShaft) || fromShaft == null)
+                return false;
+            return true;
+        }
+
         public bool TryPlanTrip(
             Vector2Int start,
             Vector2Int goal,
@@ -91,11 +116,7 @@ namespace BuildATower
             var direction = goal.y >= start.y ? ElevatorDirection.Up : ElevatorDirection.Down;
             foreach (var shaft in _elevators.GetServingShafts(start.y, goal.y))
             {
-                var entry = new Vector2Int(shaft.X, start.y);
-                var exit = new Vector2Int(shaft.X, goal.y);
-                if (!_stairs.TryFindPath(start, entry, out var toShaft) || toShaft == null)
-                    continue;
-                if (!_stairs.TryFindPath(exit, goal, out var fromShaft) || fromShaft == null)
+                if (!TryShaftWalkPaths(start, goal, shaft, out var toShaft, out var fromShaft))
                     continue;
 
                 var walkCost = toShaft.Count + fromShaft.Count;
