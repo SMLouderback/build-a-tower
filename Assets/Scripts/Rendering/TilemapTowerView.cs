@@ -22,13 +22,14 @@ namespace BuildATower
         {
             if (room?.Type == null) return;
 
+            var color = RoomPaintColor(room);
             var occupied = CollectOccupied(room);
             if (IsVisibleTransit(room))
             {
                 // Transit draws on the rooms layer so it stays visible over rooms.
                 foreach (var cell in occupied)
                 {
-                    var tile = GetTile(room.Type.placeholderColor, EdgeMaskFor(cell, occupied));
+                    var tile = GetTile(color, EdgeMaskFor(cell, occupied));
                     roomsTilemap.SetTile(ToTileCell(cell), tile);
                 }
 
@@ -38,7 +39,7 @@ namespace BuildATower
             var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
             foreach (var cell in occupied)
             {
-                var tile = GetTile(room.Type.placeholderColor, EdgeMaskFor(cell, occupied));
+                var tile = GetTile(color, EdgeMaskFor(cell, occupied));
                 map.SetTile(ToTileCell(cell), tile);
             }
         }
@@ -47,7 +48,7 @@ namespace BuildATower
         {
             if (room?.Type == null) return;
             var occupied = CollectOccupied(room);
-            var tile = GetTile(room.Type.placeholderColor, EdgeMaskFor(cell, occupied));
+            var tile = GetTile(RoomPaintColor(room), EdgeMaskFor(cell, occupied));
             if (IsVisibleTransit(room))
             {
                 roomsTilemap.SetTile(ToTileCell(cell), tile);
@@ -233,6 +234,26 @@ namespace BuildATower
 
         static Vector3Int ToTileCell(Vector2Int logic) =>
             new(logic.x, logic.y, 0);
+
+        /// <summary>
+        /// Broken: dark desaturated. Dirty (else): brownish wash. Otherwise placeholder.
+        /// </summary>
+        public static Color RoomPaintColor(RoomInstance room)
+        {
+            var baseColor = room?.Type != null ? room.Type.placeholderColor : Color.magenta;
+            if (room == null) return baseColor;
+            if (room.IsBroken)
+            {
+                var gray = baseColor.grayscale;
+                var c = Color.Lerp(baseColor, new Color(gray, gray, gray, baseColor.a), 0.75f);
+                return new Color(c.r * 0.45f, c.g * 0.45f, c.b * 0.45f, baseColor.a);
+            }
+
+            if (room.Dirty)
+                return Color.Lerp(baseColor, new Color(0.45f, 0.28f, 0.12f, baseColor.a), 0.55f);
+
+            return baseColor;
+        }
 
         static bool UsesStructureMap(RoomInstance room) =>
             room.Type != null && (room.Type.isLobby || room.Type.isScaffolding);

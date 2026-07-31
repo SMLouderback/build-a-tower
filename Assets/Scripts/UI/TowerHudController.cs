@@ -288,6 +288,9 @@ namespace BuildATower
                     if (PricePricing.IsPricedRoom(build.SelectedRoom?.Type))
                         cy = DrawPriceTierButtons(cx, cy, inner, btnH, row, label, stars);
 
+                    if (BuildController.IsStaffedServiceRoom(build.SelectedRoom?.Type))
+                        cy = DrawStaffStepper(cx, cy, inner, btnH, row, label);
+
                     var elevStatus = build.GetElevatorStatusText();
                     if (elevStatus != null)
                     {
@@ -445,6 +448,36 @@ namespace BuildATower
                 PricePricing.MarketHint(room.PriceTier, currentStars, climateOffset),
                 label);
             cy += row + 4f;
+            return cy;
+        }
+
+        float DrawStaffStepper(
+            float cx,
+            float cy,
+            float inner,
+            float btnH,
+            float row,
+            GUIStyle label)
+        {
+            var room = build.SelectedRoom;
+            if (room == null) return cy;
+
+            GUI.Label(new Rect(cx, cy, inner, row), $"Staff ({room.StaffedWorkers}/4)", label);
+            cy += row;
+
+            const float gap = 4f;
+            const int maxStaff = 4;
+            var bw = (inner - gap * maxStaff) / (maxStaff + 1);
+            for (var i = 0; i <= maxStaff; i++)
+            {
+                var count = i;
+                var active = room.StaffedWorkers == count;
+                var rect = new Rect(cx + i * (bw + gap), cy, bw, btnH);
+                if (GUI.Toggle(rect, active, count.ToString(), GUI.skin.button) && !active)
+                    build.TrySetStaffedWorkers(count);
+            }
+
+            cy += btnH + 4f;
             return cy;
         }
 

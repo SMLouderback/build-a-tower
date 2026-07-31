@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BuildATower
@@ -35,6 +36,7 @@ namespace BuildATower
         bool _dragTopEdge;
         RoomInstance _elevatorEdgeShaft;
         bool _clearedFloorOneHint;
+        readonly Dictionary<int, (bool dirty, bool broken)> _roomVisualState = new();
 
         void Awake()
         {
@@ -64,6 +66,7 @@ namespace BuildATower
 
         void Update()
         {
+            SyncConditionVisuals();
             if (worldCamera == null) return;
             if (IsPointerOverHud(Input.mousePosition))
             {
@@ -174,6 +177,20 @@ namespace BuildATower
             return true;
         }
 
+        public bool TrySetStaffedWorkers(int count)
+        {
+            if (SelectedRoom?.Type == null || !IsStaffedServiceRoom(SelectedRoom.Type))
+                return false;
+
+            SelectedRoom.SetStaffedWorkers(count);
+            if (view != null)
+                view.PaintRoom(SelectedRoom);
+            NotifyGridChanged();
+            RefreshHelpText();
+            StateChanged?.Invoke();
+            return true;
+        }
+
         public bool TrySetSelectedElevatorMaintenance(bool inMaintenance)
         {
             if (SelectedRoom?.Type == null || !SelectedRoom.Type.isElevatorShaft)
@@ -199,11 +216,18 @@ namespace BuildATower
             var floors = minY == maxY
                 ? FloorLabel(minY)
                 : $"{FloorLabel(minY)}–{FloorLabel(maxY)}";
+            var flags = room.IsBroken
+                ? "Broken"
+                : room.Dirty
+                    ? "Dirty"
+                    : "OK";
             var summary =
                 $"{room.Type.displayName} #{room.InstanceId}\n" +
                 $"Origin ({room.Origin.x}, {FloorLabel(room.Origin.y)})  " +
                 $"Size {room.Size.x}×{room.Size.y}  Floors {floors}\n" +
-                $"Condition {room.Evaluation}";
+                $"Condition {room.Condition}  {flags}";
+            if (IsStaffedServiceRoom(room.Type))
+                summary += $"\nStaff {room.StaffedWorkers}/4";
             var now = Time.realtimeSinceStartup;
             if (RoomInstance.IsGraceRefundEligible(room.Type) && room.IsInBuildGrace(now))
             {
@@ -212,6 +236,9 @@ namespace BuildATower
             }
             return summary;
         }
+
+        public static bool IsStaffedServiceRoom(RoomTypeSO type) =>
+            type != null && type.id is "service_housekeeping" or "service_maintenance";
 
         public string GetElevatorStatusText()
         {
@@ -931,6 +958,34 @@ namespace BuildATower
         }
 
         void NotifyGridChanged() => GridChanged?.Invoke();
+
+        void SyncConditionVisuals()
+        {
+            if (view == null || Grid == null) return;
+
+            var selectedChanged = false;
+            foreach (var room in Grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                var dirty = room.Dirty;
+                var broken = room.IsBroken;
+                if (_roomVisualState.TryGetValue(room.InstanceId, out var prev) &&
+                    prev.dirty == dirty &&
+                    prev.broken == broken)
+                    continue;
+
+                _roomVisualState[room.InstanceId] = (dirty, broken);
+                view.PaintRoom(room);
+                if (ReferenceEquals(room, SelectedRoom))
+                    selectedChanged = true;
+            }
+
+            if (selectedChanged)
+            {
+                RefreshHelpText();
+                StateChanged?.Invoke();
+            }
+        }
 
         bool IsElevatorToolActive() =>
             CurrentTool == BuildTool.PlaceRoom &&
