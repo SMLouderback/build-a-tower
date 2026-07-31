@@ -993,7 +993,6 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 9ad8bbe88b4262d4db855e0f90078797, type: 2}
   - {fileID: 11400000, guid: 4099465f1657274469f3b334b5206601, type: 2}
   - {fileID: 11400000, guid: 12849fa16d369244e93af4e5866eea79, type: 2}
-  - {fileID: 11400000, guid: e787759d9e9cee448b7189ce5e2d99dc, type: 2}
   - {fileID: 11400000, guid: 3f8a2c1d9e7b4650a4c6d8e0f1a2b3c4, type: 2}
   stairsRoom: {fileID: 11400000, guid: 4a9b8c7d6e5f4039a2b1c0d9e8f7a6b5, type: 2}
   panelWidth: 260

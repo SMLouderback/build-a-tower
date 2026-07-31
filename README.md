@@ -8,10 +8,11 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 - Selector + elevator maintenance resize: `docs/superpowers/specs/2026-07-29-selector-elevator-maintenance-design.md`
 - Star goals + economy HUD retune: `docs/superpowers/specs/2026-07-29-star-goals-economy-hud-design.md`
 - Price tiers + progressive HUD: `docs/superpowers/specs/2026-07-30-price-tiers-progressive-hud-design.md`
+- Commercial visit traffic (E1): `docs/superpowers/specs/2026-07-31-commercial-visit-traffic-design.md`
 - SimTower behavior reference (tower-together): `docs/reference/tower-together/`
 - Slice #3 elevators checklist: `docs/reference/tower-together/SLICE3-ELEVATORS-CHECKLIST.md`
 
-## Play (Slice #1 + #2 + #3 + #4)
+## Play (Slice #1 + #2 + #3 + #4 + E1 shops)
 
 1. Open this folder in Unity **6000.4.7f1**.
 2. Open `Assets/Scenes/TowerSandbox.unity`.
@@ -38,6 +39,8 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 23. Time presets under the clock: **|| · 1x · 2x · 5x · 10x · 60x** (pause or fast-forward; 60x helps reach midnight and quarterly checks).
 24. Pan with the **bottom horizontal** and **right vertical scrollbars** (RMB/MMB drag and scroll zoom still work) to build and inspect tall, wide towers.
 25. Room buttons show a compact **cost · income** tag (e.g. `Office $40k · $3k/d`, `Condo $80k · $150k once`, `Elevator $100k/fl · -$3k/d`); Build tool detail and Selection spell out full cost, income at the current tier, and any daily upkeep.
+26. Under **Shops**, place **Fast Food** / **Restaurant** (Food) or **Retail** — each needs a reachable path from the lobby. Office workers take a midday lunch trip; hotel guests and condo residents make at most one commercial trip per day; street visitors arrive from Outside when shops are open.
+27. Shop income is **batched at midnight**: each completed visit pays the shop’s `$/visit` into Last Net / unit contribution. Selection shows today’s visit count and the per-visit income model (not “traffic inactive”).
 
 ### Important: Game view Scale
 

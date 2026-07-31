@@ -77,5 +77,29 @@ namespace BuildATower.Tests
             var food = Make("shop_food_fast", "Counter", RoomCategory.Commercial);
             Assert.AreEqual(BuildSubgroup.Food, food.ResolvedBuildSubgroup());
         }
+
+        [Test]
+        public void Group_nests_three_shops_under_food_and_retail()
+        {
+            var rooms = new List<RoomTypeSO>
+            {
+                Make("shop_food_fast", "Fast Food", RoomCategory.Commercial),
+                Make("shop_food_restaurant", "Restaurant", RoomCategory.Commercial),
+                Make("shop_retail", "Retail", RoomCategory.Commercial)
+            };
+
+            var groups = BuildCatalog.Group(rooms);
+
+            Assert.AreEqual(1, groups.Count);
+            Assert.AreEqual(BuildFamily.Shops, groups[0].Family);
+            Assert.AreEqual(2, groups[0].Subgroups.Count);
+            Assert.AreEqual(BuildSubgroup.Food, groups[0].Subgroups[0].Subgroup);
+            Assert.AreEqual(2, groups[0].Subgroups[0].Rooms.Count);
+            Assert.AreEqual("shop_food_fast", groups[0].Subgroups[0].Rooms[0].id);
+            Assert.AreEqual("shop_food_restaurant", groups[0].Subgroups[0].Rooms[1].id);
+            Assert.AreEqual(BuildSubgroup.Retail, groups[0].Subgroups[1].Subgroup);
+            Assert.AreEqual(1, groups[0].Subgroups[1].Rooms.Count);
+            Assert.AreEqual("shop_retail", groups[0].Subgroups[1].Rooms[0].id);
+        }
     }
 }

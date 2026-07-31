@@ -326,13 +326,13 @@ git commit -m "feat: street visitors for shop traffic"
 - Modify: `README.md`
 - Test: extend `BuildCatalogTests` for three shops Food/Retail grouping
 
-- [ ] **Step 1: Assets authored with `hasActiveHours`, costs, colors, sizes (16×1 commercial)**
+- [x] **Step 1: Assets authored with `hasActiveHours`, costs, colors, sizes (16×1 commercial)**
 
-- [ ] **Step 2: HUD loads all three; catalog nests correctly**
+- [x] **Step 2: HUD loads all three; catalog nests correctly**
 
-- [ ] **Step 3: README play bullets for Shops + visits + midnight payout**
+- [x] **Step 3: README play bullets for Shops + visits + midnight payout**
 
-- [ ] **Step 4: Roslyn typecheck Scripts + EditMode — Commit**
+- [x] **Step 4: Roslyn typecheck Scripts + EditMode — Commit**
 
 ```bash
 git commit -m "feat: shop assets, HUD catalog, README for E1 visits"
