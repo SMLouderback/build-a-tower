@@ -1,0 +1,132 @@
+using BuildATower;
+using NUnit.Framework;
+using UnityEngine;
+
+namespace BuildATower.Tests
+{
+    public class RoomConditionTests
+    {
+        static RoomTypeSO Type(string id = "office", bool lobby = false, bool elevator = false, bool stairs = false, int requiredStars = 0)
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = id;
+            so.isLobby = lobby;
+            so.isElevatorShaft = elevator;
+            so.isStairs = stairs;
+            so.requiredStars = requiredStars;
+            return so;
+        }
+
+        static RoomInstance Room(RoomTypeSO type, int condition = 100)
+        {
+            var room = new RoomInstance(1, type, Vector2Int.zero, Vector2Int.one);
+            room.Condition = condition;
+            return room;
+        }
+
+        [Test]
+        public void Defaults_condition_100_not_dirty_not_broken_zero_staff()
+        {
+            var room = new RoomInstance(1, Type(), Vector2Int.zero, Vector2Int.one);
+            Assert.AreEqual(100, room.Condition);
+            Assert.IsFalse(room.Dirty);
+            Assert.IsFalse(room.IsBroken);
+            Assert.AreEqual(0, room.StaffedWorkers);
+        }
+
+        [Test]
+        public void IsBroken_when_condition_zero_or_less()
+        {
+            var room = Room(Type(), 1);
+            Assert.IsFalse(room.IsBroken);
+            room.Condition = 0;
+            Assert.IsTrue(room.IsBroken);
+            room.Condition = -1;
+            Assert.IsTrue(room.IsBroken);
+        }
+
+        [Test]
+        public void MarkDirty_and_ClearDirty()
+        {
+            var room = Room(Type());
+            room.MarkDirty();
+            Assert.IsTrue(room.Dirty);
+            room.ClearDirty();
+            Assert.IsFalse(room.Dirty);
+        }
+
+        [Test]
+        public void SetStaffedWorkers_clamps_0_to_4()
+        {
+            var room = Room(Type());
+            room.SetStaffedWorkers(2);
+            Assert.AreEqual(2, room.StaffedWorkers);
+            room.SetStaffedWorkers(-3);
+            Assert.AreEqual(0, room.StaffedWorkers);
+            room.SetStaffedWorkers(9);
+            Assert.AreEqual(4, room.StaffedWorkers);
+        }
+
+        [Test]
+        public void CanDegrade_false_for_lobby_elevator_stairs_and_null()
+        {
+            Assert.IsFalse(RoomConditionRules.CanDegrade(null));
+            Assert.IsFalse(RoomConditionRules.CanDegrade(Type(lobby: true)));
+            Assert.IsFalse(RoomConditionRules.CanDegrade(Type(elevator: true)));
+            Assert.IsFalse(RoomConditionRules.CanDegrade(Type(stairs: true)));
+            Assert.IsTrue(RoomConditionRules.CanDegrade(Type("office")));
+            Assert.IsTrue(RoomConditionRules.CanDegrade(Type("service_housekeeping")));
+        }
+
+        [Test]
+        public void ApplyMidnightDecay_decrements_degradable_floors_at_zero()
+        {
+            var office = Room(Type("office"), 5);
+            RoomConditionRules.ApplyMidnightDecay(office);
+            Assert.AreEqual(4, office.Condition);
+
+            office.Condition = 0;
+            RoomConditionRules.ApplyMidnightDecay(office);
+            Assert.AreEqual(0, office.Condition);
+            Assert.IsTrue(office.IsBroken);
+
+            var lobby = Room(Type(lobby: true), 50);
+            RoomConditionRules.ApplyMidnightDecay(lobby);
+            Assert.AreEqual(50, lobby.Condition);
+        }
+
+        [Test]
+        public void IncomePaused_when_condition_below_40_or_broken()
+        {
+            var room = Room(Type(), 40);
+            Assert.IsFalse(RoomConditionRules.IncomePaused(room));
+            room.Condition = 39;
+            Assert.IsTrue(RoomConditionRules.IncomePaused(room));
+            room.Condition = 0;
+            Assert.IsTrue(RoomConditionRules.IncomePaused(room));
+            Assert.IsFalse(RoomConditionRules.IncomePaused(null));
+        }
+
+        [Test]
+        public void CleanMinutes_basic_vs_premium_hotel()
+        {
+            Assert.AreEqual(RoomConditionRules.CleanBasicMinutes, RoomConditionRules.CleanMinutes(Type(requiredStars: 0)));
+            Assert.AreEqual(RoomConditionRules.CleanBasicMinutes, RoomConditionRules.CleanMinutes(Type(requiredStars: 1)));
+            Assert.AreEqual(RoomConditionRules.CleanPremiumMinutes, RoomConditionRules.CleanMinutes(Type(requiredStars: 2)));
+            Assert.AreEqual(RoomConditionRules.CleanPremiumMinutes, RoomConditionRules.CleanMinutes(Type(requiredStars: 3)));
+            Assert.AreEqual(RoomConditionRules.CleanBasicMinutes, RoomConditionRules.CleanMinutes(null));
+        }
+
+        [Test]
+        public void ApplyRepairTick_adds_chunk_capped_at_100()
+        {
+            var room = Room(Type(), 85);
+            RoomConditionRules.ApplyRepairTick(room);
+            Assert.AreEqual(95, room.Condition);
+            RoomConditionRules.ApplyRepairTick(room);
+            Assert.AreEqual(100, room.Condition);
+            RoomConditionRules.ApplyRepairTick(room);
+            Assert.AreEqual(100, room.Condition);
+        }
+    }
+}

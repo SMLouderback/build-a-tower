@@ -15,6 +15,9 @@ namespace BuildATower
         /// <summary>0–100 structural/cleanliness condition. 0 means broken.</summary>
         public int Condition { get; set; } = 100;
         public bool IsBroken => Condition <= 0;
+        public bool Dirty { get; private set; }
+        /// <summary>Hired staff count for housekeeping/maintenance rooms. Clamped 0–4.</summary>
+        public int StaffedWorkers { get; private set; }
         public bool CondoSold { get; set; }
         /// <summary>0=Low, 1=Normal, 2=High, 3=Max. Default Normal.</summary>
         public int PriceTier { get; set; } = PricePricing.TierNormal;
@@ -107,5 +110,12 @@ namespace BuildATower
 
         public static bool IsGraceRefundEligible(RoomTypeSO type) =>
             type != null && !type.isLobby && !type.isScaffolding;
+
+        public void MarkDirty() => Dirty = true;
+
+        public void ClearDirty() => Dirty = false;
+
+        public void SetStaffedWorkers(int count) =>
+            StaffedWorkers = Mathf.Clamp(count, 0, 4);
     }
 }
