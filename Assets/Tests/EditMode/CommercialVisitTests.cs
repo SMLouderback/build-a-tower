@@ -154,6 +154,73 @@ namespace BuildATower.Tests
                 agent.Phase == AgentPhase.Moving && agent.PhaseAfterMove == AgentPhase.VisitingShop);
         }
 
+        [Test]
+        public void Population_excludes_street_visitors()
+        {
+            var (grid, _, agents, _, clock) = SetupOfficeWithShop(open: true);
+            var before = agents.Population;
+            Assert.Greater(before, 0);
+
+            Assert.IsTrue(agents.TrySpawnStreetVisitor(grid, clock));
+            Assert.AreEqual(
+                before,
+                agents.Population,
+                "StreetVisitor agents must not count toward star Population.");
+            Assert.AreEqual(
+                1,
+                agents.Agents.Count(a => a.Role == AgentRole.StreetVisitor));
+        }
+
+        [Test]
+        public void Street_visitor_cap_is_eight()
+        {
+            var (grid, agents, clock) = SetupShopsForStreetTraffic();
+
+            for (var i = 0; i < 20; i++)
+                agents.TrySpawnStreetVisitor(grid, clock);
+
+            var streetCount = agents.Agents.Count(a => a.Role == AgentRole.StreetVisitor);
+            Assert.AreEqual(AgentSystem.MaxConcurrentStreetVisitors, streetCount);
+            Assert.IsFalse(
+                agents.TrySpawnStreetVisitor(grid, clock),
+                "Spawn must refuse once the concurrent street visitor cap is reached.");
+            Assert.AreEqual(
+                AgentSystem.MaxConcurrentStreetVisitors,
+                agents.Agents.Count(a => a.Role == AgentRole.StreetVisitor));
+        }
+
+        [Test]
+        public void SyncHomes_preserves_street_visitors()
+        {
+            var (grid, agents, clock) = SetupShopsForStreetTraffic();
+            Assert.IsTrue(agents.TrySpawnStreetVisitor(grid, clock));
+            Assert.AreEqual(1, agents.Agents.Count(a => a.Role == AgentRole.StreetVisitor));
+
+            agents.SyncHomes(grid);
+
+            Assert.AreEqual(
+                1,
+                agents.Agents.Count(a => a.Role == AgentRole.StreetVisitor),
+                "SyncHomes must not remove StreetVisitor agents whose HomeRoom is a shop.");
+        }
+
+        static (TowerGrid grid, AgentSystem agents, GameClock clock) SetupShopsForStreetTraffic()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            // Fast Food (4) + Restaurant (6) = 10 slots so the street cap (8) is the binding limit.
+            Assert.IsTrue(grid.TryPlace(FastFood(), new Vector2Int(9, 1), out _));
+            Assert.IsTrue(grid.TryPlace(Restaurant(), new Vector2Int(10, 1), out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
+
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router);
+            agents.SyncHomes(grid);
+            var clock = new GameClock(1f, 12 * 60);
+            return (grid, agents, clock);
+        }
+
         static (
             TowerGrid grid,
             RoomInstance shop,
@@ -321,6 +388,22 @@ namespace BuildATower.Tests
             so.hasActiveHours = true;
             so.activeHoursStart = 11 * 60;
             so.activeHoursEnd = 21 * 60;
+            return so;
+        }
+
+        static RoomTypeSO Restaurant()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "shop_food_restaurant";
+            so.category = RoomCategory.Commercial;
+            so.size = Vector2Int.one;
+            so.allowAboveGround = true;
+            so.incomeModel = IncomeModel.TrafficVariable;
+            so.baseIncome = 120;
+            so.maxOccupants = 6;
+            so.hasActiveHours = true;
+            so.activeHoursStart = 11 * 60;
+            so.activeHoursEnd = 22 * 60;
             return so;
         }
     }

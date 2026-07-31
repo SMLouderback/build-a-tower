@@ -97,7 +97,11 @@ namespace BuildATower
             if (build?.Grid == null || _clock == null || _agents == null) return;
             _clock.Tick(Time.deltaTime);
             _elevators.Tick(_clock.LastTickGameMinutes);
-            _agents.Tick(_clock.LastTickGameMinutes, _clock, build.Grid);
+            _agents.Tick(
+                _clock.LastTickGameMinutes,
+                _clock,
+                build.Grid,
+                _stars?.CurrentStars ?? 0);
             if (agentView != null)
                 agentView.Sync(_agents.Agents);
         }

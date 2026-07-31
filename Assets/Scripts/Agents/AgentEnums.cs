@@ -4,7 +4,8 @@ namespace BuildATower
     {
         OfficeWorker,
         HotelGuest,
-        CondoResident
+        CondoResident,
+        StreetVisitor
     }
 
     public enum AgentPhase

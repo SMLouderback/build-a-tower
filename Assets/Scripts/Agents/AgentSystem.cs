@@ -17,6 +17,10 @@ namespace BuildATower
         public const float QueueLaneOffset = 0.8f;
         public const float QueueSpacing = 0.34f;
 
+        public const int MaxConcurrentStreetVisitors = 8;
+        public const int StreetSpawnIntervalMinutes = 8;
+        public const float StreetSpawnBaseChance = 0.25f;
+
         readonly List<Agent> _agents = new();
         readonly TransitRouter _router;
         readonly ElevatorSystem _elevators;
@@ -25,6 +29,7 @@ namespace BuildATower
         System.Action<RoomInstance> _onCondoResidentMovedIn;
         int _nextId = 1;
         int _lastTotalMinutes = int.MinValue;
+        int _streetSpawnMinuteAccumulator;
 
         public IReadOnlyList<Agent> Agents => _agents;
         public int Population
@@ -34,6 +39,7 @@ namespace BuildATower
                 var count = 0;
                 foreach (var agent in _agents)
                 {
+                    if (agent.Role == AgentRole.StreetVisitor) continue;
                     if (agent.Role != AgentRole.CondoResident || agent.HasMovedIn)
                         count++;
                 }
@@ -78,6 +84,7 @@ namespace BuildATower
 
             for (var i = _agents.Count - 1; i >= 0; i--)
             {
+                if (_agents[i].Role == AgentRole.StreetVisitor) continue;
                 if (!livingRooms.Contains(_agents[i].HomeRoom))
                     _agents.RemoveAt(i);
             }
@@ -139,7 +146,11 @@ namespace BuildATower
         /// Game minutes advanced this frame (typically <see cref="GameClock.LastTickGameMinutes"/>).
         /// Walking and stress scale with this so agents keep up when time speed changes.
         /// </param>
-        public void Tick(float deltaGameMinutes, GameClock clock, TowerGrid grid)
+        public void Tick(
+            float deltaGameMinutes,
+            GameClock clock,
+            TowerGrid grid,
+            int currentStars = 0)
         {
             if (grid == null || clock == null) return;
 
@@ -149,8 +160,9 @@ namespace BuildATower
                 advanced = Mathf.Max(0, total - _lastTotalMinutes);
             _lastTotalMinutes = total;
 
-            foreach (var agent in _agents)
+            for (var i = 0; i < _agents.Count; i++)
             {
+                var agent = _agents[i];
                 if (agent.Phase == AgentPhase.Working && advanced > 0)
                     agent.WorkedMinutes += advanced;
 
@@ -167,6 +179,9 @@ namespace BuildATower
                 UpdateVisitingShop(agent, deltaGameMinutes, grid);
                 UpdateStress(agent, deltaGameMinutes);
             }
+
+            UpdateStreetTraffic(clock, grid, currentStars, advanced);
+            DespawnFinishedStreetVisitors();
         }
 
         void UpdateSchedule(Agent agent, GameClock clock, TowerGrid grid)
@@ -312,6 +327,76 @@ namespace BuildATower
             var after = agent.PhaseAfterVisit;
             agent.ReturnCell = null;
             BeginTrip(agent, agent.Cell, returnCell, after, grid);
+        }
+
+        void UpdateStreetTraffic(GameClock clock, TowerGrid grid, int stars, int advancedMinutes)
+        {
+            if (advancedMinutes <= 0) return;
+
+            _streetSpawnMinuteAccumulator += advancedMinutes;
+            while (_streetSpawnMinuteAccumulator >= StreetSpawnIntervalMinutes)
+            {
+                _streetSpawnMinuteAccumulator -= StreetSpawnIntervalMinutes;
+                if (CountStreetVisitors() >= MaxConcurrentStreetVisitors) continue;
+                if (FindOpenShops(grid, clock.MinuteOfDay).Count == 0) continue;
+
+                var chance = Mathf.Clamp01(StreetSpawnBaseChance * (1 + Mathf.Max(0, stars)));
+                if (_rng.NextDouble() >= chance) continue;
+
+                TrySpawnStreetVisitor(grid, clock);
+            }
+        }
+
+        /// <summary>
+        /// Spawns an ephemeral street visitor Outside that visits an open shop then leaves.
+        /// HomeRoom is the chosen shop (soft home) so SyncHomes can skip living-room removal.
+        /// </summary>
+        public bool TrySpawnStreetVisitor(TowerGrid grid, GameClock clock)
+        {
+            if (grid == null || clock == null) return false;
+            if (CountStreetVisitors() >= MaxConcurrentStreetVisitors) return false;
+
+            var shops = FindOpenShops(grid, clock.MinuteOfDay);
+            if (shops.Count == 0) return false;
+
+            var shop = shops[_rng.Next(shops.Count)];
+            if (!shop.TryOccupyVisitorSlot()) return false;
+
+            var exitCell = LobbyExitCell(grid);
+            var agent = new Agent(_nextId++, AgentRole.StreetVisitor, shop, exitCell)
+            {
+                VisitTarget = shop,
+                PhaseAfterVisit = AgentPhase.Outside,
+                ReturnCell = exitCell,
+                VisitDwellRemaining = ShopVisitRules.PickDwellMinutes(shop.Type, _rng)
+            };
+            _agents.Add(agent);
+            BeginTrip(agent, exitCell, ShopEntryCell(shop), AgentPhase.VisitingShop, grid);
+            return true;
+        }
+
+        int CountStreetVisitors()
+        {
+            var count = 0;
+            foreach (var agent in _agents)
+            {
+                if (agent.Role == AgentRole.StreetVisitor)
+                    count++;
+            }
+
+            return count;
+        }
+
+        void DespawnFinishedStreetVisitors()
+        {
+            for (var i = _agents.Count - 1; i >= 0; i--)
+            {
+                var agent = _agents[i];
+                if (agent.Role != AgentRole.StreetVisitor) continue;
+                if (agent.Phase != AgentPhase.Outside) continue;
+                if (agent.VisitTarget != null) continue;
+                _agents.RemoveAt(i);
+            }
         }
 
         void UpdateHotel(Agent agent, GameClock clock, TowerGrid grid)
