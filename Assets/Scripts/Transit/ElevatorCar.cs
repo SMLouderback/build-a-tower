@@ -18,7 +18,7 @@ namespace BuildATower
 
     public sealed class ElevatorCar
     {
-        public const int Capacity = 8;
+        public const int Capacity = 10;
 
         /// <summary>Travel time when the next floor is a planned stop.</summary>
         public const float MinutesPerFloor = 0.75f;

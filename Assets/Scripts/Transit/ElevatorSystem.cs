@@ -267,6 +267,79 @@ namespace BuildATower
         }
 
         /// <summary>
+        /// All non-maintenance shafts that serve both floors (for scored routing).
+        /// </summary>
+        public IReadOnlyList<ElevatorShaftRuntime> GetServingShafts(int floorA, int floorB)
+        {
+            var result = new List<ElevatorShaftRuntime>();
+            foreach (var shaft in _shafts)
+            {
+                if (shaft.InMaintenance) continue;
+                if (shaft.Serves(floorA) && shaft.Serves(floorB))
+                    result.Add(shaft);
+            }
+
+            return result;
+        }
+
+        public int QueueLength(
+            ElevatorShaftRuntime shaft,
+            int floor,
+            ElevatorDirection direction)
+        {
+            if (shaft == null || direction == ElevatorDirection.None)
+                return 0;
+
+            var queues = direction == ElevatorDirection.Up
+                ? shaft.UpQueues
+                : shaft.DownQueues;
+            if (queues == null || !queues.TryGetValue(floor, out var queue))
+                return 0;
+
+            return queue.Count;
+        }
+
+        /// <summary>
+        /// Passengers already aboard whose destination continues in <paramref name="direction"/>.
+        /// </summary>
+        public int SameWayPassengerCount(
+            ElevatorShaftRuntime shaft,
+            ElevatorDirection direction)
+        {
+            if (shaft?.Car == null || direction == ElevatorDirection.None)
+                return 0;
+
+            var count = 0;
+            var carFloor = shaft.Car.Floor;
+            foreach (var agentId in shaft.Car.PassengerIds)
+            {
+                if (!_passengerDestFloor.TryGetValue(agentId, out var destination))
+                    continue;
+
+                if (direction == ElevatorDirection.Up && destination > carFloor)
+                    count++;
+                else if (direction == ElevatorDirection.Down && destination < carFloor)
+                    count++;
+            }
+
+            return count;
+        }
+
+        public float EstimateWaitMinutes(
+            ElevatorShaftRuntime shaft,
+            int entryFloor,
+            ElevatorDirection direction)
+        {
+            if (shaft == null || direction == ElevatorDirection.None)
+                return 0f;
+
+            var queueAhead = QueueLength(shaft, entryFloor, direction);
+            var sameWay = SameWayPassengerCount(shaft, direction);
+            var busy = ElevatorRouting.NeedsBusyPenalty(shaft, entryFloor, direction);
+            return ElevatorRouting.EstimateWaitMinutes(queueAhead, sameWay, busy);
+        }
+
+        /// <summary>
         /// Shaft covering a column and floor span regardless of maintenance state.
         /// Use for agents already committed to a shaft; use FindServing for planning.
         /// </summary>
