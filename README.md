@@ -9,6 +9,7 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 - Star goals + economy HUD retune: `docs/superpowers/specs/2026-07-29-star-goals-economy-hud-design.md`
 - Price tiers + progressive HUD: `docs/superpowers/specs/2026-07-30-price-tiers-progressive-hud-design.md`
 - Commercial visit traffic (E1): `docs/superpowers/specs/2026-07-31-commercial-visit-traffic-design.md`
+- Smart elevator routing: `docs/superpowers/specs/2026-07-31-smart-elevator-routing-design.md`
 - SimTower behavior reference (tower-together): `docs/reference/tower-together/`
 - Slice #3 elevators checklist: `docs/reference/tower-together/SLICE3-ELEVATORS-CHECKLIST.md`
 
@@ -22,7 +23,7 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 6. In **Build**, open a family (**Office / Hotel / Condo / Shops / Transit**) and pick a variant. Place rooms above the lobby on floors 1+ (no overhangs). Basement rooms go on B1 (−1) and below. **Utility** appears only when support-room assets exist.
 7. Place **Stairs** under **Transit** (**2×2**, two floors). From Floor G, stairs reach **B1** (origin at −1) or **floor 1** (origin at 0). Stair run is bottom-left → top-right. Stack the next flight one floor up on the same columns (connecting floor shares landings; roles 1 and 4 cannot overlap).
 8. Watch **office workers** commute in the morning and **hotel guests** after 4pm (clock runs ~1 game minute per real second).
-9. Trips farther than **3 floors** via stairs use elevators when a shaft serves both floors; otherwise they fail and raise stress.
+9. Trips of **≤ 3 floors** use **stairs** when a valid stairs path exists. Longer trips pick the **best serving elevator** (lowest walk + queue + load score among shafts that span both floors); if none qualify, the trip fails and raises stress. Each car holds up to **10** passengers; agents **waiting in line may switch shafts** when another is clearly better.
 10. Bulldoze under occupied floors leaves scaffolding; RMB/MMB pan, scroll zoom.
 11. Within **10 real-time seconds** of placing a room, bulldoze refunds build cost minus that room’s net earnings/upkeep; after the window, demolish stays **$0**.
 12. Select **Elevator** (under Transit) and click to place a **1×2** shaft through supported floors (the initial cost is two floors).
