@@ -56,6 +56,12 @@ namespace BuildATower
         public AgentPhase PhaseAfterVisit { get; set; }
         public Vector2Int? ReturnCell { get; set; }
 
+        /// <summary>Remaining disposable cash for commercial spend today.</summary>
+        public int DisposableRemaining { get; set; }
+
+        /// <summary>Day index last used to refill disposable income, or -1.</summary>
+        public int DisposableDayIndex { get; set; } = -1;
+
         public Agent(int id, AgentRole role, RoomInstance homeRoom, Vector2Int cell)
         {
             Id = id;

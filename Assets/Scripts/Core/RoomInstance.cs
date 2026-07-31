@@ -22,6 +22,7 @@ namespace BuildATower
         public int LifetimeExpense { get; private set; }
 
         public int VisitsToday { get; private set; }
+        public int ShopEarningsToday { get; private set; }
         public int ConcurrentVisitors { get; private set; }
 
         public RoomInstance(int instanceId, RoomTypeSO type, Vector2Int origin, Vector2Int size)
@@ -60,9 +61,15 @@ namespace BuildATower
 
         public void RecordVisit() => VisitsToday++;
 
+        public void RecordShopSpend(int amount)
+        {
+            if (amount > 0) ShopEarningsToday += amount;
+        }
+
         public void ResetVisitsToday()
         {
             VisitsToday = 0;
+            ShopEarningsToday = 0;
             ConcurrentVisitors = 0;
         }
 
