@@ -5,7 +5,9 @@ namespace BuildATower
         OfficeWorker,
         HotelGuest,
         CondoResident,
-        StreetVisitor
+        StreetVisitor,
+        Maid,
+        Handyman
     }
 
     public enum AgentPhase

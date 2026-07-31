@@ -65,6 +65,12 @@ namespace BuildATower
         /// <summary>Day index when low-condition home stress was last applied, or -1.</summary>
         public int LowConditionStressDay { get; set; } = -1;
 
+        /// <summary>Hotel/room currently claimed for cleaning or repair, if any.</summary>
+        public RoomInstance ServiceTarget { get; set; }
+
+        /// <summary>Game minutes remaining for the active maid/handyman job.</summary>
+        public float ServiceWorkRemaining { get; set; }
+
         public Agent(int id, AgentRole role, RoomInstance homeRoom, Vector2Int cell)
         {
             Id = id;

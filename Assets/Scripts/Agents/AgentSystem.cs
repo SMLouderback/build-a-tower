@@ -21,6 +21,8 @@ namespace BuildATower
         public const int MaxConcurrentStreetVisitors = 8;
         public const int StreetSpawnIntervalMinutes = 8;
         public const float StreetSpawnBaseChance = 0.25f;
+        public const string HousekeepingId = "service_housekeeping";
+        public const string MaintenanceId = "service_maintenance";
 
         readonly List<Agent> _agents = new();
         readonly TransitRouter _router;
@@ -42,7 +44,7 @@ namespace BuildATower
                 var count = 0;
                 foreach (var agent in _agents)
                 {
-                    if (agent.Role == AgentRole.StreetVisitor) continue;
+                    if (IsNonPopulationRole(agent.Role)) continue;
                     if (agent.Role != AgentRole.CondoResident || agent.HasMovedIn)
                         count++;
                 }
@@ -59,7 +61,7 @@ namespace BuildATower
                 var sum = 0f;
                 foreach (var a in _agents)
                 {
-                    if (a.Role == AgentRole.StreetVisitor) continue;
+                    if (IsNonPopulationRole(a.Role)) continue;
                     sum += a.Stress;
                     count++;
                 }
@@ -97,13 +99,15 @@ namespace BuildATower
 
             for (var i = _agents.Count - 1; i >= 0; i--)
             {
-                if (_agents[i].Role == AgentRole.StreetVisitor) continue;
+                if (IsEphemeralOrStaffRole(_agents[i].Role)) continue;
                 if (!livingRooms.Contains(_agents[i].HomeRoom))
                 {
                     CancelCommercialVisit(_agents[i]);
                     _agents.RemoveAt(i);
                 }
             }
+
+            SyncServiceStaff(grid);
 
             foreach (var room in livingRooms)
             {
@@ -204,6 +208,7 @@ namespace BuildATower
 
                 StepMovement(agent, deltaGameMinutes);
                 UpdateVisitingShop(agent, deltaGameMinutes, grid);
+                UpdateServiceWork(agent, deltaGameMinutes, grid);
                 UpdateStress(agent, deltaGameMinutes);
             }
 
@@ -224,8 +229,266 @@ namespace BuildATower
                 case AgentRole.CondoResident:
                     UpdateCondo(agent, clock, grid);
                     break;
+                case AgentRole.Maid:
+                case AgentRole.Handyman:
+                    UpdateServiceAgent(agent, grid);
+                    break;
             }
         }
+
+        /// <summary>
+        /// Assigns idle Maid/Handyman agents to open jobs. Returns true if any job was claimed.
+        /// </summary>
+        public bool TryAssignServiceJobs(TowerGrid grid)
+        {
+            if (grid == null) return false;
+            var assigned = false;
+            foreach (var agent in _agents)
+            {
+                if (!IsServiceRole(agent.Role)) continue;
+                if (agent.ServiceTarget != null) continue;
+                if (agent.Phase is AgentPhase.Moving or AgentPhase.WaitingAtElevator or AgentPhase.Riding)
+                    continue;
+                if (TryAssignJobFor(agent, grid))
+                    assigned = true;
+            }
+
+            return assigned;
+        }
+
+        /// <summary>
+        /// Instantly finishes the agent's active clean/repair job (test / debug hook).
+        /// </summary>
+        public bool ForceCompleteServiceWork(Agent agent)
+        {
+            if (agent == null || agent.ServiceTarget == null || !IsServiceRole(agent.Role))
+                return false;
+
+            FinishServiceJob(agent);
+            agent.Phase = AgentPhase.AtHome;
+            agent.GoalCell = null;
+            agent.Path?.Clear();
+            agent.TripLegs?.Clear();
+            agent.TripLegIndex = 0;
+            ClearElevatorTripState(agent);
+            return true;
+        }
+
+        void SyncServiceStaff(TowerGrid grid)
+        {
+            var staffHomes = new HashSet<RoomInstance>();
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type?.id == null) continue;
+                if (room.Type.id is not (HousekeepingId or MaintenanceId)) continue;
+                staffHomes.Add(room);
+                var role = room.Type.id == HousekeepingId ? AgentRole.Maid : AgentRole.Handyman;
+                var want = room.StaffedWorkers;
+                var existing = 0;
+                for (var i = 0; i < _agents.Count; i++)
+                {
+                    if (ReferenceEquals(_agents[i].HomeRoom, room) && _agents[i].Role == role)
+                        existing++;
+                }
+
+                while (existing > want)
+                {
+                    RemoveOneStaffAgent(room, role);
+                    existing--;
+                }
+
+                while (existing < want)
+                {
+                    var homeCell = HomeCell(room, existing);
+                    var agent = new Agent(_nextId++, role, room, homeCell)
+                    {
+                        Phase = AgentPhase.AtHome,
+                        Visible = true
+                    };
+                    _agents.Add(agent);
+                    existing++;
+                }
+            }
+
+            for (var i = _agents.Count - 1; i >= 0; i--)
+            {
+                var agent = _agents[i];
+                if (!IsServiceRole(agent.Role)) continue;
+                if (staffHomes.Contains(agent.HomeRoom)) continue;
+                ClearServiceClaim(agent);
+                _agents.RemoveAt(i);
+            }
+        }
+
+        void RemoveOneStaffAgent(RoomInstance home, AgentRole role)
+        {
+            var removeIndex = -1;
+            for (var i = _agents.Count - 1; i >= 0; i--)
+            {
+                var agent = _agents[i];
+                if (!ReferenceEquals(agent.HomeRoom, home) || agent.Role != role) continue;
+                if (agent.ServiceTarget == null)
+                {
+                    removeIndex = i;
+                    break;
+                }
+
+                if (removeIndex < 0)
+                    removeIndex = i;
+            }
+
+            if (removeIndex < 0) return;
+            ClearServiceClaim(_agents[removeIndex]);
+            _agents.RemoveAt(removeIndex);
+        }
+
+        void UpdateServiceAgent(Agent agent, TowerGrid grid)
+        {
+            if (agent.ServiceTarget != null)
+            {
+                if (agent.Phase == AgentPhase.Working) return;
+                if (agent.Phase is AgentPhase.Moving or AgentPhase.WaitingAtElevator or AgentPhase.Riding)
+                    return;
+
+                // Claim lost its trip — re-path or drop.
+                if (!BeginTrip(
+                        agent,
+                        agent.Cell,
+                        HomeCell(agent.ServiceTarget, 0),
+                        AgentPhase.Working,
+                        grid))
+                    ClearServiceClaim(agent);
+                return;
+            }
+
+            if (agent.Phase is AgentPhase.Moving or AgentPhase.WaitingAtElevator or AgentPhase.Riding)
+                return;
+
+            if (TryAssignJobFor(agent, grid))
+                return;
+
+            if (agent.Phase != AgentPhase.AtHome)
+            {
+                BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, 0), AgentPhase.AtHome, grid);
+                return;
+            }
+
+            agent.Visible = true;
+        }
+
+        void UpdateServiceWork(Agent agent, float deltaGameMinutes, TowerGrid grid)
+        {
+            if (!IsServiceRole(agent.Role)) return;
+            if (agent.ServiceTarget == null || agent.Phase != AgentPhase.Working) return;
+
+            agent.ServiceWorkRemaining -= deltaGameMinutes;
+            if (agent.ServiceWorkRemaining > 0f) return;
+
+            FinishServiceJob(agent);
+            if (!TryAssignJobFor(agent, grid))
+                BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, 0), AgentPhase.AtHome, grid);
+        }
+
+        bool TryAssignJobFor(Agent agent, TowerGrid grid)
+        {
+            if (agent == null || grid == null || agent.ServiceTarget != null) return false;
+
+            RoomInstance target = null;
+            float workMinutes = 0f;
+            if (agent.Role == AgentRole.Maid)
+            {
+                target = FindOldestDirtyHotel(grid);
+                if (target != null)
+                    workMinutes = RoomConditionRules.CleanMinutes(target.Type);
+            }
+            else if (agent.Role == AgentRole.Handyman)
+            {
+                target = FindLowestConditionRepairTarget(grid);
+                if (target != null)
+                    workMinutes = RoomConditionRules.RepairMinutesPerChunk;
+            }
+
+            if (target == null) return false;
+
+            agent.ServiceTarget = target;
+            agent.ServiceWorkRemaining = workMinutes;
+            agent.Visible = true;
+            if (BeginTrip(agent, agent.Cell, HomeCell(target, 0), AgentPhase.Working, grid))
+                return true;
+
+            ClearServiceClaim(agent);
+            return false;
+        }
+
+        RoomInstance FindOldestDirtyHotel(TowerGrid grid)
+        {
+            RoomInstance best = null;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null || room.Type.category != RoomCategory.Hotel) continue;
+                if (!room.Dirty || room.IsBroken) continue;
+                if (IsServiceTargetClaimed(room)) continue;
+                if (best == null || room.InstanceId < best.InstanceId)
+                    best = room;
+            }
+
+            return best;
+        }
+
+        RoomInstance FindLowestConditionRepairTarget(TowerGrid grid)
+        {
+            RoomInstance best = null;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null || !RoomConditionRules.CanDegrade(room.Type)) continue;
+                if (room.IsBroken || room.Condition < 1 || room.Condition > 99) continue;
+                if (IsServiceTargetClaimed(room)) continue;
+                if (best == null ||
+                    room.Condition < best.Condition ||
+                    (room.Condition == best.Condition && room.InstanceId < best.InstanceId))
+                    best = room;
+            }
+
+            return best;
+        }
+
+        bool IsServiceTargetClaimed(RoomInstance room)
+        {
+            foreach (var agent in _agents)
+            {
+                if (ReferenceEquals(agent.ServiceTarget, room))
+                    return true;
+            }
+
+            return false;
+        }
+
+        static void FinishServiceJob(Agent agent)
+        {
+            var target = agent.ServiceTarget;
+            if (agent.Role == AgentRole.Maid)
+                target?.ClearDirty();
+            else if (agent.Role == AgentRole.Handyman)
+                RoomConditionRules.ApplyRepairTick(target);
+
+            ClearServiceClaim(agent);
+        }
+
+        static void ClearServiceClaim(Agent agent)
+        {
+            if (agent == null) return;
+            agent.ServiceTarget = null;
+            agent.ServiceWorkRemaining = 0f;
+        }
+
+        static bool IsServiceRole(AgentRole role) =>
+            role is AgentRole.Maid or AgentRole.Handyman;
+
+        static bool IsNonPopulationRole(AgentRole role) =>
+            role is AgentRole.StreetVisitor or AgentRole.Maid or AgentRole.Handyman;
+
+        static bool IsEphemeralOrStaffRole(AgentRole role) =>
+            role is AgentRole.StreetVisitor or AgentRole.Maid or AgentRole.Handyman;
 
         void UpdateCondo(Agent agent, GameClock clock, TowerGrid grid)
         {
@@ -617,7 +880,7 @@ namespace BuildATower
 
         void ApplyLowConditionStress(Agent agent, int dayIndex)
         {
-            if (agent == null || agent.Role == AgentRole.StreetVisitor) return;
+            if (agent == null || IsNonPopulationRole(agent.Role)) return;
             if (agent.HomeRoom == null) return;
             if (agent.HomeRoom.Condition >= RoomConditionRules.StressBelow) return;
             if (agent.LowConditionStressDay == dayIndex) return;
