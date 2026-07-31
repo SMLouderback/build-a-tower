@@ -20,6 +20,8 @@ namespace BuildATower
         AgentSystem _agents;
         EconomySystem _economy;
         StarSystem _stars;
+        MarketClimate _climate;
+        readonly System.Random _climateRng = new();
         int _lastDayIndex;
         bool _subscribed;
 
@@ -27,6 +29,7 @@ namespace BuildATower
         public AgentSystem Agents => _agents;
         public EconomySystem Economy => _economy;
         public StarSystem Stars => _stars;
+        public MarketClimate Climate => _climate;
         public StairsPathfinder Pathfinder => _pathfinder;
         public ElevatorSystem Elevators => _elevators;
         public TransitRouter Router => _router;
@@ -50,8 +53,10 @@ namespace BuildATower
             _agents = new AgentSystem(_router);
             _economy = new EconomySystem();
             _stars = new StarSystem();
+            _climate = new MarketClimate();
             _lastDayIndex = _clock.DayIndex;
             _clock.DayRolled += OnDayRolled;
+            _clock.MonthRolled += OnMonthRolled;
 
             if (agentView == null)
             {
@@ -89,7 +94,10 @@ namespace BuildATower
         void OnDestroy()
         {
             if (_clock != null)
+            {
                 _clock.DayRolled -= OnDayRolled;
+                _clock.MonthRolled -= OnMonthRolled;
+            }
         }
 
         void Update()
@@ -120,8 +128,14 @@ namespace BuildATower
             _agents.SyncHomes(
                 build.Grid,
                 room => _economy?.TrySellCondo(room, build.Wallet),
-                _stars?.CurrentStars ?? 0);
+                _stars?.CurrentStars ?? 0,
+                _climate?.ComfortTierOffset ?? 0);
             _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
+        }
+
+        void OnMonthRolled()
+        {
+            _climate?.OnMonthRolled(_climateRng);
         }
 
         void OnDayRolled()
@@ -129,9 +143,15 @@ namespace BuildATower
             if (build?.Grid == null || _agents == null || _economy == null || _stars == null)
                 return;
 
+            var climateOffset = _climate?.ComfortTierOffset ?? 0;
             for (var day = _lastDayIndex + 1; day <= _clock.DayIndex; day++)
             {
-                _economy.OnNewDay(build.Grid, _agents.Agents, build.Wallet, _stars.CurrentStars);
+                _economy.OnNewDay(
+                    build.Grid,
+                    _agents.Agents,
+                    build.Wallet,
+                    _stars.CurrentStars,
+                    climateOffset);
 
                 if (day > 0 && day % StarSystem.QuarterDays == 0)
                     _stars.EvaluateQuarterly(build.Grid, _agents.AverageStress, _agents.Population);

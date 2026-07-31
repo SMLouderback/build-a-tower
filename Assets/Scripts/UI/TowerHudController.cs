@@ -413,6 +413,7 @@ namespace BuildATower
         {
             var room = build.SelectedRoom;
             var currentStars = stars?.CurrentStars ?? 0;
+            var climateOffset = simulation?.Climate?.ComfortTierOffset ?? 0;
             GUI.Label(new Rect(cx, cy, inner, row), "Price", label);
             cy += row;
 
@@ -431,7 +432,7 @@ namespace BuildATower
             cy += btnH + 2f;
             GUI.Label(
                 new Rect(cx, cy, inner, row),
-                PricePricing.MarketHint(room.PriceTier, currentStars),
+                PricePricing.MarketHint(room.PriceTier, currentStars, climateOffset),
                 label);
             cy += row + 4f;
             return cy;

@@ -24,7 +24,8 @@ namespace BuildATower
             TowerGrid grid,
             IReadOnlyList<Agent> agents,
             FundsWallet wallet,
-            int currentStars = 0)
+            int currentStars = 0,
+            int climateOffset = 0)
         {
             LastIncome = 0;
             LastExpense = 0;
@@ -40,7 +41,9 @@ namespace BuildATower
                     room.RecordLifetimeExpense(ElevatorDailyUpkeep);
                 }
 
-                if (IsRecurringIncomeRoom(room) && HasHomeAgent(room, agents) && PassesDemand(room, currentStars))
+                if (IsRecurringIncomeRoom(room) &&
+                    HasHomeAgent(room, agents) &&
+                    PassesDemand(room, currentStars, climateOffset))
                 {
                     var amount = PricePricing.ScaledIncome(room.Type.baseIncome, room.PriceTier);
                     LastIncome += amount;
@@ -89,9 +92,9 @@ namespace BuildATower
             return true;
         }
 
-        public bool PassesDemand(RoomInstance room, int currentStars)
+        public bool PassesDemand(RoomInstance room, int currentStars, int climateOffset = 0)
         {
-            var chance = PricePricing.DemandChance(room.PriceTier, currentStars);
+            var chance = PricePricing.DemandChance(room.PriceTier, currentStars, climateOffset);
             if (chance >= 1f) return true;
             if (chance <= 0f) return false;
             return _rng.NextDouble() < chance;

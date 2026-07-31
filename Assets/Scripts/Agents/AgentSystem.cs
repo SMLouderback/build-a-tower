@@ -75,7 +75,8 @@ namespace BuildATower
         public void SyncHomes(
             TowerGrid grid,
             System.Action<RoomInstance> onNewCondoResident = null,
-            int currentStars = 0)
+            int currentStars = 0,
+            int climateOffset = 0)
         {
             _onCondoResidentMovedIn = onNewCondoResident;
             var livingRooms = new HashSet<RoomInstance>();
@@ -115,7 +116,7 @@ namespace BuildATower
                 if (role == AgentRole.CondoResident &&
                     !room.CondoSold &&
                     existing == 0 &&
-                    !PassesCondoDemand(room, currentStars))
+                    !PassesCondoDemand(room, currentStars, climateOffset))
                     continue;
 
                 var want = Mathf.Max(1, room.Type.maxOccupants);
@@ -144,9 +145,9 @@ namespace BuildATower
             }
         }
 
-        bool PassesCondoDemand(RoomInstance room, int currentStars)
+        bool PassesCondoDemand(RoomInstance room, int currentStars, int climateOffset = 0)
         {
-            var chance = PricePricing.DemandChance(room.PriceTier, currentStars);
+            var chance = PricePricing.DemandChance(room.PriceTier, currentStars, climateOffset);
             if (chance >= 1f) return true;
             if (chance <= 0f) return false;
             return _rng.NextDouble() < chance;
