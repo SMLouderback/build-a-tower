@@ -53,9 +53,9 @@ namespace BuildATower
 
                 if (ShopVisitRules.IsShop(room.Type))
                 {
-                    if (room.VisitsToday > 0)
+                    if (room.ShopEarningsToday > 0)
                     {
-                        var amount = room.VisitsToday * ShopVisitRules.PayPerVisit(room.Type);
+                        var amount = room.ShopEarningsToday;
                         LastIncome += amount;
                         if (_lastIncomeByRoom.TryGetValue(room.InstanceId, out var existing))
                             _lastIncomeByRoom[room.InstanceId] = existing + amount;

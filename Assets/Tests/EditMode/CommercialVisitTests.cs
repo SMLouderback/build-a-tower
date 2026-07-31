@@ -298,6 +298,35 @@ namespace BuildATower.Tests
 
             Assert.AreEqual(0, shop.ConcurrentVisitors);
             Assert.AreEqual(0, shop.VisitsToday);
+            Assert.AreEqual(0, shop.ShopEarningsToday);
+        }
+
+        [Test]
+        public void OnNewDay_pays_shop_earnings_not_visits_times_list_price()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(grid.TryPlace(FastFood(), new Vector2Int(9, 1), out var shop));
+
+            // Two visits spent 25 + 40; list price is $40 so visits×price would be 80.
+            shop.RecordVisit();
+            shop.RecordShopSpend(25);
+            shop.RecordVisit();
+            shop.RecordShopSpend(40);
+            Assert.AreEqual(2, shop.VisitsToday);
+            Assert.AreEqual(65, shop.ShopEarningsToday);
+
+            var economy = new EconomySystem(seed: 1);
+            var wallet = new FundsWallet(0);
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+
+            Assert.AreEqual(65, economy.LastIncome);
+            Assert.AreEqual(65, wallet.Balance);
+            Assert.AreEqual(65, shop.LifetimeIncome);
+            Assert.AreEqual(65, economy.GetLastRoomIncome(shop));
+            Assert.AreEqual(0, shop.VisitsToday);
+            Assert.AreEqual(0, shop.ShopEarningsToday);
+            Assert.AreNotEqual(80, economy.LastIncome);
         }
 
         [Test]

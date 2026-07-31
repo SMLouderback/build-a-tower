@@ -54,13 +54,16 @@ namespace BuildATower.Tests
             shop.id = "shop_food_fast";
             var instance = new RoomInstance(7, shop, Vector2Int.zero, Vector2Int.one);
             instance.RecordVisit();
+            instance.RecordShopSpend(25);
             instance.RecordVisit();
+            instance.RecordShopSpend(40);
 
             StringAssert.Contains("/ visit", RoomEconomyFormat.IncomeLine(shop));
-            StringAssert.Contains("batched at midnight", RoomEconomyFormat.IncomeLine(shop));
+            StringAssert.Contains("spent dollars at midnight", RoomEconomyFormat.IncomeLine(shop));
 
             var lines = RoomEconomyFormat.SelectedUnitLines(instance, null, new EconomySystem());
             CollectionAssert.Contains(lines, "Visits today: 2");
+            CollectionAssert.Contains(lines, "Earnings today: $65");
             StringAssert.Contains("/visit", RoomEconomyFormat.ButtonTag(shop));
         }
 

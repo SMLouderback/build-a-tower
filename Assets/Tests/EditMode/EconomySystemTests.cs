@@ -161,9 +161,13 @@ namespace BuildATower.Tests
             grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
             Assert.IsTrue(grid.TryPlace(FastFoodShop(baseIncome: 40), new Vector2Int(0, 1), out var shop));
             shop.RecordVisit();
+            shop.RecordShopSpend(30);
             shop.RecordVisit();
+            shop.RecordShopSpend(40);
             shop.RecordVisit();
+            shop.RecordShopSpend(50);
             Assert.AreEqual(3, shop.VisitsToday);
+            Assert.AreEqual(120, shop.ShopEarningsToday);
 
             var wallet = new FundsWallet(100_000);
             var economy = new EconomySystem();
@@ -173,6 +177,7 @@ namespace BuildATower.Tests
             Assert.AreEqual(120, economy.LastIncome);
             Assert.AreEqual(100_120, wallet.Balance);
             Assert.AreEqual(0, shop.VisitsToday);
+            Assert.AreEqual(0, shop.ShopEarningsToday);
             Assert.AreEqual(120, shop.LifetimeIncome);
             Assert.AreEqual(120, economy.GetLastRoomIncome(shop));
             Assert.IsTrue(economy.HasRecordedEconomyEvent);

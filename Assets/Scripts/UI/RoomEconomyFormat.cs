@@ -28,7 +28,7 @@ namespace BuildATower
                 case IncomeModel.NightlyRate when type.baseIncome > 0:
                     return $"Income: ${amount:N0} / day occupied";
                 case IncomeModel.TrafficVariable when type.baseIncome > 0:
-                    return $"Income: ${type.baseIncome:N0} / visit (batched at midnight)";
+                    return $"Income: up to ${type.baseIncome:N0} / visit (spent dollars at midnight)";
                 default:
                     return "Income: —";
             }
@@ -69,6 +69,7 @@ namespace BuildATower
                     break;
                 case IncomeModel.TrafficVariable:
                     lines.Add($"Visits today: {room.VisitsToday}");
+                    lines.Add($"Earnings today: ${room.ShopEarningsToday:N0}");
                     break;
                 default:
                     lines.Add("Status: Non-revenue unit");
