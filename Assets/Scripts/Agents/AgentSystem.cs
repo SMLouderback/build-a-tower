@@ -92,7 +92,10 @@ namespace BuildATower
             {
                 if (_agents[i].Role == AgentRole.StreetVisitor) continue;
                 if (!livingRooms.Contains(_agents[i].HomeRoom))
+                {
+                    CancelCommercialVisit(_agents[i]);
                     _agents.RemoveAt(i);
+                }
             }
 
             foreach (var room in livingRooms)
@@ -286,8 +289,22 @@ namespace BuildATower
             agent.PhaseAfterVisit = afterVisit;
             agent.ReturnCell = agent.Cell;
             agent.VisitDwellRemaining = ShopVisitRules.PickDwellMinutes(shop.Type, _rng);
-            BeginTrip(agent, agent.Cell, ShopEntryCell(shop), AgentPhase.VisitingShop, grid);
-            return true;
+            if (BeginTrip(agent, agent.Cell, ShopEntryCell(shop), AgentPhase.VisitingShop, grid))
+                return true;
+
+            CancelCommercialVisit(agent);
+            return false;
+        }
+
+        static void CancelCommercialVisit(Agent agent)
+        {
+            if (agent == null) return;
+
+            agent.VisitTarget?.ReleaseVisitorSlot();
+            agent.VisitTarget = null;
+            agent.CommercialTripDay = -1;
+            agent.VisitDwellRemaining = 0f;
+            agent.ReturnCell = null;
         }
 
         List<RoomInstance> FindOpenShops(TowerGrid grid, int minuteOfDay)
@@ -377,8 +394,12 @@ namespace BuildATower
                 VisitDwellRemaining = ShopVisitRules.PickDwellMinutes(shop.Type, _rng)
             };
             _agents.Add(agent);
-            BeginTrip(agent, exitCell, ShopEntryCell(shop), AgentPhase.VisitingShop, grid);
-            return true;
+            if (BeginTrip(agent, exitCell, ShopEntryCell(shop), AgentPhase.VisitingShop, grid))
+                return true;
+
+            CancelCommercialVisit(agent);
+            _agents.RemoveAt(_agents.Count - 1);
+            return false;
         }
 
         int CountStreetVisitors()
@@ -437,7 +458,7 @@ namespace BuildATower
                 TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Staying);
         }
 
-        void BeginTrip(
+        bool BeginTrip(
             Agent agent,
             Vector2Int spawnIfOutside,
             Vector2Int to,
@@ -446,7 +467,7 @@ namespace BuildATower
         {
             if (agent.GoalCell == to &&
                 agent.Phase is AgentPhase.Moving or AgentPhase.WaitingAtElevator or AgentPhase.Riding)
-                return;
+                return true;
 
             agent.GoalCell = to;
             agent.PhaseAfterMove = after;
@@ -462,11 +483,11 @@ namespace BuildATower
                 agent.TripLegs = legs;
                 agent.TripLegIndex = 0;
                 StartLeg(agent, legs[0]);
+                return true;
             }
-            else
-            {
-                StallInPlace(agent);
-            }
+
+            StallInPlace(agent);
+            return false;
         }
 
         void StepMovement(Agent agent, float deltaGameMinutes)

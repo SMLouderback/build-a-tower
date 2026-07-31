@@ -60,7 +60,11 @@ namespace BuildATower
 
         public void RecordVisit() => VisitsToday++;
 
-        public void ResetVisitsToday() => VisitsToday = 0;
+        public void ResetVisitsToday()
+        {
+            VisitsToday = 0;
+            ConcurrentVisitors = 0;
+        }
 
         public bool TryOccupyVisitorSlot()
         {

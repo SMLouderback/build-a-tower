@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using BuildATower;
 using NUnit.Framework;
@@ -204,6 +205,62 @@ namespace BuildATower.Tests
             Assert.AreEqual(
                 AgentSystem.MaxConcurrentStreetVisitors,
                 agents.Agents.Count(a => a.Role == AgentRole.StreetVisitor));
+        }
+
+        [Test]
+        public void TryBeginCommercialTrip_releases_slot_when_trip_cannot_start()
+        {
+            var (grid, shop, agents, agent, clock) = SetupOfficeWithShop(open: true);
+            PlaceAgentWorkingAtOffice(agent);
+
+            // Unreachable cell: shop is open from lobby but agent cannot route there.
+            agent.Cell = new Vector2Int(5, 5);
+            agent.WorldPosition = new Vector2(5.5f, 5.5f);
+
+            Assert.IsFalse(agents.TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Working));
+            Assert.AreEqual(0, shop.ConcurrentVisitors);
+            Assert.AreEqual(-1, agent.CommercialTripDay);
+            Assert.IsNull(agent.VisitTarget);
+        }
+
+        [Test]
+        public void SyncHomes_releases_visitor_slot_when_removing_agent_with_visit_target()
+        {
+            var (grid, shop, agents, agent, _) = SetupOfficeWithShop(open: true);
+            PlaceAgentWorkingAtOffice(agent);
+
+            shop.TryOccupyVisitorSlot();
+            agent.VisitTarget = shop;
+            agent.CommercialTripDay = 0;
+            Assert.AreEqual(1, shop.ConcurrentVisitors);
+
+            var gridWithoutOffice = new TowerGrid();
+            Assert.IsTrue(gridWithoutOffice.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(gridWithoutOffice.TryPlace(FastFood(), new Vector2Int(9, 1), out _));
+
+            agents.SyncHomes(gridWithoutOffice);
+
+            Assert.AreEqual(0, shop.ConcurrentVisitors);
+            Assert.IsFalse(agents.Agents.Contains(agent));
+        }
+
+        [Test]
+        public void OnNewDay_resets_concurrent_visitors_for_shops()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(grid.TryPlace(FastFood(), new Vector2Int(9, 1), out var shop));
+
+            shop.TryOccupyVisitorSlot();
+            shop.TryOccupyVisitorSlot();
+            Assert.AreEqual(2, shop.ConcurrentVisitors);
+
+            var economy = new EconomySystem(seed: 1);
+            var wallet = new FundsWallet(0);
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+
+            Assert.AreEqual(0, shop.ConcurrentVisitors);
+            Assert.AreEqual(0, shop.VisitsToday);
         }
 
         [Test]

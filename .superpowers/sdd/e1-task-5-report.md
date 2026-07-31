@@ -47,3 +47,25 @@ Created (ScriptableObjects + Resources mirrors for HUD `Resources.Load`):
 - Active hours authored as **minute-of-day** (required by `ShopVisitRules`); older Office SOs still use hour integers (unrelated to shops)
 - Duplicate SO vs Resources shop assets (same pattern as premium rooms); edits must be mirrored
 - `RetailFastFood` still on disk if anything references GUID `e787759d…`
+
+---
+
+## E1 final review fix: visitor slot leak
+
+**Commit:** `fix: release shop visitor slots on aborted commercial trips`
+
+### Problem
+
+`TryOccupyVisitorSlot()` ran before `BeginTrip`. If routing failed (`StallInPlace`) or `SyncHomes` removed an agent mid-visit, `ConcurrentVisitors` was never released. `CommercialTripDay` could be burned without a trip starting.
+
+### Fix
+
+- `BeginTrip` returns `bool`; `TryBeginCommercialTrip` / `TrySpawnStreetVisitor` call `CancelCommercialVisit` on failure (release slot, clear visit fields, reset `CommercialTripDay` to `-1`).
+- `SyncHomes` calls `CancelCommercialVisit` before removing agents whose home room is gone.
+- `ResetVisitsToday()` also zeroes `ConcurrentVisitors`; `OnNewDay` resets all shops at midnight (safety net).
+
+### Tests (EditMode, not run in batch)
+
+- `TryBeginCommercialTrip_releases_slot_when_trip_cannot_start`
+- `SyncHomes_releases_visitor_slot_when_removing_agent_with_visit_target`
+- `OnNewDay_resets_concurrent_visitors_for_shops`
