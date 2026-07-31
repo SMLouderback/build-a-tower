@@ -12,6 +12,9 @@ namespace BuildATower
         public Vector2Int Origin { get; }
         public Vector2Int Size { get; }
         public int Evaluation { get; set; } = 100;
+        /// <summary>0–100 structural/cleanliness condition. 0 means broken.</summary>
+        public int Condition { get; set; } = 100;
+        public bool IsBroken => Condition <= 0;
         public bool CondoSold { get; set; }
         /// <summary>0=Low, 1=Normal, 2=High, 3=Max. Default Normal.</summary>
         public int PriceTier { get; set; } = PricePricing.TierNormal;

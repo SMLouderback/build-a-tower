@@ -26,11 +26,41 @@ namespace BuildATower.Tests
             return type;
         }
 
+        static RoomTypeSO Service(string id)
+        {
+            var type = ScriptableObject.CreateInstance<RoomTypeSO>();
+            type.id = id;
+            type.size = Vector2Int.one;
+            type.allowAboveGround = true;
+            type.requiredStars = 2;
+            return type;
+        }
+
         static TowerGrid GridWithLobby()
         {
             var grid = new TowerGrid();
             Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 0, TowerGrid.LobbyFloor, out _));
             return grid;
+        }
+
+        static TowerGrid GridReadyForTwoStars()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 5, TowerGrid.LobbyFloor, out _));
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out _));
+            return grid;
+        }
+
+        static bool PlaceServices(TowerGrid grid, out RoomInstance housekeeping)
+        {
+            housekeeping = null;
+            if (!grid.TryPlace(Service("service_security"), new Vector2Int(1, 1), out _))
+                return false;
+            if (!grid.TryPlace(Service("service_housekeeping"), new Vector2Int(2, 1), out housekeeping))
+                return false;
+            if (!grid.TryPlace(Service("service_maintenance"), new Vector2Int(3, 1), out _))
+                return false;
+            return true;
         }
 
         [Test]
@@ -141,7 +171,7 @@ namespace BuildATower.Tests
 
         [TestCase(-1, 0)]
         [TestCase(1, 1)]
-        [TestCase(3, StarSystem.MaxStars)]
+        [TestCase(4, StarSystem.MaxStars)]
         public void ForceStars_clamps_requested_test_tier(int requestedStars, int expectedStars)
         {
             var stars = new StarSystem();
@@ -149,6 +179,86 @@ namespace BuildATower.Tests
             stars.ForceStars(requestedStars);
 
             Assert.AreEqual(expectedStars, stars.CurrentStars);
+        }
+
+        [Test]
+        public void MaxStars_is_three()
+        {
+            Assert.AreEqual(3, StarSystem.MaxStars);
+            Assert.AreEqual(60, StarSystem.ThreeStarPopulation);
+            Assert.AreEqual(20f, StarSystem.ThreeStarMaxStress);
+        }
+
+        [Test]
+        public void TryPromote_reaches_three_stars_when_facilities_and_thresholds_met()
+        {
+            var stars = new StarSystem();
+            var grid = GridReadyForTwoStars();
+            Assert.IsTrue(PlaceServices(grid, out _));
+            stars.ForceStars(2);
+
+            Assert.IsTrue(stars.TryPromote(grid, averageStress: 20f, population: 60));
+
+            Assert.AreEqual(3, stars.CurrentStars);
+        }
+
+        [Test]
+        public void TryPromote_blocks_three_stars_without_all_facilities()
+        {
+            var stars = new StarSystem();
+            var grid = GridReadyForTwoStars();
+            Assert.IsTrue(grid.TryPlace(Service("service_security"), new Vector2Int(1, 1), out _));
+            Assert.IsTrue(grid.TryPlace(Service("service_housekeeping"), new Vector2Int(2, 1), out _));
+            // Missing maintenance
+            stars.ForceStars(2);
+
+            Assert.IsFalse(stars.TryPromote(grid, averageStress: 20f, population: 60));
+
+            Assert.AreEqual(2, stars.CurrentStars);
+        }
+
+        [Test]
+        public void TryPromote_blocks_three_stars_when_housekeeping_is_broken()
+        {
+            var stars = new StarSystem();
+            var grid = GridReadyForTwoStars();
+            Assert.IsTrue(PlaceServices(grid, out var housekeeping));
+            housekeeping.Condition = 0;
+            stars.ForceStars(2);
+
+            Assert.IsFalse(stars.TryPromote(grid, averageStress: 20f, population: 60));
+
+            Assert.AreEqual(2, stars.CurrentStars);
+        }
+
+        [Test]
+        public void TryPromote_blocks_three_stars_when_population_or_stress_miss()
+        {
+            var stars = new StarSystem();
+            var grid = GridReadyForTwoStars();
+            Assert.IsTrue(PlaceServices(grid, out _));
+            stars.ForceStars(2);
+
+            Assert.IsFalse(stars.TryPromote(grid, averageStress: 20f, population: 59));
+            Assert.IsFalse(stars.TryPromote(grid, averageStress: 20.1f, population: 60));
+
+            Assert.AreEqual(2, stars.CurrentStars);
+        }
+
+        [Test]
+        public void FormatNextStarGoal_lists_facilities_for_three_star_tier()
+        {
+            var stars = new StarSystem();
+            stars.ForceStars(2);
+
+            var goal = stars.FormatNextStarGoal(GridReadyForTwoStars(), averageStress: 10f, population: 40);
+
+            StringAssert.Contains("3★", goal);
+            StringAssert.Contains($"Pop 40/{StarSystem.ThreeStarPopulation}", goal);
+            StringAssert.Contains("Stress 10/20", goal);
+            StringAssert.Contains("Security", goal);
+            StringAssert.Contains("Housekeeping", goal);
+            StringAssert.Contains("Maintenance", goal);
         }
     }
 }

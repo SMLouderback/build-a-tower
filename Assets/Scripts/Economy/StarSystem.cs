@@ -7,7 +7,13 @@ namespace BuildATower
         public const float OneStarMaxStress = 40f;
         public const int TwoStarPopulation = 30;
         public const float TwoStarMaxStress = 25f;
-        public const int MaxStars = 2;
+        public const int ThreeStarPopulation = 60;
+        public const float ThreeStarMaxStress = 20f;
+        public const int MaxStars = 3;
+
+        const string SecurityId = "service_security";
+        const string HousekeepingId = "service_housekeeping";
+        const string MaintenanceId = "service_maintenance";
 
         public int CurrentStars { get; private set; }
         public string LastResult { get; private set; }
@@ -71,14 +77,25 @@ namespace BuildATower
             if (target >= 2)
                 lines += $"\n  Elevator {Mark(HasElevator(grid))}";
 
+            if (target >= 3)
+            {
+                lines += $"\n  Security {Mark(HasOperationalFacility(grid, SecurityId))}";
+                lines += $"\n  Housekeeping {Mark(HasOperationalFacility(grid, HousekeepingId))}";
+                lines += $"\n  Maintenance {Mark(HasOperationalFacility(grid, MaintenanceId))}";
+            }
+
             return lines;
         }
 
         public static int RequiredPopulation(int stars) =>
-            stars >= 2 ? TwoStarPopulation : OneStarPopulation;
+            stars >= 3 ? ThreeStarPopulation :
+            stars >= 2 ? TwoStarPopulation :
+            OneStarPopulation;
 
         public static float AllowedStress(int stars) =>
-            stars >= 2 ? TwoStarMaxStress : OneStarMaxStress;
+            stars >= 3 ? ThreeStarMaxStress :
+            stars >= 2 ? TwoStarMaxStress :
+            OneStarMaxStress;
 
         static string Mark(bool met) => met ? "✓" : "✗";
 
@@ -88,7 +105,9 @@ namespace BuildATower
             if (population < RequiredPopulation(stars) || averageStress > AllowedStress(stars))
                 return false;
 
-            return stars < 2 || HasElevator(grid);
+            if (stars >= 2 && !HasElevator(grid)) return false;
+            if (stars >= 3 && !HasOperationalServiceFacilities(grid)) return false;
+            return true;
         }
 
         static bool HasElevator(TowerGrid grid)
@@ -102,6 +121,32 @@ namespace BuildATower
             }
 
             return false;
+        }
+
+        static bool HasOperationalServiceFacilities(TowerGrid grid) =>
+            HasOperationalFacility(grid, SecurityId) &&
+            HasOperationalFacility(grid, HousekeepingId) &&
+            HasOperationalFacility(grid, MaintenanceId);
+
+        static bool HasOperationalFacility(TowerGrid grid, string typeId)
+        {
+            if (grid == null || string.IsNullOrEmpty(typeId)) return false;
+
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                if (room.Type.id != typeId) continue;
+                if (IsBroken(room)) continue;
+                return true;
+            }
+
+            return false;
+        }
+
+        static bool IsBroken(RoomInstance room)
+        {
+            if (room == null) return false;
+            return room.IsBroken;
         }
     }
 }
