@@ -14,5 +14,5 @@ Task 3: complete (commits 050c0e0..2e28cd6, pending review)
 Task 3: review approved
 Task 4: complete (commits 2e28cd6..77cd082, review accept; follow-up AverageStress → ec40b92)
 
-Task 5: complete (commits ec40b92..0bd9f14 — shop assets, HUD, README)
+Task 5: complete (commits ec40b92..cf60b32 — shop assets, HUD, README)
 

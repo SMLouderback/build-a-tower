@@ -7,7 +7,7 @@ DONE_WITH_CONCERNS
 ## Commits
 
 - `ec40b92` — `fix: exclude StreetVisitor from AverageStress` (Task 4 follow-up)
-- `0bd9f14` — `feat: shop assets, HUD catalog, README for E1 visits`
+- `cf60b32` — `feat: shop assets, HUD catalog, README for E1 visits`
 
 ## Changes
 
