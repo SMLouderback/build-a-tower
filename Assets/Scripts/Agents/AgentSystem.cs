@@ -180,13 +180,21 @@ namespace BuildATower
                     UpdateHotel(agent, clock, grid);
                     break;
                 case AgentRole.CondoResident:
-                    UpdateCondo(agent, grid);
+                    UpdateCondo(agent, clock, grid);
                     break;
             }
         }
 
-        void UpdateCondo(Agent agent, TowerGrid grid)
+        void UpdateCondo(Agent agent, GameClock clock, TowerGrid grid)
         {
+            var minute = clock.MinuteOfDay;
+            if (agent.HasMovedIn &&
+                agent.Phase == AgentPhase.AtHome &&
+                minute >= 12 * 60 &&
+                minute <= 17 * 60 &&
+                agent.CommercialTripDay != clock.DayIndex)
+                TryBeginCommercialTrip(agent, grid, clock, AgentPhase.AtHome);
+
             if (agent.HasMovedIn || agent.Phase == AgentPhase.AtHome)
                 return;
 
@@ -330,6 +338,12 @@ namespace BuildATower
                 BeginTrip(agent, agent.Cell, exitCell, AgentPhase.Outside, grid);
                 agent.CheckedOutToday = true;
             }
+
+            if (agent.Phase == AgentPhase.Staying &&
+                minute >= 18 * 60 &&
+                minute <= 21 * 60 &&
+                agent.CommercialTripDay != clock.DayIndex)
+                TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Staying);
         }
 
         void BeginTrip(

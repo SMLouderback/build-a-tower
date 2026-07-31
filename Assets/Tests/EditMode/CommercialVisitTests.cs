@@ -96,6 +96,64 @@ namespace BuildATower.Tests
                 agent.Phase == AgentPhase.Moving && agent.PhaseAfterMove == AgentPhase.VisitingShop);
         }
 
+        [Test]
+        public void Hotel_evening_window_triggers_at_most_once_per_day()
+        {
+            var (grid, shop, agents, agent, clock) = SetupHotelWithShop();
+            PlaceAgentStayingAtHotel(agent, clock);
+
+            clock.AdvanceMinutes(19 * 60 - clock.MinuteOfDay);
+            agents.Tick(1f, clock, grid);
+
+            Assert.AreEqual(clock.DayIndex, agent.CommercialTripDay);
+            Assert.AreSame(shop, agent.VisitTarget);
+            Assert.AreEqual(AgentPhase.Staying, agent.PhaseAfterVisit);
+            Assert.IsTrue(
+                agent.Phase is AgentPhase.Moving or AgentPhase.WaitingAtElevator,
+                "Hotel Staying evening window should begin a commercial trip.");
+
+            agent.Phase = AgentPhase.VisitingShop;
+            agent.VisitDwellRemaining = 0.01f;
+            agents.Tick(1f, clock, grid);
+            Assert.AreEqual(1, shop.VisitsToday);
+
+            agent.Phase = AgentPhase.Staying;
+            agents.Tick(1f, clock, grid);
+            Assert.AreEqual(1, shop.VisitsToday);
+            Assert.AreEqual(clock.DayIndex, agent.CommercialTripDay);
+            Assert.IsFalse(
+                agent.Phase == AgentPhase.Moving && agent.PhaseAfterMove == AgentPhase.VisitingShop);
+        }
+
+        [Test]
+        public void Condo_daytime_window_triggers_at_most_once_per_day()
+        {
+            var (grid, shop, agents, agent, clock) = SetupCondoWithShop();
+            PlaceAgentAtHomeInCondo(agent);
+
+            clock.AdvanceMinutes(14 * 60 - clock.MinuteOfDay);
+            agents.Tick(1f, clock, grid);
+
+            Assert.AreEqual(clock.DayIndex, agent.CommercialTripDay);
+            Assert.AreSame(shop, agent.VisitTarget);
+            Assert.AreEqual(AgentPhase.AtHome, agent.PhaseAfterVisit);
+            Assert.IsTrue(
+                agent.Phase is AgentPhase.Moving or AgentPhase.WaitingAtElevator,
+                "Condo AtHome daytime window should begin a commercial trip.");
+
+            agent.Phase = AgentPhase.VisitingShop;
+            agent.VisitDwellRemaining = 0.01f;
+            agents.Tick(1f, clock, grid);
+            Assert.AreEqual(1, shop.VisitsToday);
+
+            agent.Phase = AgentPhase.AtHome;
+            agents.Tick(1f, clock, grid);
+            Assert.AreEqual(1, shop.VisitsToday);
+            Assert.AreEqual(clock.DayIndex, agent.CommercialTripDay);
+            Assert.IsFalse(
+                agent.Phase == AgentPhase.Moving && agent.PhaseAfterMove == AgentPhase.VisitingShop);
+        }
+
         static (
             TowerGrid grid,
             RoomInstance shop,
@@ -118,6 +176,50 @@ namespace BuildATower.Tests
             return (grid, shop, agents, agent, clock);
         }
 
+        static (
+            TowerGrid grid,
+            RoomInstance shop,
+            AgentSystem agents,
+            Agent agent,
+            GameClock clock) SetupHotelWithShop()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Hotel(), new Vector2Int(0, 1), out _));
+            Assert.IsTrue(grid.TryPlace(FastFood(), new Vector2Int(9, 1), out var shop));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
+
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router);
+            agents.SyncHomes(grid);
+            var agent = agents.Agents.Single();
+            var clock = new GameClock(1f, 16 * 60);
+            return (grid, shop, agents, agent, clock);
+        }
+
+        static (
+            TowerGrid grid,
+            RoomInstance shop,
+            AgentSystem agents,
+            Agent agent,
+            GameClock clock) SetupCondoWithShop()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Condo(), new Vector2Int(0, 1), out _));
+            Assert.IsTrue(grid.TryPlace(FastFood(), new Vector2Int(9, 1), out var shop));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
+
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router);
+            agents.SyncHomes(grid);
+            var agent = agents.Agents.Single();
+            var clock = new GameClock(1f, 12 * 60);
+            return (grid, shop, agents, agent, clock);
+        }
+
         static void PlaceAgentWorkingAtOffice(Agent agent)
         {
             var home = agent.HomeRoom.Origin;
@@ -127,6 +229,27 @@ namespace BuildATower.Tests
             agent.Visible = true;
             agent.CheckedOutToday = true;
             agent.WorkedMinutes = 60;
+        }
+
+        static void PlaceAgentStayingAtHotel(Agent agent, GameClock clock)
+        {
+            var home = agent.HomeRoom.Origin;
+            agent.Cell = home;
+            agent.WorldPosition = new Vector2(home.x + 0.5f, home.y + 0.5f);
+            agent.Phase = AgentPhase.Staying;
+            agent.Visible = true;
+            agent.CheckInDay = clock.DayIndex;
+            agent.CheckedOutToday = false;
+        }
+
+        static void PlaceAgentAtHomeInCondo(Agent agent)
+        {
+            var home = agent.HomeRoom.Origin;
+            agent.Cell = home;
+            agent.WorldPosition = new Vector2(home.x + 0.5f, home.y + 0.5f);
+            agent.Phase = AgentPhase.AtHome;
+            agent.HasMovedIn = true;
+            agent.Visible = true;
         }
 
         static RoomTypeSO Lobby()
@@ -147,6 +270,30 @@ namespace BuildATower.Tests
             so.size = new Vector2Int(9, 1);
             so.maxOccupants = 1;
             so.allowAboveGround = true;
+            return so;
+        }
+
+        static RoomTypeSO Hotel()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "hotel";
+            so.category = RoomCategory.Hotel;
+            so.size = new Vector2Int(9, 1);
+            so.maxOccupants = 1;
+            so.allowAboveGround = true;
+            return so;
+        }
+
+        static RoomTypeSO Condo()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "condo";
+            so.category = RoomCategory.Condo;
+            so.size = Vector2Int.one;
+            so.maxOccupants = 1;
+            so.allowAboveGround = true;
+            so.incomeModel = IncomeModel.UpfrontSale;
+            so.baseIncome = 150_000;
             return so;
         }
 
