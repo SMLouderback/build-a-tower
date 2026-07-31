@@ -5,6 +5,11 @@ namespace BuildATower
     public sealed class EconomySystem
     {
         public const int ElevatorDailyUpkeep = 3_000;
+        public const int MaidWagePerDay = 200;
+        public const int HandymanWagePerDay = 300;
+
+        const string HousekeepingId = "service_housekeeping";
+        const string MaintenanceId = "service_maintenance";
 
         readonly Dictionary<int, int> _lastIncomeByRoom = new();
         readonly Dictionary<int, int> _lastExpenseByRoom = new();
@@ -12,6 +17,7 @@ namespace BuildATower
 
         public int LastIncome { get; private set; }
         public int LastExpense { get; private set; }
+        public int LastWageExpense { get; private set; }
         public int LastNet { get; private set; }
         public bool HasRecordedEconomyEvent { get; private set; }
 
@@ -29,8 +35,12 @@ namespace BuildATower
         {
             LastIncome = 0;
             LastExpense = 0;
+            LastWageExpense = 0;
             _lastIncomeByRoom.Clear();
             _lastExpenseByRoom.Clear();
+
+            foreach (var room in grid.Rooms)
+                RoomConditionRules.ApplyMidnightDecay(room);
 
             foreach (var room in grid.Rooms)
             {
@@ -41,7 +51,10 @@ namespace BuildATower
                     room.RecordLifetimeExpense(ElevatorDailyUpkeep);
                 }
 
-                if (IsRecurringIncomeRoom(room) &&
+                var incomeBlocked = RoomConditionRules.IncomePaused(room) || room.IsBroken;
+
+                if (!incomeBlocked &&
+                    IsRecurringIncomeRoom(room) &&
                     HasHomeAgent(room, agents) &&
                     PassesDemand(room, currentStars, climateOffset))
                 {
@@ -53,7 +66,7 @@ namespace BuildATower
 
                 if (ShopVisitRules.IsShop(room.Type))
                 {
-                    if (room.ShopEarningsToday > 0)
+                    if (!incomeBlocked && room.ShopEarningsToday > 0)
                     {
                         var amount = room.ShopEarningsToday;
                         LastIncome += amount;
@@ -65,6 +78,18 @@ namespace BuildATower
                     }
 
                     room.ResetVisitsToday();
+                }
+
+                var wage = WageForRoom(room);
+                if (wage > 0)
+                {
+                    LastWageExpense += wage;
+                    LastExpense += wage;
+                    if (_lastExpenseByRoom.TryGetValue(room.InstanceId, out var existingExpense))
+                        _lastExpenseByRoom[room.InstanceId] = existingExpense + wage;
+                    else
+                        _lastExpenseByRoom[room.InstanceId] = wage;
+                    room.RecordLifetimeExpense(wage);
                 }
             }
 
@@ -108,6 +133,18 @@ namespace BuildATower
 
         public int GetLastRoomNet(RoomInstance room) =>
             GetLastRoomIncome(room) - GetLastRoomExpense(room);
+
+        static int WageForRoom(RoomInstance room)
+        {
+            if (room?.Type?.id == null || room.StaffedWorkers <= 0)
+                return 0;
+            return room.Type.id switch
+            {
+                HousekeepingId => room.StaffedWorkers * MaidWagePerDay,
+                MaintenanceId => room.StaffedWorkers * HandymanWagePerDay,
+                _ => 0
+            };
+        }
 
         static bool IsRecurringIncomeRoom(RoomInstance room)
         {
