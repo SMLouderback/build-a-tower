@@ -121,12 +121,22 @@ namespace BuildATower.Tests
         public void ApplyRepairTick_adds_chunk_capped_at_100()
         {
             var room = Room(Type(), 85);
-            RoomConditionRules.ApplyRepairTick(room);
+            Assert.IsTrue(RoomConditionRules.ApplyRepairTick(room));
             Assert.AreEqual(95, room.Condition);
-            RoomConditionRules.ApplyRepairTick(room);
+            Assert.IsTrue(RoomConditionRules.ApplyRepairTick(room));
             Assert.AreEqual(100, room.Condition);
-            RoomConditionRules.ApplyRepairTick(room);
+            Assert.IsTrue(RoomConditionRules.ApplyRepairTick(room));
             Assert.AreEqual(100, room.Condition);
+        }
+
+        [Test]
+        public void ApplyRepairTick_noop_when_broken_or_null()
+        {
+            Assert.IsFalse(RoomConditionRules.ApplyRepairTick(null));
+            var broken = Room(Type(), 0);
+            Assert.IsFalse(RoomConditionRules.ApplyRepairTick(broken));
+            Assert.AreEqual(0, broken.Condition);
+            Assert.IsTrue(broken.IsBroken);
         }
     }
 }

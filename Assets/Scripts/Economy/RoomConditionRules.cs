@@ -30,10 +30,16 @@ namespace BuildATower
             room.Condition = Mathf.Max(0, room.Condition - 1);
         }
 
-        public static void ApplyRepairTick(RoomInstance room)
+        /// <summary>
+        /// Applies +RepairChunk to Condition (cap 100). No-op if room is null or Broken (Condition &lt; 1).
+        /// </summary>
+        /// <returns>True if the room was repairable (not null/Broken); false for no-op.</returns>
+        public static bool ApplyRepairTick(RoomInstance room)
         {
-            if (room == null) return;
+            if (room == null || room.IsBroken || room.Condition < 1)
+                return false;
             room.Condition = Mathf.Min(100, room.Condition + RepairChunk);
+            return true;
         }
     }
 }

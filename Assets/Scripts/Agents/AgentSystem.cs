@@ -381,6 +381,15 @@ namespace BuildATower
             if (!IsServiceRole(agent.Role)) return;
             if (agent.ServiceTarget == null || agent.Phase != AgentPhase.Working) return;
 
+            // Midnight can decay 1→0 while a handyman job is in progress; abort before repairing.
+            if (agent.Role == AgentRole.Handyman && agent.ServiceTarget.IsBroken)
+            {
+                ClearServiceClaim(agent);
+                if (!TryAssignJobFor(agent, grid))
+                    BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, 0), AgentPhase.AtHome, grid);
+                return;
+            }
+
             agent.ServiceWorkRemaining -= deltaGameMinutes;
             if (agent.ServiceWorkRemaining > 0f) return;
 
@@ -469,7 +478,11 @@ namespace BuildATower
             if (agent.Role == AgentRole.Maid)
                 target?.ClearDirty();
             else if (agent.Role == AgentRole.Handyman)
-                RoomConditionRules.ApplyRepairTick(target);
+            {
+                // Do not revive Broken rooms if Condition hit 0 mid-job (e.g. midnight decay).
+                if (target != null && !target.IsBroken)
+                    RoomConditionRules.ApplyRepairTick(target);
+            }
 
             ClearServiceClaim(agent);
         }

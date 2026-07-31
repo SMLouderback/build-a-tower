@@ -121,6 +121,30 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Handyman_ForceComplete_does_not_revive_room_that_broke_mid_job()
+        {
+            var grid = ServiceTower(out _, out var maint, out _, out var office);
+            maint.SetStaffedWorkers(1);
+            office.Condition = 1;
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            var handyman = agents.Agents.Single(a => a.Role == AgentRole.Handyman);
+
+            Assert.IsTrue(agents.TryAssignServiceJobs(grid));
+            Assert.AreSame(office, handyman.ServiceTarget);
+            PlaceAtRoom(handyman, office);
+            handyman.Phase = AgentPhase.Working;
+
+            office.Condition = 0;
+            Assert.IsTrue(office.IsBroken);
+
+            Assert.IsTrue(agents.ForceCompleteServiceWork(handyman));
+            Assert.IsTrue(office.IsBroken);
+            Assert.AreEqual(0, office.Condition);
+            Assert.IsNull(handyman.ServiceTarget);
+        }
+
+        [Test]
         public void Maid_claims_oldest_dirty_hotel_by_instance_id()
         {
             var grid = new TowerGrid();
