@@ -40,6 +40,16 @@ namespace BuildATower
         public int ElevatorQueueSide { get; set; } = 1;
         public float ElevatorWaitMinutes { get; set; }
 
+        /// <summary>
+        /// Absolute game minutes when this agent last switched elevator shafts while waiting.
+        /// </summary>
+        public float LastElevatorSwitchTotalMinutes { get; set; } = float.NegativeInfinity;
+
+        /// <summary>
+        /// Absolute game minutes when the next waiting re-score is allowed.
+        /// </summary>
+        public float NextElevatorRescoreTotalMinutes { get; set; }
+
         public int CommercialTripDay { get; set; } = -1;
         public RoomInstance VisitTarget { get; set; }
         public float VisitDwellRemaining { get; set; }

@@ -29,6 +29,7 @@ namespace BuildATower
         System.Action<RoomInstance> _onCondoResidentMovedIn;
         int _nextId = 1;
         int _lastTotalMinutes = int.MinValue;
+        float _nowTotalMinutes;
         int _streetSpawnMinuteAccumulator;
 
         public IReadOnlyList<Agent> Agents => _agents;
@@ -164,6 +165,7 @@ namespace BuildATower
             if (grid == null || clock == null) return;
 
             var total = clock.DayIndex * GameClock.MinutesPerDay + clock.MinuteOfDay;
+            _nowTotalMinutes = total;
             var advanced = 0;
             if (_lastTotalMinutes != int.MinValue)
                 advanced = Mathf.Max(0, total - _lastTotalMinutes);
@@ -182,6 +184,8 @@ namespace BuildATower
                     // Watchdog: covers maintenance toggles, shortening, and demolition.
                     if (IsElevatorWaitOrphaned(agent))
                         ReplanTrip(agent, allowReplan: true);
+                    else
+                        TryRescoreElevatorWait(agent, total);
                 }
 
                 StepMovement(agent, deltaGameMinutes);
@@ -616,6 +620,8 @@ namespace BuildATower
             }
 
             agent.Phase = AgentPhase.WaitingAtElevator;
+            agent.NextElevatorRescoreTotalMinutes =
+                _nowTotalMinutes + ElevatorRouting.RescoreIntervalGameMinutes;
             var shaft = _elevators.FindShaftAt(leg.ElevatorX, leg.EntryFloor, leg.ExitFloor);
             if (shaft == null) return;
 
@@ -747,6 +753,121 @@ namespace BuildATower
                 _elevators.RemoveFromQueues(agent.Id);
                 ReplanTrip(agent, allowReplan: true);
             }
+        }
+
+        /// <summary>
+        /// Re-score the current elevator wait against other serving shafts. Switches when an
+        /// alternate is meaningfully better and the switch cooldown has elapsed.
+        /// </summary>
+        public bool TryRescoreElevatorWait(Agent agent, float totalMinutes)
+        {
+            if (agent == null || agent.Phase != AgentPhase.WaitingAtElevator)
+                return false;
+            if (!agent.GoalCell.HasValue)
+                return false;
+            if (totalMinutes < agent.NextElevatorRescoreTotalMinutes)
+                return false;
+
+            agent.NextElevatorRescoreTotalMinutes =
+                totalMinutes + ElevatorRouting.RescoreIntervalGameMinutes;
+            if (totalMinutes <
+                agent.LastElevatorSwitchTotalMinutes + ElevatorRouting.SwitchCooldownGameMinutes)
+                return false;
+
+            var current = CurrentElevatorShaft(agent);
+            if (current == null)
+                return false;
+
+            var entryFloor = agent.ElevatorEntryFloor;
+            var destFloor = agent.ElevatorDestFloor;
+            if (!current.Serves(entryFloor) || !current.Serves(destFloor))
+                return false;
+
+            var direction = destFloor > entryFloor
+                ? ElevatorDirection.Up
+                : ElevatorDirection.Down;
+            if (direction == ElevatorDirection.None)
+                return false;
+
+            var goal = agent.GoalCell.Value;
+            var start = new Vector2Int(agent.Cell.x, entryFloor);
+            if (!TryScoreShaftWait(
+                    agent,
+                    current,
+                    start,
+                    goal,
+                    entryFloor,
+                    direction,
+                    isCurrent: true,
+                    out var currentScore))
+                return false;
+
+            var bestScore = currentScore;
+            var foundAlternate = false;
+            foreach (var shaft in _elevators.GetServingShafts(entryFloor, destFloor))
+            {
+                if (shaft.RoomInstanceId == current.RoomInstanceId)
+                    continue;
+                if (!TryScoreShaftWait(
+                        agent,
+                        shaft,
+                        start,
+                        goal,
+                        entryFloor,
+                        direction,
+                        isCurrent: false,
+                        out var score))
+                    continue;
+
+                foundAlternate = true;
+                if (score < bestScore)
+                    bestScore = score;
+            }
+
+            if (!foundAlternate ||
+                !ElevatorRouting.IsMeaningfullyBetter(currentScore, bestScore))
+                return false;
+
+            _elevators.RemoveFromQueues(agent.Id);
+            agent.LastElevatorSwitchTotalMinutes = totalMinutes;
+            _nowTotalMinutes = totalMinutes;
+            ReplanTrip(agent, allowReplan: true);
+            return true;
+        }
+
+        bool TryScoreShaftWait(
+            Agent agent,
+            ElevatorShaftRuntime shaft,
+            Vector2Int start,
+            Vector2Int goal,
+            int entryFloor,
+            ElevatorDirection direction,
+            bool isCurrent,
+            out float score)
+        {
+            score = 0f;
+            if (shaft == null)
+                return false;
+
+            float wait;
+            if (isCurrent)
+            {
+                var index = _elevators.GetQueueIndex(shaft, entryFloor, direction, agent.Id);
+                if (index < 0)
+                    return false;
+                var sameWay = _elevators.SameWayPassengerCount(shaft, direction);
+                var busy = ElevatorRouting.NeedsBusyPenalty(shaft, entryFloor, direction);
+                wait = ElevatorRouting.EstimateWaitMinutes(index, sameWay, busy);
+            }
+            else
+            {
+                wait = _elevators.EstimateWaitMinutes(shaft, entryFloor, direction);
+            }
+
+            // Same-floor Manhattan walks approximate path length for open lobby/office halls.
+            var walkCost = Mathf.Abs(shaft.X - start.x) + Mathf.Abs(shaft.X - goal.x);
+            score = ElevatorRouting.Score(walkCost, wait);
+            return true;
         }
 
         void ReplanTrip(Agent agent, bool allowReplan)
