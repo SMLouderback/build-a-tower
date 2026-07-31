@@ -530,30 +530,14 @@ namespace BuildATower
             if (refundDelta > 0) Wallet.Add(refundDelta);
             else if (refundDelta < 0) Wallet.Subtract(-refundDelta);
 
-            if (IsVisibleTransit(removed))
+            // Always clear vacated cells first. Scaffolding paints on the structure
+            // layer; leaving the old rooms-layer tile made demolished rooms look present.
+            foreach (var c in removed.OccupiedCells())
             {
-                foreach (var c in removed.OccupiedCells())
-                {
-                    view.ClearCell(c, structureMap: false);
-                    if (Grid.TryGetRoomAt(c, out var at))
-                        view.PaintCell(c, at);
-                }
-            }
-            else
-            {
-                foreach (var c in removed.OccupiedCells())
-                {
-                    if (Grid.TryGetRoomAt(c, out var at))
-                    {
-                        // Transit still punches through — keep / refresh its paint.
-                        if (IsVisibleTransit(at))
-                            view.PaintCell(c, at);
-                        continue;
-                    }
-
-                    view.ClearCell(c, structureMap: false);
-                    view.ClearCell(c, structureMap: true);
-                }
+                view.ClearCell(c, structureMap: false);
+                view.ClearCell(c, structureMap: true);
+                if (Grid.TryGetRoomAt(c, out var at))
+                    view.PaintCell(c, at);
             }
 
             foreach (var scaffold in scaffoldsPlaced)

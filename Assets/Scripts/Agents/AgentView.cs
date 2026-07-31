@@ -49,7 +49,7 @@ namespace BuildATower
             role switch
             {
                 AgentRole.OfficeWorker => new Color(0.2f, 0.45f, 0.95f, 1f),
-                AgentRole.HotelGuest => new Color(0.95f, 0.35f, 0.45f, 1f),
+                AgentRole.HotelGuest => new Color(0.70f, 0.40f, 0.88f, 1f),
                 AgentRole.CondoResident => new Color(0.3f, 0.75f, 0.4f, 1f),
                 AgentRole.StreetVisitor => new Color(0.95f, 0.55f, 0.15f, 1f),
                 _ => Color.white

@@ -6,47 +6,56 @@ namespace BuildATower
 {
     public sealed class TilemapTowerView : MonoBehaviour
     {
+        const int TilePixels = 16;
+        const int BorderThickness = 2;
+
         [SerializeField] Tilemap structureTilemap;
         [SerializeField] Tilemap roomsTilemap;
         [SerializeField] Tilemap ghostTilemap;
 
-        readonly Dictionary<Color, Tile> _tiles = new();
+        readonly Dictionary<(Color color, byte edges), Tile> _tiles = new();
         readonly List<Vector3Int> _ghostCells = new();
         readonly List<Vector3Int> _selectionCells = new();
         readonly List<Vector3Int> _handleCells = new();
 
         public void PaintRoom(RoomInstance room)
         {
+            if (room?.Type == null) return;
+
+            var occupied = CollectOccupied(room);
             if (IsVisibleTransit(room))
             {
                 // Transit draws on the rooms layer so it stays visible over rooms.
-                var tile = GetTile(room.Type.placeholderColor);
-                foreach (var cell in room.OccupiedCells())
+                foreach (var cell in occupied)
                 {
-                    var tc = ToTileCell(cell);
-                    roomsTilemap.SetTile(tc, tile);
+                    var tile = GetTile(room.Type.placeholderColor, EdgeMaskFor(cell, occupied));
+                    roomsTilemap.SetTile(ToTileCell(cell), tile);
                 }
 
                 return;
             }
 
             var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
-            var roomTile = GetTile(room.Type.placeholderColor);
-            foreach (var cell in room.OccupiedCells())
-                map.SetTile(ToTileCell(cell), roomTile);
+            foreach (var cell in occupied)
+            {
+                var tile = GetTile(room.Type.placeholderColor, EdgeMaskFor(cell, occupied));
+                map.SetTile(ToTileCell(cell), tile);
+            }
         }
 
         public void PaintCell(Vector2Int cell, RoomInstance room)
         {
             if (room?.Type == null) return;
+            var occupied = CollectOccupied(room);
+            var tile = GetTile(room.Type.placeholderColor, EdgeMaskFor(cell, occupied));
             if (IsVisibleTransit(room))
             {
-                roomsTilemap.SetTile(ToTileCell(cell), GetTile(room.Type.placeholderColor));
+                roomsTilemap.SetTile(ToTileCell(cell), tile);
                 return;
             }
 
             var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
-            map.SetTile(ToTileCell(cell), GetTile(room.Type.placeholderColor));
+            map.SetTile(ToTileCell(cell), tile);
         }
 
         public void ClearRoom(RoomInstance room)
@@ -75,12 +84,15 @@ namespace BuildATower
             // Keep selection/handles from fighting the ghost preview occupancy list.
             var c = valid ? color : Color.Lerp(color, Color.red, 0.65f);
             c.a = 0.45f;
-            var tile = GetTile(c);
+            var occupied = new HashSet<Vector2Int>();
             for (var dy = 0; dy < size.y; dy++)
             for (var dx = 0; dx < size.x; dx++)
+                occupied.Add(new Vector2Int(origin.x + dx, origin.y + dy));
+
+            foreach (var logic in occupied)
             {
-                var cell = ToTileCell(new Vector2Int(origin.x + dx, origin.y + dy));
-                ghostTilemap.SetTile(cell, tile);
+                var cell = ToTileCell(logic);
+                ghostTilemap.SetTile(cell, GetTile(c, EdgeMaskFor(logic, occupied)));
                 _ghostCells.Add(cell);
             }
         }
@@ -97,11 +109,11 @@ namespace BuildATower
             ClearSelection();
             if (room == null || ghostTilemap == null) return;
             var color = new Color(1f, 1f, 1f, 0.28f);
-            var tile = GetTile(color);
-            foreach (var cell in room.OccupiedCells())
+            var occupied = CollectOccupied(room);
+            foreach (var logic in occupied)
             {
-                var tc = ToTileCell(cell);
-                ghostTilemap.SetTile(tc, tile);
+                var tc = ToTileCell(logic);
+                ghostTilemap.SetTile(tc, GetTile(color, EdgeMaskFor(logic, occupied)));
                 _selectionCells.Add(tc);
             }
         }
@@ -121,7 +133,7 @@ namespace BuildATower
                 return;
 
             var color = new Color(1f, 0.85f, 0.2f, 0.75f);
-            var tile = GetTile(color);
+            var tile = GetTile(color, EdgeMask.All);
             var minY = shaft.Origin.y;
             var maxY = minY + shaft.Size.y - 1;
             var top = ToTileCell(new Vector2Int(shaft.Origin.x, maxY));
@@ -147,8 +159,8 @@ namespace BuildATower
         /// </summary>
         public void PaintStarterGuides(int minX, int maxX)
         {
-            var dirt = GetTile(new Color(0.45f, 0.32f, 0.22f, 1f));
-            var lobbyGuide = GetTile(new Color(0.95f, 0.82f, 0.28f, 1f));
+            var dirt = GetTile(new Color(0.45f, 0.32f, 0.22f, 1f), EdgeMask.None);
+            var lobbyGuide = GetTile(new Color(0.95f, 0.82f, 0.28f, 1f), EdgeMask.None);
 
             for (var x = minX; x <= maxX; x++)
             {
@@ -164,17 +176,59 @@ namespace BuildATower
                 structureTilemap.SetTile(new Vector3Int(x, floor, 0), null);
         }
 
-        Tile GetTile(Color color)
+        Tile GetTile(Color color, byte edges)
         {
-            if (_tiles.TryGetValue(color, out var existing)) return existing;
+            var key = (color, edges);
+            if (_tiles.TryGetValue(key, out var existing)) return existing;
+
             var tile = ScriptableObject.CreateInstance<Tile>();
-            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
-            tex.SetPixel(0, 0, color);
+            var tex = new Texture2D(TilePixels, TilePixels, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp
+            };
+
+            var border = Color.Lerp(color, Color.black, 0.55f);
+            border.a = color.a;
+
+            for (var y = 0; y < TilePixels; y++)
+            for (var x = 0; x < TilePixels; x++)
+            {
+                var onBorder =
+                    ((edges & EdgeMask.Left) != 0 && x < BorderThickness) ||
+                    ((edges & EdgeMask.Right) != 0 && x >= TilePixels - BorderThickness) ||
+                    ((edges & EdgeMask.Bottom) != 0 && y < BorderThickness) ||
+                    ((edges & EdgeMask.Top) != 0 && y >= TilePixels - BorderThickness);
+                tex.SetPixel(x, y, onBorder ? border : color);
+            }
+
             tex.Apply();
-            tile.sprite = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
+            tile.sprite = Sprite.Create(
+                tex,
+                new Rect(0, 0, TilePixels, TilePixels),
+                new Vector2(0.5f, 0.5f),
+                TilePixels);
             tile.color = Color.white;
-            _tiles[color] = tile;
+            _tiles[key] = tile;
             return tile;
+        }
+
+        static HashSet<Vector2Int> CollectOccupied(RoomInstance room)
+        {
+            var occupied = new HashSet<Vector2Int>();
+            foreach (var cell in room.OccupiedCells())
+                occupied.Add(cell);
+            return occupied;
+        }
+
+        static byte EdgeMaskFor(Vector2Int cell, HashSet<Vector2Int> occupied)
+        {
+            byte edges = EdgeMask.None;
+            if (!occupied.Contains(new Vector2Int(cell.x - 1, cell.y))) edges |= EdgeMask.Left;
+            if (!occupied.Contains(new Vector2Int(cell.x + 1, cell.y))) edges |= EdgeMask.Right;
+            if (!occupied.Contains(new Vector2Int(cell.x, cell.y - 1))) edges |= EdgeMask.Bottom;
+            if (!occupied.Contains(new Vector2Int(cell.x, cell.y + 1))) edges |= EdgeMask.Top;
+            return edges;
         }
 
         static Vector3Int ToTileCell(Vector2Int logic) =>
@@ -185,5 +239,15 @@ namespace BuildATower
 
         static bool IsVisibleTransit(RoomInstance room) =>
             room?.Type != null && (room.Type.isStairs || room.Type.isElevatorShaft);
+
+        static class EdgeMask
+        {
+            public const byte None = 0;
+            public const byte Left = 1;
+            public const byte Right = 2;
+            public const byte Bottom = 4;
+            public const byte Top = 8;
+            public const byte All = Left | Right | Bottom | Top;
+        }
     }
 }
