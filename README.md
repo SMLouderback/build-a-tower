@@ -10,6 +10,7 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 - Price tiers + progressive HUD: `docs/superpowers/specs/2026-07-30-price-tiers-progressive-hud-design.md`
 - Commercial visit traffic (E1): `docs/superpowers/specs/2026-07-31-commercial-visit-traffic-design.md`
 - Smart elevator routing: `docs/superpowers/specs/2026-07-31-smart-elevator-routing-design.md`
+- Disposable income & market climate: `docs/superpowers/specs/2026-07-31-agent-disposable-income-climate-design.md`
 - SimTower behavior reference (tower-together): `docs/reference/tower-together/`
 - Slice #3 elevators checklist: `docs/reference/tower-together/SLICE3-ELEVATORS-CHECKLIST.md`
 
@@ -18,7 +19,7 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 1. Open this folder in Unity **6000.4.7f1**.
 2. Open `Assets/Scenes/TowerSandbox.unity`.
 3. Press **Play**.
-4. HUD **core strip** (top-left): funds, stars, **clock + speed presets**, and help. Expand **Build** (open by default), then later **Goals** (after lobby) and **Economy** (after first midnight / income).
+4. HUD **core strip** (top-left): funds, stars, **Gregorian date + time** (starts **Sat 01 Jan 2000**), **Climate** (market step), **speed presets**, and help. Expand **Build** (open by default), then later **Goals** (after lobby) and **Economy** (after first midnight / income).
 5. **Drag left → right on Floor G** (lobby / ground / 1st floor — same level) to place the Lobby.
 6. In **Build**, open a family (**Office / Hotel / Condo / Shops / Transit**) and pick a variant. Place rooms above the lobby on floors 1+ (no overhangs). Basement rooms go on B1 (−1) and below. **Utility** appears only when support-room assets exist.
 7. Place **Stairs** under **Transit** (**2×2**, two floors). From Floor G, stairs reach **B1** (origin at −1) or **floor 1** (origin at 0). Stair run is bottom-left → top-right. Stack the next flight one floor up on the same columns (connecting floor shares landings; roles 1 and 4 cannot overlap).
@@ -41,7 +42,9 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 24. Pan with the **bottom horizontal** and **right vertical scrollbars** (RMB/MMB drag and scroll zoom still work) to build and inspect tall, wide towers.
 25. Room buttons show a compact **cost · income** tag (e.g. `Office $40k · $3k/d`, `Condo $80k · $150k once`, `Elevator $100k/fl · -$3k/d`); Build tool detail and Selection spell out full cost, income at the current tier, and any daily upkeep.
 26. Under **Shops**, place **Fast Food** / **Restaurant** (Food) or **Retail** — each needs a reachable path from the lobby. Office workers take a midday lunch trip; hotel guests and condo residents make at most one commercial trip per day; street visitors arrive from Outside when shops are open.
-27. Shop income is **batched at midnight**: each completed visit pays the shop’s `$/visit` into Last Net / unit contribution. Selection shows today’s visit count and the per-visit income model (not “traffic inactive”).
+27. **Market climate** starts at **Normal** (Recession · Slow · Normal · Strong · Boom) and may shift on the **1st of each Gregorian month**. Climate scales daily disposable spend and how many rent/sale price tiers the market tolerates (see price-tier market hints).
+28. Agents roll a **daily disposable budget** by home band — **Basic** (standard Office / Hotel / Condo): ~$40–$100; **Premium** (`*Premium` living rooms): ~$90–$200; **Street** visitors: ~$20–$60 — then multiply by the current climate. Price tier on the unit does **not** change the band.
+29. Shop visits spend **random dollars** (`1 … min(shop list price, remaining budget)`); agents skip shops they cannot afford (e.g. Basic budget vs Restaurant). Shop income is **batched at midnight** from **dollars spent that day**, not flat `visits × list price`. Selection shows today’s visit count and earnings.
 
 ### Important: Game view Scale
 

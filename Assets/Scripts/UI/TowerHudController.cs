@@ -159,6 +159,10 @@ namespace BuildATower
             GUI.Label(new Rect(cx, cy, inner, row), $"Time: {clockText}", label);
             cy += row;
 
+            var climateName = simulation?.Climate?.Name ?? "—";
+            GUI.Label(new Rect(cx, cy, inner, row), $"Climate: {climateName}", label);
+            cy += row;
+
             DrawTimeSpeedButtons(cx, cy, inner, btnH);
             cy += btnH + 6f;
 
