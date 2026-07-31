@@ -40,6 +40,12 @@ namespace BuildATower
         public int ElevatorQueueSide { get; set; } = 1;
         public float ElevatorWaitMinutes { get; set; }
 
+        public int CommercialTripDay { get; set; } = -1;
+        public RoomInstance VisitTarget { get; set; }
+        public float VisitDwellRemaining { get; set; }
+        public AgentPhase PhaseAfterVisit { get; set; }
+        public Vector2Int? ReturnCell { get; set; }
+
         public Agent(int id, AgentRole role, RoomInstance homeRoom, Vector2Int cell)
         {
             Id = id;

@@ -164,6 +164,7 @@ namespace BuildATower
                 }
 
                 StepMovement(agent, deltaGameMinutes);
+                UpdateVisitingShop(agent, deltaGameMinutes, grid);
                 UpdateStress(agent, deltaGameMinutes);
             }
         }
@@ -221,9 +222,88 @@ namespace BuildATower
             if (agent.Phase == AgentPhase.Working && agent.WorkedMinutes >= agent.WorkMinutes)
                 BeginTrip(agent, agent.Cell, exitCell, AgentPhase.Outside, grid);
 
+            if (agent.Phase == AgentPhase.Working &&
+                minute >= 11 * 60 + 30 &&
+                minute <= 13 * 60 + 30 &&
+                agent.CommercialTripDay != clock.DayIndex)
+                TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Working);
+
             // Reset daily commute flag at midnight window.
             if (minute < 5 * 60)
                 agent.CheckedOutToday = false;
+        }
+
+        /// <summary>
+        /// Starts a once-per-day commercial visit when an open reachable shop has capacity.
+        /// Reused by office lunch (Task 2) and hotel/condo windows (Task 3).
+        /// </summary>
+        public bool TryBeginCommercialTrip(
+            Agent agent,
+            TowerGrid grid,
+            GameClock clock,
+            AgentPhase afterVisit)
+        {
+            if (agent == null || grid == null || clock == null) return false;
+            if (agent.CommercialTripDay == clock.DayIndex) return false;
+
+            var shops = FindOpenShops(grid, clock.MinuteOfDay);
+            if (shops.Count == 0) return false;
+
+            var shop = shops[_rng.Next(shops.Count)];
+            if (!shop.TryOccupyVisitorSlot()) return false;
+
+            agent.CommercialTripDay = clock.DayIndex;
+            agent.VisitTarget = shop;
+            agent.PhaseAfterVisit = afterVisit;
+            agent.ReturnCell = agent.Cell;
+            agent.VisitDwellRemaining = ShopVisitRules.PickDwellMinutes(shop.Type, _rng);
+            BeginTrip(agent, agent.Cell, ShopEntryCell(shop), AgentPhase.VisitingShop, grid);
+            return true;
+        }
+
+        List<RoomInstance> FindOpenShops(TowerGrid grid, int minuteOfDay)
+        {
+            var open = new List<RoomInstance>();
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                if (!ShopVisitRules.IsShop(room.Type)) continue;
+                if (!ShopVisitRules.IsOpen(room.Type, minuteOfDay)) continue;
+                if (room.ConcurrentVisitors >= ShopVisitRules.SlotCount(room.Type)) continue;
+                if (!CanReachShopFromLobby(grid, room)) continue;
+                open.Add(room);
+            }
+
+            return open;
+        }
+
+        bool CanReachShopFromLobby(TowerGrid grid, RoomInstance shop) =>
+            _router.TryPlanTrip(LobbyExitCell(grid), ShopEntryCell(shop), out var legs) &&
+            legs.Count > 0;
+
+        static Vector2Int ShopEntryCell(RoomInstance shop) =>
+            shop == null ? Vector2Int.zero : shop.Origin;
+
+        void UpdateVisitingShop(Agent agent, float deltaGameMinutes, TowerGrid grid)
+        {
+            if (agent.Phase != AgentPhase.VisitingShop) return;
+
+            agent.VisitDwellRemaining -= deltaGameMinutes;
+            if (agent.VisitDwellRemaining > 0f) return;
+
+            var shop = agent.VisitTarget;
+            if (shop != null)
+            {
+                shop.RecordVisit();
+                shop.ReleaseVisitorSlot();
+            }
+
+            agent.VisitTarget = null;
+            agent.VisitDwellRemaining = 0f;
+            var returnCell = agent.ReturnCell ?? agent.Cell;
+            var after = agent.PhaseAfterVisit;
+            agent.ReturnCell = null;
+            BeginTrip(agent, agent.Cell, returnCell, after, grid);
         }
 
         void UpdateHotel(Agent agent, GameClock clock, TowerGrid grid)

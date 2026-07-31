@@ -15,6 +15,7 @@ namespace BuildATower
         Working,
         Staying,
         WaitingAtElevator,
-        Riding
+        Riding,
+        VisitingShop
     }
 }
