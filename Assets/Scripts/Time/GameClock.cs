@@ -1,14 +1,17 @@
 using System;
+using System.Globalization;
 using UnityEngine;
 
 namespace BuildATower
 {
     /// <summary>
     /// Accelerated day clock. 1 real second ≈ <see cref="minutesPerRealSecond"/> game minutes.
+    /// Calendar epoch is Saturday 1 January 2000 at <see cref="DayIndex"/> 0.
     /// </summary>
     public sealed class GameClock
     {
         public const int MinutesPerDay = 24 * 60;
+        static readonly DateTime Epoch = new DateTime(2000, 1, 1);
 
         float _minutesPerRealSecond;
         float _minuteAccumulator;
@@ -33,7 +36,11 @@ namespace BuildATower
         public bool Paused { get; set; }
         public float LastTickGameMinutes { get; private set; }
 
+        /// <summary>Gregorian date for the current <see cref="DayIndex"/> (time-of-day is midnight on that date).</summary>
+        public DateTime CalendarDate => Epoch.AddDays(DayIndex);
+
         public event Action DayRolled;
+        public event Action MonthRolled;
 
         public void Tick(float deltaTimeSeconds)
         {
@@ -55,29 +62,19 @@ namespace BuildATower
             while (MinuteOfDay >= MinutesPerDay)
             {
                 MinuteOfDay -= MinutesPerDay;
+                var previousMonth = CalendarDate.Month;
+                var previousYear = CalendarDate.Year;
                 DayIndex++;
                 DayRolled?.Invoke();
+                if (CalendarDate.Month != previousMonth || CalendarDate.Year != previousYear)
+                    MonthRolled?.Invoke();
             }
         }
 
         public string FormatHud()
         {
-            var dayName = WeekdayName(DayIndex);
-            return $"{dayName} {Hour:00}:{Minute:00}";
-        }
-
-        static string WeekdayName(int dayIndex)
-        {
-            return (dayIndex % 7) switch
-            {
-                0 => "Mon",
-                1 => "Tue",
-                2 => "Wed",
-                3 => "Thu",
-                4 => "Fri",
-                5 => "Sat",
-                _ => "Sun"
-            };
+            var date = CalendarDate.ToString("ddd dd MMM yyyy", CultureInfo.InvariantCulture);
+            return $"{date}  {Hour:00}:{Minute:00}";
         }
     }
 }
