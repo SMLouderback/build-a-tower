@@ -46,6 +46,43 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void TryBeginCommercialTrip_skips_restaurant_when_remaining_below_price()
+        {
+            var (grid, shop, agents, agent, clock) = SetupOfficeWithRestaurant();
+            PlaceAgentWorkingAtOffice(agent);
+            agent.DisposableRemaining = 30;
+            agent.DisposableDayIndex = clock.DayIndex;
+
+            Assert.IsFalse(agents.TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Working));
+            Assert.AreEqual(-1, agent.CommercialTripDay);
+            Assert.IsNull(agent.VisitTarget);
+            Assert.AreEqual(0, shop.ConcurrentVisitors);
+            Assert.AreEqual(30, agent.DisposableRemaining);
+        }
+
+        [Test]
+        public void Visit_complete_reduces_disposable_and_records_shop_earnings()
+        {
+            var (grid, shop, agents, agent, clock) = SetupOfficeWithShop(open: true);
+            PlaceAgentWorkingAtOffice(agent);
+            agent.DisposableRemaining = 50;
+            agent.DisposableDayIndex = clock.DayIndex;
+
+            Assert.IsTrue(agents.TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Working));
+            Assert.AreSame(shop, agent.VisitTarget);
+
+            agent.Phase = AgentPhase.VisitingShop;
+            agent.VisitDwellRemaining = 0.01f;
+            agents.Tick(1f, clock, grid);
+
+            Assert.AreEqual(1, shop.VisitsToday);
+            Assert.Greater(shop.ShopEarningsToday, 0);
+            Assert.Less(agent.DisposableRemaining, 50);
+            Assert.AreEqual(50 - agent.DisposableRemaining, shop.ShopEarningsToday);
+            Assert.That(shop.ShopEarningsToday, Is.InRange(1, 40));
+        }
+
+        [Test]
         public void Office_lunch_trip_records_visit_after_dwell()
         {
             var (grid, shop, agents, agent, clock) = SetupOfficeWithShop(open: true);
@@ -283,8 +320,11 @@ namespace BuildATower.Tests
             var grid = new TowerGrid();
             Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
             // Fast Food (4) + Restaurant (6) = 10 slots so the street cap (8) is the binding limit.
-            Assert.IsTrue(grid.TryPlace(FastFood(), new Vector2Int(9, 1), out _));
-            Assert.IsTrue(grid.TryPlace(Restaurant(), new Vector2Int(10, 1), out _));
+            // Price floors at Street band min ($20) so affordability never blocks the spawn-cap test.
+            Assert.IsTrue(grid.TryPlace(FastFood(), new Vector2Int(9, 1), out var fast));
+            Assert.IsTrue(grid.TryPlace(Restaurant(), new Vector2Int(10, 1), out var restaurant));
+            fast.Type.baseIncome = 20;
+            restaurant.Type.baseIncome = 20;
             Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
 
             var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
@@ -314,6 +354,28 @@ namespace BuildATower.Tests
             agents.SyncHomes(grid);
             var agent = agents.Agents.Single();
             var clock = new GameClock(1f, open ? 12 * 60 : 22 * 60);
+            return (grid, shop, agents, agent, clock);
+        }
+
+        static (
+            TowerGrid grid,
+            RoomInstance shop,
+            AgentSystem agents,
+            Agent agent,
+            GameClock clock) SetupOfficeWithRestaurant()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, 1), out _));
+            Assert.IsTrue(grid.TryPlace(Restaurant(), new Vector2Int(9, 1), out var shop));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
+
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router);
+            agents.SyncHomes(grid);
+            var agent = agents.Agents.Single();
+            var clock = new GameClock(1f, 12 * 60);
             return (grid, shop, agents, agent, clock);
         }
 

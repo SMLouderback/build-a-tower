@@ -27,6 +27,7 @@ namespace BuildATower
         readonly System.Random _rng = new(42);
         readonly HashSet<int> _condoMoveInsNotified = new();
         System.Action<RoomInstance> _onCondoResidentMovedIn;
+        MarketClimate _climate;
         int _nextId = 1;
         int _lastTotalMinutes = int.MinValue;
         float _nowTotalMinutes;
@@ -66,11 +67,14 @@ namespace BuildATower
             }
         }
 
-        public AgentSystem(TransitRouter router)
+        public AgentSystem(TransitRouter router, MarketClimate climate = null)
         {
             _router = router;
             _elevators = router.Elevators;
+            _climate = climate;
         }
+
+        public void SetClimate(MarketClimate climate) => _climate = climate;
 
         public void SyncHomes(
             TowerGrid grid,
@@ -161,9 +165,12 @@ namespace BuildATower
             float deltaGameMinutes,
             GameClock clock,
             TowerGrid grid,
-            int currentStars = 0)
+            int currentStars = 0,
+            MarketClimate climate = null)
         {
             if (grid == null || clock == null) return;
+            if (climate != null)
+                _climate = climate;
 
             var total = clock.DayIndex * GameClock.MinutesPerDay + clock.MinuteOfDay;
             _nowTotalMinutes = total;
@@ -175,6 +182,7 @@ namespace BuildATower
             for (var i = 0; i < _agents.Count; i++)
             {
                 var agent = _agents[i];
+                EnsureDisposable(agent, clock.DayIndex);
                 if (agent.Phase == AgentPhase.Working && advanced > 0)
                     agent.WorkedMinutes += advanced;
 
@@ -283,7 +291,8 @@ namespace BuildATower
             if (agent == null || grid == null || clock == null) return false;
             if (agent.CommercialTripDay == clock.DayIndex) return false;
 
-            var shops = FindOpenShops(grid, clock.MinuteOfDay);
+            EnsureDisposable(agent, clock.DayIndex);
+            var shops = FindOpenShops(grid, clock.MinuteOfDay, agent.DisposableRemaining);
             if (shops.Count == 0) return false;
 
             var shop = shops[_rng.Next(shops.Count)];
@@ -312,7 +321,18 @@ namespace BuildATower
             agent.ReturnCell = null;
         }
 
-        List<RoomInstance> FindOpenShops(TowerGrid grid, int minuteOfDay)
+        void EnsureDisposable(Agent agent, int dayIndex)
+        {
+            if (agent == null || agent.DisposableDayIndex == dayIndex) return;
+
+            var homeType = agent.Role == AgentRole.StreetVisitor ? null : agent.HomeRoom?.Type;
+            var band = AgentWealth.ResolveBand(agent.Role, homeType);
+            var mult = _climate?.SpendMultiplier ?? 1f;
+            agent.DisposableRemaining = AgentWealth.RollDailyDisposable(band, mult, _rng);
+            agent.DisposableDayIndex = dayIndex;
+        }
+
+        List<RoomInstance> FindOpenShops(TowerGrid grid, int minuteOfDay, int? disposableRemaining = null)
         {
             var open = new List<RoomInstance>();
             foreach (var room in grid.Rooms)
@@ -321,6 +341,9 @@ namespace BuildATower
                 if (!ShopVisitRules.IsShop(room.Type)) continue;
                 if (!ShopVisitRules.IsOpen(room.Type, minuteOfDay)) continue;
                 if (room.ConcurrentVisitors >= ShopVisitRules.SlotCount(room.Type)) continue;
+                if (disposableRemaining.HasValue &&
+                    !AgentWealth.CanAfford(disposableRemaining.Value, room.Type))
+                    continue;
                 if (!CanReachShopFromLobby(grid, room)) continue;
                 open.Add(room);
             }
@@ -345,6 +368,9 @@ namespace BuildATower
             var shop = agent.VisitTarget;
             if (shop != null)
             {
+                var spent = AgentWealth.RollSpend(agent.DisposableRemaining, shop.Type, _rng);
+                agent.DisposableRemaining -= spent;
+                shop.RecordShopSpend(spent);
                 shop.RecordVisit();
                 shop.ReleaseVisitorSlot();
             }
@@ -384,7 +410,11 @@ namespace BuildATower
             if (grid == null || clock == null) return false;
             if (CountStreetVisitors() >= MaxConcurrentStreetVisitors) return false;
 
-            var shops = FindOpenShops(grid, clock.MinuteOfDay);
+            var remaining = AgentWealth.RollDailyDisposable(
+                WealthBand.Street,
+                _climate?.SpendMultiplier ?? 1f,
+                _rng);
+            var shops = FindOpenShops(grid, clock.MinuteOfDay, remaining);
             if (shops.Count == 0) return false;
 
             var shop = shops[_rng.Next(shops.Count)];
@@ -396,7 +426,9 @@ namespace BuildATower
                 VisitTarget = shop,
                 PhaseAfterVisit = AgentPhase.Outside,
                 ReturnCell = exitCell,
-                VisitDwellRemaining = ShopVisitRules.PickDwellMinutes(shop.Type, _rng)
+                VisitDwellRemaining = ShopVisitRules.PickDwellMinutes(shop.Type, _rng),
+                DisposableRemaining = remaining,
+                DisposableDayIndex = clock.DayIndex
             };
             _agents.Add(agent);
             if (BeginTrip(agent, exitCell, ShopEntryCell(shop), AgentPhase.VisitingShop, grid))

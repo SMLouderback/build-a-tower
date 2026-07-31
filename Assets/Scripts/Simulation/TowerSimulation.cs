@@ -109,7 +109,8 @@ namespace BuildATower
                 _clock.LastTickGameMinutes,
                 _clock,
                 build.Grid,
-                _stars?.CurrentStars ?? 0);
+                _stars?.CurrentStars ?? 0,
+                _climate);
             if (agentView != null)
                 agentView.Sync(_agents.Agents);
         }
