@@ -172,6 +172,23 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void AverageStress_excludes_street_visitors()
+        {
+            var (grid, _, agents, _, clock) = SetupOfficeWithShop(open: true);
+            var before = agents.AverageStress;
+            Assert.IsTrue(agents.TrySpawnStreetVisitor(grid, clock));
+
+            var street = agents.Agents.First(a => a.Role == AgentRole.StreetVisitor);
+            street.Stress = 100f;
+
+            Assert.AreEqual(
+                before,
+                agents.AverageStress,
+                0.001f,
+                "StreetVisitor stress must not affect AverageStress.");
+        }
+
+        [Test]
         public void Street_visitor_cap_is_eight()
         {
             var (grid, agents, clock) = SetupShopsForStreetTraffic();

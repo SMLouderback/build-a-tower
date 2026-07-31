@@ -52,10 +52,16 @@ namespace BuildATower
         {
             get
             {
-                if (_agents.Count == 0) return 0f;
+                var count = 0;
                 var sum = 0f;
-                foreach (var a in _agents) sum += a.Stress;
-                return sum / _agents.Count;
+                foreach (var a in _agents)
+                {
+                    if (a.Role == AgentRole.StreetVisitor) continue;
+                    sum += a.Stress;
+                    count++;
+                }
+
+                return count == 0 ? 0f : sum / count;
             }
         }
 
