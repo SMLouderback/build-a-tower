@@ -302,5 +302,35 @@ namespace BuildATower.Tests
             Assert.AreEqual(2 * EconomySystem.MaidWagePerDay, hk.LifetimeExpense);
             Assert.AreEqual(EconomySystem.HandymanWagePerDay, maint.LifetimeExpense);
         }
+
+        [Test]
+        public void Midnight_charges_security_wages()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            var security = ScriptableObject.CreateInstance<RoomTypeSO>();
+            security.id = "service_security";
+            security.size = new Vector2Int(2, 1);
+            security.allowAboveGround = true;
+            Assert.IsTrue(grid.TryPlace(security, new Vector2Int(0, 1), out var room));
+            room.SetStaffedWorkers(2);
+            var wallet = new FundsWallet(50_000);
+            var economy = new EconomySystem();
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+            Assert.AreEqual(50_000 - 2 * EconomySystem.SecurityGuardWagePerDay,
+                wallet.Balance);
+            Assert.AreEqual(2 * EconomySystem.SecurityGuardWagePerDay, economy.LastWageExpense);
+        }
+
+        [Test]
+        public void Security_is_staffed_service_and_auto_hires()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "service_security";
+            Assert.IsTrue(BuildController.IsStaffedServiceRoom(so));
+            var room = new RoomInstance(1, so, Vector2Int.zero, new Vector2Int(2, 1));
+            BuildController.ApplyAutoHireOnPlace(room);
+            Assert.AreEqual(1, room.StaffedWorkers);
+        }
     }
 }

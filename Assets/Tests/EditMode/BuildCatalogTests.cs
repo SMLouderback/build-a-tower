@@ -142,7 +142,7 @@ namespace BuildATower.Tests
 
             Assert.AreEqual(1, hkRoom.StaffedWorkers);
             Assert.AreEqual(1, maintRoom.StaffedWorkers);
-            Assert.AreEqual(0, securityRoom.StaffedWorkers);
+            Assert.AreEqual(1, securityRoom.StaffedWorkers);
         }
     }
 }

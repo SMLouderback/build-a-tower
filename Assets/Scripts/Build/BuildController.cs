@@ -100,12 +100,12 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Housekeeping and Maintenance start with one hired worker on place.
+        /// Housekeeping, Maintenance, and Security start with one hired worker on place.
         /// </summary>
         public static void ApplyAutoHireOnPlace(RoomInstance room)
         {
             if (room?.Type == null) return;
-            if (room.Type.id is "service_housekeeping" or "service_maintenance")
+            if (room.Type.id is "service_housekeeping" or "service_maintenance" or "service_security")
                 room.SetStaffedWorkers(1);
         }
 
@@ -238,7 +238,7 @@ namespace BuildATower
         }
 
         public static bool IsStaffedServiceRoom(RoomTypeSO type) =>
-            type != null && type.id is "service_housekeeping" or "service_maintenance";
+            type != null && type.id is "service_housekeeping" or "service_maintenance" or "service_security";
 
         public string GetElevatorStatusText()
         {

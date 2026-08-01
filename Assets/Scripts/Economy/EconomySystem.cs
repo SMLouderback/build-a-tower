@@ -7,9 +7,11 @@ namespace BuildATower
         public const int ElevatorDailyUpkeep = 3_000;
         public const int MaidWagePerDay = 200;
         public const int HandymanWagePerDay = 300;
+        public const int SecurityGuardWagePerDay = 250;
 
         const string HousekeepingId = "service_housekeeping";
         const string MaintenanceId = "service_maintenance";
+        const string SecurityId = "service_security";
 
         readonly Dictionary<int, int> _lastIncomeByRoom = new();
         readonly Dictionary<int, int> _lastExpenseByRoom = new();
@@ -142,6 +144,7 @@ namespace BuildATower
             {
                 HousekeepingId => room.StaffedWorkers * MaidWagePerDay,
                 MaintenanceId => room.StaffedWorkers * HandymanWagePerDay,
+                SecurityId => room.StaffedWorkers * SecurityGuardWagePerDay,
                 _ => 0
             };
         }
