@@ -8,6 +8,8 @@ namespace BuildATower
         public const float StressGainPerSecond = 12f;
         public const float StressDecayPerSecond = 4f;
         public const float LowConditionStressPerDay = 8f;
+        public const float CrimeStressPerDayAtMax = 12f;
+        public const float CriminalProximityStressPerMinute = 0.4f;
         /// <summary>
         /// Walk speed in cells per game minute. At 1x (1 game minute / real second) this
         /// matches the old cells-per-real-second feel; faster presets scale movement with the clock.
@@ -205,6 +207,7 @@ namespace BuildATower
                 var agent = _agents[i];
                 EnsureDisposable(agent, clock.DayIndex);
                 ApplyLowConditionStress(agent, clock.DayIndex);
+                ApplyCrimeStressDaily(agent, _crime, clock.DayIndex);
                 if (agent.Phase == AgentPhase.Working && advanced > 0)
                     agent.WorkedMinutes += advanced;
 
@@ -224,6 +227,7 @@ namespace BuildATower
                 UpdateServiceWork(agent, deltaGameMinutes, grid);
                 UpdateCriminalWork(agent, deltaGameMinutes, grid);
                 UpdateStress(agent, deltaGameMinutes);
+                UpdateCrimeProximityStress(agent, _agents, deltaGameMinutes);
             }
 
             UpdateStreetTraffic(clock, grid, currentStars, advanced);
@@ -1341,6 +1345,48 @@ namespace BuildATower
             agent.Stress = Mathf.Min(100f, agent.Stress + LowConditionStressPerDay);
             agent.LowConditionStressDay = dayIndex;
         }
+
+        public static void ApplyCrimeStressDaily(Agent agent, CrimeSystem crime, int dayIndex)
+        {
+            if (agent == null || crime == null) return;
+            if (IsCrimeStressExempt(agent.Role)) return;
+            if (agent.CrimeStressDay == dayIndex) return;
+            var c = crime.GetCrime(agent.Cell.y);
+            if (c <= 0f) return;
+            agent.Stress = Mathf.Min(100f, agent.Stress + CrimeStressPerDayAtMax * (c / 100f));
+            agent.CrimeStressDay = dayIndex;
+        }
+
+        public static void UpdateCrimeProximityStress(
+            Agent agent,
+            IReadOnlyList<Agent> agents,
+            float deltaGameMinutes)
+        {
+            if (agent == null || agents == null || deltaGameMinutes <= 0f) return;
+            if (IsCrimeStressExempt(agent.Role)) return;
+            if (agent.Phase == AgentPhase.Outside) return;
+
+            var floor = agent.Cell.y;
+            var criminalNearby = false;
+            for (var i = 0; i < agents.Count; i++)
+            {
+                var other = agents[i];
+                if (other == null || other == agent) continue;
+                if (other.Role != AgentRole.Criminal) continue;
+                if (other.Phase == AgentPhase.Outside) continue;
+                if (other.Cell.y != floor) continue;
+                criminalNearby = true;
+                break;
+            }
+
+            if (!criminalNearby) return;
+            agent.Stress = Mathf.Min(
+                100f,
+                agent.Stress + CriminalProximityStressPerMinute * deltaGameMinutes);
+        }
+
+        static bool IsCrimeStressExempt(AgentRole role) =>
+            role is AgentRole.Security or AgentRole.Maid or AgentRole.Handyman or AgentRole.Criminal;
 
         void UpdateStress(Agent agent, float deltaGameMinutes)
         {

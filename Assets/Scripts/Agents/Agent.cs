@@ -65,6 +65,9 @@ namespace BuildATower
         /// <summary>Day index when low-condition home stress was last applied, or -1.</summary>
         public int LowConditionStressDay { get; set; } = -1;
 
+        /// <summary>Day index when floor-crime stress was last applied, or -1.</summary>
+        public int CrimeStressDay { get; set; } = -1;
+
         /// <summary>Hotel/room currently claimed for cleaning or repair, if any.</summary>
         public RoomInstance ServiceTarget { get; set; }
 
