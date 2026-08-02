@@ -44,13 +44,23 @@ namespace BuildATower
             }
         }
 
-        public bool TryFindPath(Vector2Int start, Vector2Int goal, out List<Vector2Int> path)
+        public bool TryFindPath(Vector2Int start, Vector2Int goal, out List<Vector2Int> path) =>
+            TryFindPath(start, goal, MaxStairsFloorSpan, out path);
+
+        public bool TryFindPath(
+            Vector2Int start,
+            Vector2Int goal,
+            int maxFloorSpan,
+            out List<Vector2Int> path)
         {
             path = null;
             if (!_walkable.Contains(start) || !_walkable.Contains(goal)) return false;
 
-            var floorSpan = Mathf.Abs(goal.y - start.y);
-            if (floorSpan > MaxStairsFloorSpan) return false;
+            if (maxFloorSpan >= 0)
+            {
+                var floorSpan = Mathf.Abs(goal.y - start.y);
+                if (floorSpan > maxFloorSpan) return false;
+            }
 
             if (start == goal)
             {

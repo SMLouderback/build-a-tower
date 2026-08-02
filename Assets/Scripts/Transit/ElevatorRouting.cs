@@ -4,12 +4,32 @@ namespace BuildATower
 {
     public static class ElevatorRouting
     {
+        public const int StairsComfortFloorSpan = 3;
+        public const float StairsOverCapPenaltyPerFloor = 40f;
+        public const float StairsOverCapStressPerFloor = 25f;
+
         public const float WaitWeight = 3f;
         public const float BoardCycleMinutes = 2f;
         public const float BusyPenaltyMinutes = 1.5f;
         public const float SwitchImproveRatio = 0.25f;
         public const float RescoreIntervalGameMinutes = 10f;
         public const float SwitchCooldownGameMinutes = 30f;
+
+        public static float StairsOverCapPenalty(int stairFloorSpan) =>
+            Math.Max(0, stairFloorSpan - StairsComfortFloorSpan) * StairsOverCapPenaltyPerFloor;
+
+        public static int MaxAffordableOverCapFloors(float currentStress)
+        {
+            var n = 0;
+            var s = currentStress;
+            while (s < 100f)
+            {
+                n++;
+                s += StairsOverCapStressPerFloor;
+            }
+
+            return n;
+        }
 
         public static float Score(int walkCost, float waitEstimate, float waitWeightScale = 1f) =>
             walkCost + WaitWeight * waitWeightScale * waitEstimate;
