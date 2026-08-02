@@ -11,8 +11,8 @@ namespace BuildATower
         public const float RescoreIntervalGameMinutes = 10f;
         public const float SwitchCooldownGameMinutes = 30f;
 
-        public static float Score(int walkCost, float waitEstimate) =>
-            walkCost + WaitWeight * waitEstimate;
+        public static float Score(int walkCost, float waitEstimate, float waitWeightScale = 1f) =>
+            walkCost + WaitWeight * waitWeightScale * waitEstimate;
 
         public static bool IsMeaningfullyBetter(float currentScore, float alternateScore)
         {

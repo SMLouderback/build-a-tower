@@ -23,6 +23,7 @@ namespace BuildATower
     {
         readonly StairsPathfinder _stairs;
         readonly ElevatorSystem _elevators;
+        float _waitWeightScale = 1f;
 
         public ElevatorSystem Elevators => _elevators;
 
@@ -31,6 +32,9 @@ namespace BuildATower
             _stairs = stairs;
             _elevators = elevators;
         }
+
+        public void SetWaitWeightScale(float waitWeightScale) =>
+            _waitWeightScale = waitWeightScale > 0f ? waitWeightScale : 1f;
 
         public void Rebuild(TowerGrid grid)
         {
@@ -121,7 +125,7 @@ namespace BuildATower
 
                 var walkCost = toShaft.Count + fromShaft.Count;
                 var wait = _elevators.EstimateWaitMinutes(shaft, start.y, direction);
-                var score = ElevatorRouting.Score(walkCost, wait);
+                var score = ElevatorRouting.Score(walkCost, wait, _waitWeightScale);
 
                 var betterScore = score < bestScore - 1e-3f;
                 var nearTie = Mathf.Abs(score - bestScore) <= 1e-3f;

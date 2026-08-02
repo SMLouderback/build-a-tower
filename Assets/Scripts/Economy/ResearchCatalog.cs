@@ -34,5 +34,63 @@ namespace BuildATower
             ResearchBranch.Maintenance => "Maintenance",
             _ => branch.ToString()
         };
+
+        // Spec §4.1 — cumulative from highest completed level (0 = identity).
+
+        public static float ShopSpendMultiplier(int level) => level switch
+        {
+            1 => 1.10f,
+            2 => 1.20f,
+            3 => 1.35f,
+            _ => 1f
+        };
+
+        public static float ElevatorSpeedMultiplier(int level) => level switch
+        {
+            1 => 1.10f,
+            2 => 1.20f,
+            3 => 1.35f,
+            _ => 1f
+        };
+
+        /// <summary>I = identity; II/III reduce WaitWeight for better queue scoring.</summary>
+        public static float ElevatorRoutingWaitWeightScale(int level) => level switch
+        {
+            2 => 0.85f,
+            3 => 0.70f,
+            _ => 1f
+        };
+
+        public static float CrimeSuppressionMultiplier(int level) => level switch
+        {
+            1 => 1.15f,
+            2 => 1.30f,
+            3 => 1.50f,
+            _ => 1f
+        };
+
+        public static float CleanMinutesMultiplier(int level) => level switch
+        {
+            1 => 0.90f,
+            2 => 0.80f,
+            3 => 0.65f,
+            _ => 1f
+        };
+
+        public static float RepairMinutesMultiplier(int level) => level switch
+        {
+            1 => 0.90f,
+            2 => 0.80f,
+            3 => 0.65f,
+            _ => 1f
+        };
+
+        public static float RepairChunkMultiplier(int level) => level switch
+        {
+            1 => 1.10f,
+            2 => 1.25f,
+            3 => 1.45f,
+            _ => 1f
+        };
     }
 }

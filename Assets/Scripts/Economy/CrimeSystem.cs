@@ -41,7 +41,8 @@ namespace BuildATower
             IReadOnlyDictionary<int, float> hotelLoadByFloor,
             int totalStaffedSecurityWorkers,
             IReadOnlyList<int> patrolFloors,
-            IReadOnlyList<int> criminalFloors)
+            IReadOnlyList<int> criminalFloors,
+            float crimeSuppressionMultiplier = 1f)
         {
             if (deltaGameMinutes <= 0f) return;
 
@@ -63,15 +64,16 @@ namespace BuildATower
                     Add(floor, CriminalRaisePerMinute * deltaGameMinutes);
             }
 
-            var baselineDecay = totalStaffedSecurityWorkers * BaselineDecayPerStaffPerMinute * deltaGameMinutes;
+            var suppression = crimeSuppressionMultiplier <= 0f ? 1f : crimeSuppressionMultiplier;
+            var baselineDecay = totalStaffedSecurityWorkers * BaselineDecayPerStaffPerMinute * deltaGameMinutes * suppression;
             var patrolDecay = new Dictionary<int, float>();
             if (patrolFloors != null)
             {
                 foreach (var floor in patrolFloors)
                 {
-                    AddPatrolDecay(patrolDecay, floor, PatrolDecayPerMinute * deltaGameMinutes);
-                    AddPatrolDecay(patrolDecay, floor - 1, PatrolDecayPerMinute * PatrolAdjacentFactor * deltaGameMinutes);
-                    AddPatrolDecay(patrolDecay, floor + 1, PatrolDecayPerMinute * PatrolAdjacentFactor * deltaGameMinutes);
+                    AddPatrolDecay(patrolDecay, floor, PatrolDecayPerMinute * deltaGameMinutes * suppression);
+                    AddPatrolDecay(patrolDecay, floor - 1, PatrolDecayPerMinute * PatrolAdjacentFactor * deltaGameMinutes * suppression);
+                    AddPatrolDecay(patrolDecay, floor + 1, PatrolDecayPerMinute * PatrolAdjacentFactor * deltaGameMinutes * suppression);
                 }
             }
 

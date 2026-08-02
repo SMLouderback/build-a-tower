@@ -43,6 +43,7 @@ namespace BuildATower
         System.Action<RoomInstance> _onCondoResidentMovedIn;
         MarketClimate _climate;
         CrimeSystem _crime;
+        ResearchSystem _research;
         int _nextId = 1;
         int _lastTotalMinutes = int.MinValue;
         float _nowTotalMinutes;
@@ -188,12 +189,14 @@ namespace BuildATower
             TowerGrid grid,
             int currentStars = 0,
             MarketClimate climate = null,
-            CrimeSystem crime = null)
+            CrimeSystem crime = null,
+            ResearchSystem research = null)
         {
             if (grid == null || clock == null) return;
             if (climate != null)
                 _climate = climate;
             _crime = crime;
+            _research = research;
 
             var total = clock.DayIndex * GameClock.MinutesPerDay + clock.MinuteOfDay;
             _nowTotalMinutes = total;
@@ -765,13 +768,16 @@ namespace BuildATower
             {
                 target = FindOldestDirtyHotel(grid);
                 if (target != null)
-                    workMinutes = RoomConditionRules.CleanMinutes(target.Type);
+                    workMinutes = RoomConditionRules.CleanMinutes(
+                        target.Type,
+                        ResearchEffects.CleanMinutesMultiplier(_research));
             }
             else if (agent.Role == AgentRole.Handyman)
             {
                 target = FindLowestConditionRepairTarget(grid);
                 if (target != null)
-                    workMinutes = RoomConditionRules.RepairMinutesPerChunk;
+                    workMinutes = RoomConditionRules.RepairMinutes(
+                        ResearchEffects.RepairMinutesMultiplier(_research));
             }
 
             if (target == null) return false;
@@ -829,7 +835,7 @@ namespace BuildATower
             return false;
         }
 
-        static void FinishServiceJob(Agent agent)
+        void FinishServiceJob(Agent agent)
         {
             var target = agent.ServiceTarget;
             if (agent.Role == AgentRole.Maid)
@@ -838,7 +844,9 @@ namespace BuildATower
             {
                 // Do not revive Broken rooms if Condition hit 0 mid-job (e.g. midnight decay).
                 if (target != null && !target.IsBroken)
-                    RoomConditionRules.ApplyRepairTick(target);
+                    RoomConditionRules.ApplyRepairTick(
+                        target,
+                        ResearchEffects.RepairChunkMultiplier(_research));
             }
 
             ClearServiceClaim(agent);
@@ -1010,7 +1018,10 @@ namespace BuildATower
             {
                 var spent = AgentWealth.RollSpend(agent.DisposableRemaining, shop.Type, _rng);
                 agent.DisposableRemaining -= spent;
-                shop.RecordShopSpend(spent);
+                var recorded = Mathf.Max(
+                    0,
+                    Mathf.RoundToInt(spent * ResearchEffects.ShopSpendMultiplier(_research)));
+                shop.RecordShopSpend(recorded);
                 shop.RecordVisit();
                 shop.ReleaseVisitorSlot();
             }
@@ -1688,7 +1699,10 @@ namespace BuildATower
             }
 
             var walkCost = toShaft.Count + fromShaft.Count;
-            score = ElevatorRouting.Score(walkCost, wait);
+            score = ElevatorRouting.Score(
+                walkCost,
+                wait,
+                ResearchEffects.ElevatorRoutingWaitWeightScale(_research));
             return true;
         }
 

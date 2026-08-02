@@ -114,14 +114,19 @@ namespace BuildATower
         {
             if (build?.Grid == null || _clock == null || _agents == null) return;
             _clock.Tick(Time.deltaTime);
-            _elevators.Tick(_clock.LastTickGameMinutes);
+            var research = _research;
+            _router?.SetWaitWeightScale(ResearchEffects.ElevatorRoutingWaitWeightScale(research));
+            _elevators.Tick(
+                _clock.LastTickGameMinutes,
+                ResearchEffects.ElevatorSpeedMultiplier(research));
             _agents.Tick(
                 _clock.LastTickGameMinutes,
                 _clock,
                 build.Grid,
                 _stars?.CurrentStars ?? 0,
                 _climate,
-                _crime);
+                _crime,
+                research);
             _agents.CollectFloorsForRole(AgentRole.Security, _patrolFloors);
             _agents.CollectFloorsForRole(AgentRole.Criminal, _criminalFloors);
             _crime.Tick(
@@ -130,8 +135,9 @@ namespace BuildATower
                 CrimeFloorLoads.HotelLoadByFloor(build.Grid, _agents.Agents),
                 CountStaffedSecurity(build.Grid),
                 _patrolFloors,
-                _criminalFloors);
-            _research?.TickProgress(
+                _criminalFloors,
+                ResearchEffects.CrimeSuppressionMultiplier(research));
+            research?.TickProgress(
                 _clock.LastTickGameMinutes,
                 EconomySystem.CountResearcherPool(build.Grid));
             if (agentView != null)

@@ -9,6 +9,7 @@ namespace BuildATower
 
         readonly List<ElevatorShaftRuntime> _shafts = new();
         readonly Dictionary<int, int> _passengerDestFloor = new();
+        float _speedMultiplier = 1f;
 
         public IReadOnlyList<ElevatorShaftRuntime> Shafts => _shafts;
 
@@ -55,11 +56,12 @@ namespace BuildATower
             }
         }
 
-        public void Tick(float deltaGameMinutes)
+        public void Tick(float deltaGameMinutes, float speedMultiplier = 1f)
         {
             if (deltaGameMinutes <= 0f)
                 return;
 
+            _speedMultiplier = speedMultiplier > 0f ? speedMultiplier : 1f;
             foreach (var shaft in _shafts)
                 TickShaft(shaft, deltaGameMinutes);
         }
@@ -465,14 +467,21 @@ namespace BuildATower
 
         float TravelMinutesForNextFloor(ElevatorShaftRuntime shaft)
         {
+            float baseMinutes;
             if (shaft.Car.Direction == ElevatorDirection.None)
-                return ElevatorCar.MinutesPerFloor;
+            {
+                baseMinutes = ElevatorCar.MinutesPerFloor;
+            }
+            else
+            {
+                var nextFloor = shaft.Car.Floor +
+                                (shaft.Car.Direction == ElevatorDirection.Up ? 1 : -1);
+                baseMinutes = WillStopAt(shaft, nextFloor)
+                    ? ElevatorCar.MinutesPerFloor
+                    : ElevatorCar.MinutesPerPassingFloor;
+            }
 
-            var nextFloor = shaft.Car.Floor +
-                            (shaft.Car.Direction == ElevatorDirection.Up ? 1 : -1);
-            return WillStopAt(shaft, nextFloor)
-                ? ElevatorCar.MinutesPerFloor
-                : ElevatorCar.MinutesPerPassingFloor;
+            return baseMinutes / _speedMultiplier;
         }
 
         bool WillStopAt(ElevatorShaftRuntime shaft, int floor)

@@ -17,12 +17,19 @@ namespace BuildATower
         public static bool IncomePaused(RoomInstance room) =>
             room != null && room.Condition < PauseBelow;
 
-        public static float CleanMinutes(RoomTypeSO hotelType)
+        public static float CleanMinutes(RoomTypeSO hotelType, float minutesMultiplier = 1f)
         {
-            if (hotelType != null && hotelType.requiredStars >= 2)
-                return CleanPremiumMinutes;
-            return CleanBasicMinutes;
+            var baseMinutes = hotelType != null && hotelType.requiredStars >= 2
+                ? CleanPremiumMinutes
+                : CleanBasicMinutes;
+            return baseMinutes * minutesMultiplier;
         }
+
+        public static float RepairMinutes(float minutesMultiplier = 1f) =>
+            RepairMinutesPerChunk * minutesMultiplier;
+
+        public static int EffectiveRepairChunk(float chunkMultiplier = 1f) =>
+            Mathf.Max(1, Mathf.RoundToInt(RepairChunk * chunkMultiplier));
 
         public static void ApplyMidnightDecay(RoomInstance room)
         {
@@ -31,14 +38,15 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Applies +RepairChunk to Condition (cap 100). No-op if room is null or Broken (Condition &lt; 1).
+        /// Applies +RepairChunk (scaled by <paramref name="chunkMultiplier"/>) to Condition (cap 100).
+        /// No-op if room is null or Broken (Condition &lt; 1).
         /// </summary>
         /// <returns>True if the room was repairable (not null/Broken); false for no-op.</returns>
-        public static bool ApplyRepairTick(RoomInstance room)
+        public static bool ApplyRepairTick(RoomInstance room, float chunkMultiplier = 1f)
         {
             if (room == null || room.IsBroken || room.Condition < 1)
                 return false;
-            room.Condition = Mathf.Min(100, room.Condition + RepairChunk);
+            room.Condition = Mathf.Min(100, room.Condition + EffectiveRepairChunk(chunkMultiplier));
             return true;
         }
     }
