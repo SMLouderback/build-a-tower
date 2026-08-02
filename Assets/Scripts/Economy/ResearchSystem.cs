@@ -126,12 +126,32 @@ namespace BuildATower
                 ? 0f
                 : 1f + (researcherPool - 1) * ResearchCatalog.ResearcherSpeedBonus;
 
+        public float GetNodeProgress(ResearchBranch branch, int level) =>
+            GetProgress(branch, level);
+
+        public float GetProgressPercent(ResearchBranch branch, int level)
+        {
+            if (IsComplete(branch, level))
+                return 100f;
+            var baseWork = ResearchCatalog.BaseWorkMinutes(level);
+            if (baseWork <= 0f)
+                return 0f;
+            return 100f * GetProgress(branch, level) / baseWork;
+        }
+
         public float EstimateEtaMinutes(int researcherPool)
         {
             if (!_activeBranch.HasValue)
                 return 0f;
+            return EstimateEtaMinutes(_activeBranch.Value, _activeLevel, researcherPool);
+        }
 
-            var remaining = ResearchCatalog.BaseWorkMinutes(_activeLevel) - ActiveProgress;
+        public float EstimateEtaMinutes(ResearchBranch branch, int level, int researcherPool)
+        {
+            if (IsComplete(branch, level))
+                return 0f;
+
+            var remaining = ResearchCatalog.BaseWorkMinutes(level) - GetProgress(branch, level);
             if (remaining <= 0f)
                 return 0f;
 
@@ -144,8 +164,25 @@ namespace BuildATower
 
         public int EstimateRemainingCost(int researcherPool, int nonBrokenLabs, float climateMult)
         {
-            var etaMinutes = EstimateEtaMinutes(researcherPool);
-            if (float.IsInfinity(etaMinutes) || etaMinutes <= 0f || !_activeBranch.HasValue)
+            if (!_activeBranch.HasValue)
+                return 0;
+            return EstimateRemainingCost(
+                _activeBranch.Value,
+                _activeLevel,
+                researcherPool,
+                nonBrokenLabs,
+                climateMult);
+        }
+
+        public int EstimateRemainingCost(
+            ResearchBranch branch,
+            int level,
+            int researcherPool,
+            int nonBrokenLabs,
+            float climateMult)
+        {
+            var etaMinutes = EstimateEtaMinutes(branch, level, researcherPool);
+            if (float.IsInfinity(etaMinutes) || etaMinutes <= 0f)
                 return 0;
 
             var etaDays = etaMinutes / (24f * 60f);

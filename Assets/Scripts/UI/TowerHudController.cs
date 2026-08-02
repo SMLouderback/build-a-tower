@@ -35,6 +35,9 @@ namespace BuildATower
         Vector2 _scroll;
         float _contentHeight = 400f;
 
+        ResearchBranch _researchPickBranch = ResearchBranch.Marketing;
+        int _researchPickLevel = 1;
+
         Texture2D _whiteTex;
         string _hoverTooltip;
 
@@ -266,6 +269,9 @@ namespace BuildATower
 
                     if (BuildController.IsStaffedServiceRoom(build.SelectedRoom?.Type))
                         cy = DrawStaffStepper(cx, cy, contentInner, btnH, row, label);
+
+                    if (build.SelectedRoom?.Type?.id == EconomySystem.ResearchId)
+                        cy = DrawResearchSelection(cx, cy, contentInner, btnH, row, label);
 
                     var elevStatus = build.GetElevatorStatusText();
                     if (elevStatus != null)
@@ -866,6 +872,200 @@ namespace BuildATower
 
             cy += btnH + 4f;
             return cy;
+        }
+
+        float DrawResearchSelection(
+            float cx,
+            float cy,
+            float inner,
+            float btnH,
+            float row,
+            GUIStyle label)
+        {
+            var research = simulation?.Research;
+            if (research == null || build.Grid == null)
+                return cy;
+
+            SyncResearchPick(research);
+
+            var pool = EconomySystem.CountResearcherPool(build.Grid);
+            var labs = EconomySystem.CountNonBrokenResearchLabs(build.Grid);
+            var climate = simulation.Climate;
+            var climateName = climate?.Name ?? "—";
+            var climateMult = climate?.SpendMultiplier ?? 1f;
+            var idleDay = ResearchCatalog.IdlePerLabPerDay * labs;
+            var activeDay = research.IsRunning && !research.IsPaused
+                ? ResearchCatalog.ActivePerDay
+                : 0;
+
+            GUI.Label(new Rect(cx, cy, inner, row), $"Researchers in pool: {pool}", label);
+            cy += row;
+
+            var branches = (ResearchBranch[])System.Enum.GetValues(typeof(ResearchBranch));
+            const float levelGap = 3f;
+            var nameW = Mathf.Min(118f, inner * 0.42f);
+            var levelW = (inner - nameW - levelGap * 2f) / 3f;
+
+            foreach (var branch in branches)
+            {
+                GUI.Label(
+                    new Rect(cx, cy, nameW, btnH),
+                    ResearchCatalog.BranchDisplayName(branch),
+                    label);
+
+                for (var level = 1; level <= ResearchCatalog.MaxLevel; level++)
+                {
+                    var rect = new Rect(
+                        cx + nameW + (level - 1) * (levelW + levelGap),
+                        cy,
+                        levelW,
+                        btnH);
+                    var picked = _researchPickBranch == branch && _researchPickLevel == level;
+                    var caption = ResearchLevelCaption(research, branch, level);
+                    var wasEnabled = GUI.enabled;
+                    var locked = !research.IsComplete(branch, level) && !research.CanStart(branch, level);
+                    GUI.enabled = wasEnabled && !locked;
+                    if (GUI.Toggle(rect, picked, caption, GUI.skin.button) && !picked && !locked)
+                    {
+                        _researchPickBranch = branch;
+                        _researchPickLevel = level;
+                    }
+
+                    GUI.enabled = wasEnabled;
+                }
+
+                cy += btnH + 2f;
+            }
+
+            cy += 2f;
+            var pickBranch = _researchPickBranch;
+            var pickLevel = _researchPickLevel;
+            var pickComplete = research.IsComplete(pickBranch, pickLevel);
+            var isPickActive = research.ActiveBranch == pickBranch && research.ActiveLevel == pickLevel;
+            var canStart = research.CanStart(pickBranch, pickLevel);
+
+            const float actionGap = 4f;
+            var actionW = (inner - actionGap) * 0.5f;
+            var startEnabled = canStart && !(isPickActive && !research.IsPaused);
+            var pauseEnabled = isPickActive && !research.IsPaused;
+
+            var prev = GUI.enabled;
+            GUI.enabled = prev && startEnabled;
+            if (GUI.Button(new Rect(cx, cy, actionW, btnH), "Start") && startEnabled)
+                research.TryStart(pickBranch, pickLevel);
+            GUI.enabled = prev && pauseEnabled;
+            if (GUI.Button(new Rect(cx + actionW + actionGap, cy, actionW, btnH), "Pause") && pauseEnabled)
+                research.Pause();
+            GUI.enabled = prev;
+            cy += btnH + 4f;
+
+            if (pickComplete)
+            {
+                GUI.Label(new Rect(cx, cy, inner, row), "Selected tech: complete ✓", label);
+                cy += row;
+            }
+            else
+            {
+                var eta = research.EstimateEtaMinutes(pickBranch, pickLevel, pool);
+                var est = research.EstimateRemainingCost(
+                    pickBranch, pickLevel, pool, labs, climateMult);
+                GUI.Label(new Rect(cx, cy, inner, row), $"ETA: {FormatResearchEta(eta)}", label);
+                cy += row;
+                GUI.Label(new Rect(cx, cy, inner, row), $"Est. remaining $: ${est:N0}", label);
+                cy += row;
+            }
+
+            GUI.Label(new Rect(cx, cy, inner, row), $"Idle/day: ${idleDay:N0}", label);
+            cy += row;
+            GUI.Label(new Rect(cx, cy, inner, row), $"Active/day: ${activeDay:N0}", label);
+            cy += row;
+            GUI.Label(
+                new Rect(cx, cy, inner, row),
+                $"Climate: {climateName} ×{climateMult:0.00}",
+                label);
+            cy += row;
+
+            if (research.IsRunning && research.IsPaused)
+            {
+                GUI.Label(new Rect(cx, cy, inner, row), "Paused — progress decaying", label);
+                cy += row;
+            }
+
+            GUI.Label(
+                new Rect(cx, cy, inner, row * 2f),
+                "Estimate at current climate & staff; actual burn changes if climate shifts.",
+                label);
+            cy += row * 2f + 4f;
+            return cy;
+        }
+
+        void SyncResearchPick(ResearchSystem research)
+        {
+            var pickOk =
+                research.IsComplete(_researchPickBranch, _researchPickLevel) ||
+                research.CanStart(_researchPickBranch, _researchPickLevel) ||
+                (research.ActiveBranch == _researchPickBranch &&
+                 research.ActiveLevel == _researchPickLevel);
+            if (pickOk)
+                return;
+
+            if (research.IsRunning && research.ActiveBranch.HasValue)
+            {
+                _researchPickBranch = research.ActiveBranch.Value;
+                _researchPickLevel = research.ActiveLevel;
+                return;
+            }
+
+            foreach (ResearchBranch branch in System.Enum.GetValues(typeof(ResearchBranch)))
+            {
+                for (var level = 1; level <= ResearchCatalog.MaxLevel; level++)
+                {
+                    if (!research.CanStart(branch, level)) continue;
+                    _researchPickBranch = branch;
+                    _researchPickLevel = level;
+                    return;
+                }
+            }
+        }
+
+        static string ResearchLevelCaption(ResearchSystem research, ResearchBranch branch, int level)
+        {
+            var roman = level switch
+            {
+                1 => "I",
+                2 => "II",
+                3 => "III",
+                _ => level.ToString()
+            };
+
+            if (research.IsComplete(branch, level))
+                return $"{roman} ✓";
+            if (!research.CanStart(branch, level))
+                return $"{roman} locked";
+
+            var pct = research.GetProgressPercent(branch, level);
+            if (pct > 0.05f ||
+                (research.ActiveBranch == branch && research.ActiveLevel == level))
+                return $"{roman} {pct:0}%";
+            return roman;
+        }
+
+        static string FormatResearchEta(float etaMinutes)
+        {
+            if (float.IsInfinity(etaMinutes))
+                return "∞ (need researchers)";
+            if (etaMinutes <= 0f)
+                return "—";
+
+            var totalMinutes = Mathf.CeilToInt(etaMinutes);
+            var days = totalMinutes / (24 * 60);
+            var hours = totalMinutes % (24 * 60) / 60;
+            var mins = totalMinutes % 60;
+            if (days > 0)
+                return $"{days}d {hours}h";
+            if (hours > 0)
+                return $"{hours}h {mins}m";
+            return $"{mins}m";
         }
 
         void DrawTimeSpeedButtons(float x, float y, float width, float height)

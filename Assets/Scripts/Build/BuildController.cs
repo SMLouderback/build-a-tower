@@ -231,6 +231,29 @@ namespace BuildATower
                 summary += $"\nStaff {room.StaffedWorkers}/4";
             if (room.Type.id == "service_security")
                 summary += $"\nGuards on patrol: {CountSecurityAgentsForHome(room)}";
+            if (room.Type.id == EconomySystem.ResearchId)
+            {
+                var sim = GetComponent<TowerSimulation>();
+                var research = sim?.Research;
+                var pool = EconomySystem.CountResearcherPool(Grid);
+                summary += $"\nResearchers in pool: {pool}";
+                if (research != null && research.IsRunning && research.ActiveBranch.HasValue)
+                {
+                    var branch = research.ActiveBranch.Value;
+                    var roman = research.ActiveLevel switch
+                    {
+                        1 => "I",
+                        2 => "II",
+                        3 => "III",
+                        _ => research.ActiveLevel.ToString()
+                    };
+                    var pct = research.GetProgressPercent(branch, research.ActiveLevel);
+                    var state = research.IsPaused ? "Paused" : "Active";
+                    summary +=
+                        $"\nResearch: {ResearchCatalog.BranchDisplayName(branch)} {roman} " +
+                        $"{pct:0}% ({state})";
+                }
+            }
             var now = Time.realtimeSinceStartup;
             if (RoomInstance.IsGraceRefundEligible(room.Type) && room.IsInBuildGrace(now))
             {
