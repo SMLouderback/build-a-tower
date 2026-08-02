@@ -322,6 +322,103 @@ namespace BuildATower.Tests
             Assert.IsFalse(legs.Any(leg => leg.Kind == TransitLegKind.Elevator));
         }
 
+        /// <summary>
+        /// Lobby + offices 1–11; elevator x=0 spans 0–10; stairs connect 10↔11.
+        /// </summary>
+        TowerGrid HybridTowerElevatorTo10StairsTo11(out ElevatorSystem elevators)
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            for (var floor = 1; floor <= 11; floor++)
+                Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, floor), out _));
+
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 10, out _));
+            // 2×2 stairs beside the shaft: floors 10–11 at x=1..2 (no elevator overlap).
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(1, 10), out _));
+
+            elevators = new ElevatorSystem();
+            elevators.SyncFromGrid(grid);
+            return grid;
+        }
+
+        [Test]
+        public void TryPlanTrip_hybrid_elevator_then_stairs_above_shaft()
+        {
+            var grid = HybridTowerElevatorTo10StairsTo11(out var elevators);
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+
+            Assert.IsTrue(router.TryPlanTrip(
+                new Vector2Int(5, 0),
+                new Vector2Int(5, 11),
+                out var legs));
+            Assert.IsTrue(legs.Any(leg => leg.Kind == TransitLegKind.Elevator));
+            Assert.IsTrue(legs.Any(leg => leg.Kind == TransitLegKind.Stairs));
+            var elevator = legs.Single(leg => leg.Kind == TransitLegKind.Elevator);
+            Assert.AreEqual(0, elevator.ElevatorX);
+            Assert.AreEqual(0, elevator.EntryFloor);
+            Assert.AreEqual(10, elevator.ExitFloor);
+            var elevatorIndex = legs.FindIndex(leg => leg.Kind == TransitLegKind.Elevator);
+            var stairsIndex = legs.FindIndex(leg => leg.Kind == TransitLegKind.Stairs);
+            Assert.Greater(stairsIndex, elevatorIndex);
+        }
+
+        [Test]
+        public void TryPlanTrip_hybrid_stairs_then_elevator_below_start()
+        {
+            var grid = HybridTowerElevatorTo10StairsTo11(out var elevators);
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+
+            Assert.IsTrue(router.TryPlanTrip(
+                new Vector2Int(5, 11),
+                new Vector2Int(5, 0),
+                out var legs));
+            Assert.IsTrue(legs.Any(leg => leg.Kind == TransitLegKind.Stairs));
+            Assert.IsTrue(legs.Any(leg => leg.Kind == TransitLegKind.Elevator));
+            var elevator = legs.Single(leg => leg.Kind == TransitLegKind.Elevator);
+            Assert.AreEqual(0, elevator.ElevatorX);
+            Assert.AreEqual(10, elevator.EntryFloor);
+            Assert.AreEqual(0, elevator.ExitFloor);
+            var elevatorIndex = legs.FindIndex(leg => leg.Kind == TransitLegKind.Elevator);
+            var stairsIndex = legs.FindIndex(leg => leg.Kind == TransitLegKind.Stairs);
+            Assert.Less(stairsIndex, elevatorIndex);
+        }
+
+        [Test]
+        public void TryPlanTrip_prefers_full_elevator_over_overcap_stairs_when_both_exist()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            for (var floor = 1; floor <= 4; floor++)
+                Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, floor), out _));
+
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 4, out _));
+            // Continuous stairs 0–4 beside offices (x=8..9), empty elevator queues.
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(8, 0), out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(8, 1), out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(8, 2), out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(8, 3), out _));
+
+            var elevators = new ElevatorSystem();
+            elevators.SyncFromGrid(grid);
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+
+            Assert.IsTrue(router.TryPlanTrip(
+                new Vector2Int(5, 0),
+                new Vector2Int(5, 4),
+                out var legs));
+            Assert.IsTrue(
+                legs.Any(leg => leg.Kind == TransitLegKind.Elevator),
+                "Under normal waits, full elevator must beat over-cap pure stairs.");
+            Assert.IsFalse(
+                legs.Count == 1 && legs[0].Kind == TransitLegKind.Stairs,
+                "Must not take over-cap stairs-only when a full elevator serves both floors.");
+        }
+
         [Test]
         public void TryRescoreElevatorWait_switches_when_alternate_much_better()
         {
