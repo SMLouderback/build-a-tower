@@ -71,6 +71,9 @@ namespace BuildATower
         /// <summary>Game minutes remaining for the active maid/handyman job.</summary>
         public float ServiceWorkRemaining { get; set; }
 
+        /// <summary>Total remaining life for a Criminal before they leave via lobby.</summary>
+        public float CriminalDwellRemaining { get; set; }
+
         public Agent(int id, AgentRole role, RoomInstance homeRoom, Vector2Int cell)
         {
             Id = id;

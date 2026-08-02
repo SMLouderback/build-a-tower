@@ -26,6 +26,7 @@ namespace BuildATower
         MarketClimate _climate;
         readonly System.Random _climateRng = new();
         readonly List<int> _patrolFloors = new();
+        readonly List<int> _criminalFloors = new();
         int _lastDayIndex;
         bool _subscribed;
 
@@ -119,13 +120,14 @@ namespace BuildATower
                 _climate,
                 _crime);
             _agents.CollectFloorsForRole(AgentRole.Security, _patrolFloors);
+            _agents.CollectFloorsForRole(AgentRole.Criminal, _criminalFloors);
             _crime.Tick(
                 _clock.LastTickGameMinutes,
                 CrimeFloorLoads.ShopLoadByFloor(build.Grid),
                 CrimeFloorLoads.HotelLoadByFloor(build.Grid, _agents.Agents),
                 CountStaffedSecurity(build.Grid),
                 _patrolFloors,
-                Array.Empty<int>());
+                _criminalFloors);
             if (agentView != null)
                 agentView.Sync(_agents.Agents);
         }

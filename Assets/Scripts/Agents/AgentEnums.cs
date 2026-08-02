@@ -8,7 +8,8 @@ namespace BuildATower
         StreetVisitor,
         Maid,
         Handyman,
-        Security
+        Security,
+        Criminal
     }
 
     public enum AgentPhase

@@ -25,6 +25,11 @@ namespace BuildATower
         public const string MaintenanceId = "service_maintenance";
         public const string SecurityId = "service_security";
         public const float PatrolDwellMinutes = 8f;
+        public const int MaxConcurrentCriminals = 3;
+        public const float CriminalSpawnMinAvg = 15f;
+        public const float CriminalSpawnChancePerMinute = 0.08f;
+        public const float CriminalLifeMinutes = 180f;
+        public const float CriminalFloorDwellMinutes = 8f;
 
         readonly List<Agent> _agents = new();
         readonly TransitRouter _router;
@@ -32,6 +37,7 @@ namespace BuildATower
         readonly System.Random _rng = new(42);
         readonly HashSet<int> _condoMoveInsNotified = new();
         readonly HashSet<int> _patrolFloorScratch = new();
+        readonly HashSet<int> _criminalFloorScratch = new();
         System.Action<RoomInstance> _onCondoResidentMovedIn;
         MarketClimate _climate;
         CrimeSystem _crime;
@@ -41,6 +47,7 @@ namespace BuildATower
         int _streetSpawnMinuteAccumulator;
 
         public IReadOnlyList<Agent> Agents => _agents;
+        public string LastCaptureMessage { get; private set; }
         public int Population
         {
             get
@@ -193,6 +200,9 @@ namespace BuildATower
                 advanced = Mathf.Max(0, total - _lastTotalMinutes);
             _lastTotalMinutes = total;
 
+            // Capture before AI replans so same-floor pairs from the prior frame resolve.
+            TryCaptureCriminals(_crime);
+
             for (var i = 0; i < _agents.Count; i++)
             {
                 var agent = _agents[i];
@@ -215,11 +225,15 @@ namespace BuildATower
                 StepMovement(agent, deltaGameMinutes);
                 UpdateVisitingShop(agent, deltaGameMinutes, grid);
                 UpdateServiceWork(agent, deltaGameMinutes, grid);
+                UpdateCriminalWork(agent, deltaGameMinutes, grid);
                 UpdateStress(agent, deltaGameMinutes);
             }
 
             UpdateStreetTraffic(clock, grid, currentStars, advanced);
+            UpdateCriminalTraffic(deltaGameMinutes, grid, _crime);
+            TryCaptureCriminals(_crime);
             DespawnFinishedStreetVisitors();
+            DespawnFinishedCriminals();
         }
 
         /// <summary>
@@ -257,6 +271,9 @@ namespace BuildATower
                     break;
                 case AgentRole.Security:
                     UpdateSecurityAgent(agent, grid, _crime);
+                    break;
+                case AgentRole.Criminal:
+                    UpdateCriminalAgent(agent, grid, _crime);
                     break;
             }
         }
@@ -404,6 +421,144 @@ namespace BuildATower
             }
 
             agent.Visible = true;
+        }
+
+        void UpdateCriminalAgent(Agent agent, TowerGrid grid, CrimeSystem crime)
+        {
+            // Life + floor dwell countdown live in UpdateCriminalWork.
+            if (agent.Phase == AgentPhase.Working) return;
+            if (agent.Phase is AgentPhase.WaitingAtElevator or AgentPhase.Riding)
+                return;
+
+            if (agent.Phase == AgentPhase.Moving)
+            {
+                if (agent.Path == null || agent.Path.Count == 0 || agent.PathIndex >= agent.Path.Count)
+                    ReplanTrip(agent, allowReplan: true);
+                return;
+            }
+
+            if (agent.CriminalDwellRemaining <= 0f)
+            {
+                BeginLeaveTower(agent, grid);
+                return;
+            }
+
+            TryStartCriminalRoam(agent, grid, crime);
+        }
+
+        void UpdateCriminalWork(Agent agent, float deltaGameMinutes, TowerGrid grid)
+        {
+            if (agent == null || agent.Role != AgentRole.Criminal) return;
+            if (deltaGameMinutes <= 0f) return;
+
+            if (agent.Phase != AgentPhase.Outside)
+                agent.CriminalDwellRemaining -= deltaGameMinutes;
+
+            if (agent.CriminalDwellRemaining <= 0f)
+            {
+                agent.CriminalDwellRemaining = 0f;
+                if (agent.Phase is AgentPhase.Outside or AgentPhase.WaitingAtElevator or AgentPhase.Riding
+                    or AgentPhase.Moving)
+                    return;
+                BeginLeaveTower(agent, grid);
+                return;
+            }
+
+            if (agent.Phase != AgentPhase.Working) return;
+
+            agent.VisitDwellRemaining -= deltaGameMinutes;
+            if (agent.VisitDwellRemaining > 0f) return;
+            agent.VisitDwellRemaining = 0f;
+            if (!TryStartCriminalRoam(agent, grid, _crime))
+                BeginLeaveTower(agent, grid);
+        }
+
+        void BeginLeaveTower(Agent agent, TowerGrid grid)
+        {
+            if (agent == null || grid == null) return;
+            if (agent.Phase == AgentPhase.Outside) return;
+            if (agent.Phase is AgentPhase.WaitingAtElevator or AgentPhase.Riding) return;
+            if (agent.Phase == AgentPhase.Moving &&
+                agent.PhaseAfterMove == AgentPhase.Outside)
+                return;
+
+            var exitCell = LobbyExitCell(grid);
+            BeginTrip(agent, agent.Cell, exitCell, AgentPhase.Outside, grid);
+        }
+
+        bool TryStartCriminalRoam(Agent agent, TowerGrid grid, CrimeSystem crime)
+        {
+            if (agent == null || grid == null) return false;
+
+            var floor = PickCriminalRoamFloor(crime, grid);
+            if (floor == null) return false;
+
+            var cell = PatrolCellOnFloor(grid, floor.Value);
+            if (cell == null) return false;
+
+            agent.VisitDwellRemaining = CriminalFloorDwellMinutes;
+            agent.Visible = true;
+
+            if (agent.Phase == AgentPhase.Outside)
+            {
+                return BeginTrip(agent, LobbyExitCell(grid), cell.Value, AgentPhase.Working, grid);
+            }
+
+            if (agent.Cell.y == floor.Value)
+            {
+                agent.Phase = AgentPhase.Working;
+                agent.PhaseAfterMove = AgentPhase.Working;
+                agent.GoalCell = null;
+                agent.Path?.Clear();
+                agent.PathIndex = 0;
+                agent.TripLegs?.Clear();
+                agent.TripLegIndex = 0;
+                ClearElevatorTripState(agent);
+                return true;
+            }
+
+            if (BeginTrip(agent, agent.Cell, cell.Value, AgentPhase.Working, grid))
+                return true;
+
+            agent.VisitDwellRemaining = 0f;
+            return false;
+        }
+
+        int? PickCriminalRoamFloor(CrimeSystem crime, TowerGrid grid)
+        {
+            if (grid == null) return null;
+
+            _criminalFloorScratch.Clear();
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                var isTarget =
+                    ShopVisitRules.IsShop(room.Type) ||
+                    room.Type.category == RoomCategory.Hotel;
+                if (!isTarget) continue;
+                var minY = room.Origin.y;
+                var maxY = room.Origin.y + room.Size.y - 1;
+                for (var y = minY; y <= maxY; y++)
+                    _criminalFloorScratch.Add(y);
+            }
+
+            if (_criminalFloorScratch.Count == 0) return null;
+
+            int? best = null;
+            var bestCrime = -1f;
+            foreach (var floor in _criminalFloorScratch)
+            {
+                var c = crime?.GetCrime(floor) ?? 0f;
+                if (best == null ||
+                    c > bestCrime ||
+                    (Mathf.Approximately(c, bestCrime) && floor < best.Value))
+                {
+                    best = floor;
+                    bestCrime = c;
+                }
+            }
+
+            return best;
         }
 
         void UpdateSecurityAgent(Agent agent, TowerGrid grid, CrimeSystem crime)
@@ -679,10 +834,12 @@ namespace BuildATower
             role is AgentRole.Maid or AgentRole.Handyman or AgentRole.Security;
 
         static bool IsNonPopulationRole(AgentRole role) =>
-            role is AgentRole.StreetVisitor or AgentRole.Maid or AgentRole.Handyman or AgentRole.Security;
+            role is AgentRole.StreetVisitor or AgentRole.Maid or AgentRole.Handyman or AgentRole.Security
+                or AgentRole.Criminal;
 
         static bool IsEphemeralOrStaffRole(AgentRole role) =>
-            role is AgentRole.StreetVisitor or AgentRole.Maid or AgentRole.Handyman or AgentRole.Security;
+            role is AgentRole.StreetVisitor or AgentRole.Maid or AgentRole.Handyman or AgentRole.Security
+                or AgentRole.Criminal;
 
         void UpdateCondo(Agent agent, GameClock clock, TowerGrid grid)
         {
@@ -921,6 +1078,90 @@ namespace BuildATower
                 if (agent.Role != AgentRole.StreetVisitor) continue;
                 if (agent.Phase != AgentPhase.Outside) continue;
                 if (agent.VisitTarget != null) continue;
+                _agents.RemoveAt(i);
+            }
+        }
+
+        void UpdateCriminalTraffic(float deltaGameMinutes, TowerGrid grid, CrimeSystem crime)
+        {
+            if (deltaGameMinutes <= 0f || grid == null || crime == null) return;
+            if (!grid.HasLobby) return;
+            if (CountCriminals() >= MaxConcurrentCriminals) return;
+            if (crime.AverageCrime < CriminalSpawnMinAvg) return;
+
+            var chance = CriminalSpawnChancePerMinute * deltaGameMinutes * (crime.AverageCrime / 100f);
+            if (_rng.NextDouble() >= chance) return;
+
+            TrySpawnCriminal(grid, crime);
+        }
+
+        /// <summary>Runs same-floor Security→Criminal capture (EditMode / debug).</summary>
+        public int CaptureCriminalsNow(CrimeSystem crime)
+        {
+            if (crime == null) return 0;
+            var before = _agents.Count;
+            TryCaptureCriminals(crime);
+            return before - _agents.Count;
+        }
+
+        /// <summary>
+        /// Spawns an ephemeral Criminal at the lobby exit that roams high-crime shop/hotel floors.
+        /// </summary>
+        public bool TrySpawnCriminal(TowerGrid grid, CrimeSystem crime)
+        {
+            if (CountCriminals() >= MaxConcurrentCriminals) return false;
+            if (crime == null || crime.AverageCrime < CriminalSpawnMinAvg) return false;
+            if (grid == null || !grid.HasLobby) return false;
+
+            var exitCell = LobbyExitCell(grid);
+            var agent = new Agent(_nextId++, AgentRole.Criminal, null, exitCell)
+            {
+                CriminalDwellRemaining = CriminalLifeMinutes,
+                Phase = AgentPhase.Outside,
+                Visible = false
+            };
+            _agents.Add(agent);
+
+            if (TryStartCriminalRoam(agent, grid, crime))
+                return true;
+
+            // No roam target — linger at lobby so capture/floor contribution still work.
+            agent.Cell = exitCell;
+            agent.WorldPosition = new Vector2(exitCell.x + 0.5f, exitCell.y + 0.5f);
+            agent.Phase = AgentPhase.Working;
+            agent.Visible = true;
+            agent.VisitDwellRemaining = CriminalFloorDwellMinutes;
+            return true;
+        }
+
+        int CountCriminals()
+        {
+            var count = 0;
+            foreach (var agent in _agents)
+            {
+                if (agent.Role == AgentRole.Criminal)
+                    count++;
+            }
+
+            return count;
+        }
+
+        void TryCaptureCriminals(CrimeSystem crime)
+        {
+            if (crime == null) return;
+            var captures = CrimeCapture.TryCapture(_agents, crime, out var message);
+            if (captures > 0 && !string.IsNullOrEmpty(message))
+                LastCaptureMessage = message;
+        }
+
+        void DespawnFinishedCriminals()
+        {
+            for (var i = _agents.Count - 1; i >= 0; i--)
+            {
+                var agent = _agents[i];
+                if (agent.Role != AgentRole.Criminal) continue;
+                if (agent.Phase != AgentPhase.Outside) continue;
+                if (agent.CriminalDwellRemaining > 0f) continue;
                 _agents.RemoveAt(i);
             }
         }

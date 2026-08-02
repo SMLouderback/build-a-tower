@@ -55,6 +55,7 @@ namespace BuildATower
                 AgentRole.Maid => new Color(0.15f, 0.82f, 0.78f, 1f),
                 AgentRole.Handyman => new Color(0.72f, 0.38f, 0.18f, 1f),
                 AgentRole.Security => new Color(0.25f, 0.4f, 0.95f, 1f),
+                AgentRole.Criminal => new Color(0.75f, 0.1f, 0.15f, 1f),
                 _ => Color.white
             };
 
