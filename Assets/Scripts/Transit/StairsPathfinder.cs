@@ -5,7 +5,8 @@ namespace BuildATower
 {
     /// <summary>
     /// Grid pathfinder: horizontal on occupied cells; vertical only on stairs.
-    /// Journeys with |Δfloor| &gt; <see cref="MaxStairsFloorSpan"/> are rejected.
+    /// The 3-arg overload rejects journeys with |Δfloor| &gt; <see cref="MaxStairsFloorSpan"/>.
+    /// The 4-arg overload accepts <c>maxFloorSpan &lt; 0</c> to skip the span gate (unlimited).
     /// </summary>
     public sealed class StairsPathfinder
     {

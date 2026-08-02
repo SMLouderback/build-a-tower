@@ -73,8 +73,9 @@ namespace BuildATower.Tests
             var pf = new StairsPathfinder();
             pf.Rebuild(grid);
 
-            var start = new Vector2Int(5, 0);
-            var goal = new Vector2Int(5, 4);
+            // Walkable stair-column endpoints (2×2 shaft at x=0..1); |Δfloor|=4 > comfort span 3.
+            var start = new Vector2Int(0, 0);
+            var goal = new Vector2Int(0, 4);
 
             Assert.IsFalse(pf.TryFindPath(start, goal, out _));
             Assert.IsTrue(pf.TryFindPath(start, goal, -1, out var path));
