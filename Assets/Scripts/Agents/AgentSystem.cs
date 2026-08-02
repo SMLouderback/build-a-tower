@@ -23,14 +23,18 @@ namespace BuildATower
         public const float StreetSpawnBaseChance = 0.25f;
         public const string HousekeepingId = "service_housekeeping";
         public const string MaintenanceId = "service_maintenance";
+        public const string SecurityId = "service_security";
+        public const float PatrolDwellMinutes = 8f;
 
         readonly List<Agent> _agents = new();
         readonly TransitRouter _router;
         readonly ElevatorSystem _elevators;
         readonly System.Random _rng = new(42);
         readonly HashSet<int> _condoMoveInsNotified = new();
+        readonly HashSet<int> _patrolFloorScratch = new();
         System.Action<RoomInstance> _onCondoResidentMovedIn;
         MarketClimate _climate;
+        CrimeSystem _crime;
         int _nextId = 1;
         int _lastTotalMinutes = int.MinValue;
         float _nowTotalMinutes;
@@ -174,11 +178,13 @@ namespace BuildATower
             GameClock clock,
             TowerGrid grid,
             int currentStars = 0,
-            MarketClimate climate = null)
+            MarketClimate climate = null,
+            CrimeSystem crime = null)
         {
             if (grid == null || clock == null) return;
             if (climate != null)
                 _climate = climate;
+            _crime = crime;
 
             var total = clock.DayIndex * GameClock.MinutesPerDay + clock.MinuteOfDay;
             _nowTotalMinutes = total;
@@ -216,6 +222,22 @@ namespace BuildATower
             DespawnFinishedStreetVisitors();
         }
 
+        /// <summary>
+        /// Fills <paramref name="into"/> with current floors for agents of <paramref name="role"/>
+        /// that are inside the tower (not <see cref="AgentPhase.Outside"/>).
+        /// </summary>
+        public void CollectFloorsForRole(AgentRole role, List<int> into)
+        {
+            into?.Clear();
+            if (into == null) return;
+            foreach (var agent in _agents)
+            {
+                if (agent == null || agent.Role != role) continue;
+                if (agent.Phase == AgentPhase.Outside) continue;
+                into.Add(agent.Cell.y);
+            }
+        }
+
         void UpdateSchedule(Agent agent, GameClock clock, TowerGrid grid)
         {
             switch (agent.Role)
@@ -233,6 +255,9 @@ namespace BuildATower
                 case AgentRole.Handyman:
                     UpdateServiceAgent(agent, grid);
                     break;
+                case AgentRole.Security:
+                    UpdateSecurityAgent(agent, grid, _crime);
+                    break;
             }
         }
 
@@ -245,7 +270,7 @@ namespace BuildATower
             var assigned = false;
             foreach (var agent in _agents)
             {
-                if (!IsServiceRole(agent.Role)) continue;
+                if (agent.Role is not (AgentRole.Maid or AgentRole.Handyman)) continue;
                 if (agent.ServiceTarget != null) continue;
                 if (agent.Phase is AgentPhase.Moving or AgentPhase.WaitingAtElevator or AgentPhase.Riding)
                     continue;
@@ -280,9 +305,14 @@ namespace BuildATower
             foreach (var room in grid.Rooms)
             {
                 if (room?.Type?.id == null) continue;
-                if (room.Type.id is not (HousekeepingId or MaintenanceId)) continue;
+                if (room.Type.id is not (HousekeepingId or MaintenanceId or SecurityId)) continue;
                 staffHomes.Add(room);
-                var role = room.Type.id == HousekeepingId ? AgentRole.Maid : AgentRole.Handyman;
+                var role = room.Type.id switch
+                {
+                    HousekeepingId => AgentRole.Maid,
+                    MaintenanceId => AgentRole.Handyman,
+                    _ => AgentRole.Security
+                };
                 var want = room.StaffedWorkers;
                 var existing = 0;
                 for (var i = 0; i < _agents.Count; i++)
@@ -376,10 +406,161 @@ namespace BuildATower
             agent.Visible = true;
         }
 
+        void UpdateSecurityAgent(Agent agent, TowerGrid grid, CrimeSystem crime)
+        {
+            // Dwell countdown + replan live in UpdateServiceWork (same as maid/handyman Working).
+            if (agent.Phase == AgentPhase.Working) return;
+
+            // Do not replan every tick while waiting/riding.
+            if (agent.Phase is AgentPhase.WaitingAtElevator or AgentPhase.Riding)
+                return;
+
+            if (agent.Phase == AgentPhase.Moving)
+            {
+                if (agent.Path == null || agent.Path.Count == 0 || agent.PathIndex >= agent.Path.Count)
+                    ReplanTrip(agent, allowReplan: true);
+                return;
+            }
+
+            if (TryStartPatrol(agent, grid, crime))
+                return;
+
+            if (agent.Phase != AgentPhase.AtHome)
+            {
+                BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, 0), AgentPhase.AtHome, grid);
+                return;
+            }
+
+            agent.Visible = true;
+        }
+
+        bool TryStartPatrol(Agent agent, TowerGrid grid, CrimeSystem crime)
+        {
+            if (agent == null || grid == null) return false;
+
+            var floor = PickPatrolFloor(crime, grid);
+            if (floor == null) return false;
+
+            var cell = PatrolCellOnFloor(grid, floor.Value);
+            if (cell == null) return false;
+
+            agent.ServiceTarget = null;
+            agent.ServiceWorkRemaining = PatrolDwellMinutes;
+            agent.Visible = true;
+
+            if (agent.Cell.y == floor.Value)
+            {
+                agent.Phase = AgentPhase.Working;
+                agent.PhaseAfterMove = AgentPhase.Working;
+                agent.GoalCell = null;
+                agent.Path?.Clear();
+                agent.PathIndex = 0;
+                agent.TripLegs?.Clear();
+                agent.TripLegIndex = 0;
+                ClearElevatorTripState(agent);
+                return true;
+            }
+
+            if (BeginTrip(agent, agent.Cell, cell.Value, AgentPhase.Working, grid))
+                return true;
+
+            agent.ServiceWorkRemaining = 0f;
+            return false;
+        }
+
+        int? PickPatrolFloor(CrimeSystem crime, TowerGrid grid)
+        {
+            if (crime == null || grid == null) return null;
+
+            var shopLoad = CrimeFloorLoads.ShopLoadByFloor(grid);
+            var hotelLoad = CrimeFloorLoads.HotelLoadByFloor(grid, _agents);
+
+            _patrolFloorScratch.Clear();
+            foreach (var room in grid.Rooms)
+            {
+                if (room == null) continue;
+                var minY = room.Origin.y;
+                var maxY = room.Origin.y + room.Size.y - 1;
+                for (var y = minY; y <= maxY; y++)
+                    _patrolFloorScratch.Add(y);
+            }
+
+            foreach (var floor in shopLoad.Keys)
+                _patrolFloorScratch.Add(floor);
+            foreach (var floor in hotelLoad.Keys)
+                _patrolFloorScratch.Add(floor);
+
+            int? bestBusy = null;
+            var bestBusyCrime = 0f;
+            int? bestAny = null;
+            var bestAnyCrime = 0f;
+
+            foreach (var floor in _patrolFloorScratch)
+            {
+                var c = crime.GetCrime(floor);
+                if (c <= 0f) continue;
+
+                var busy =
+                    (shopLoad.TryGetValue(floor, out var shop) && shop > 0f) ||
+                    (hotelLoad.TryGetValue(floor, out var hotel) && hotel > 0f);
+
+                if (busy &&
+                    (bestBusy == null ||
+                     c > bestBusyCrime ||
+                     (Mathf.Approximately(c, bestBusyCrime) && floor < bestBusy.Value)))
+                {
+                    bestBusy = floor;
+                    bestBusyCrime = c;
+                }
+
+                if (bestAny == null ||
+                    c > bestAnyCrime ||
+                    (Mathf.Approximately(c, bestAnyCrime) && floor < bestAny.Value))
+                {
+                    bestAny = floor;
+                    bestAnyCrime = c;
+                }
+            }
+
+            return bestBusy ?? bestAny;
+        }
+
+        static Vector2Int? PatrolCellOnFloor(TowerGrid grid, int floor)
+        {
+            if (grid == null) return null;
+
+            if (grid.HasLobby && floor == TowerGrid.LobbyFloor)
+                return LobbyExitCell(grid);
+
+            RoomInstance best = null;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                if (floor < room.Origin.y || floor >= room.Origin.y + room.Size.y) continue;
+                if (best == null || room.InstanceId < best.InstanceId)
+                    best = room;
+            }
+
+            if (best == null) return null;
+            return new Vector2Int(best.Origin.x, floor);
+        }
+
         void UpdateServiceWork(Agent agent, float deltaGameMinutes, TowerGrid grid)
         {
             if (!IsServiceRole(agent.Role)) return;
-            if (agent.ServiceTarget == null || agent.Phase != AgentPhase.Working) return;
+            if (agent.Phase != AgentPhase.Working) return;
+
+            if (agent.Role == AgentRole.Security)
+            {
+                agent.ServiceWorkRemaining -= deltaGameMinutes;
+                if (agent.ServiceWorkRemaining > 0f) return;
+                agent.ServiceWorkRemaining = 0f;
+                if (!TryStartPatrol(agent, grid, _crime))
+                    BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, 0), AgentPhase.AtHome, grid);
+                return;
+            }
+
+            if (agent.ServiceTarget == null) return;
 
             // Midnight can decay 1→0 while a handyman job is in progress; abort before repairing.
             if (agent.Role == AgentRole.Handyman && agent.ServiceTarget.IsBroken)
@@ -495,13 +676,13 @@ namespace BuildATower
         }
 
         static bool IsServiceRole(AgentRole role) =>
-            role is AgentRole.Maid or AgentRole.Handyman;
+            role is AgentRole.Maid or AgentRole.Handyman or AgentRole.Security;
 
         static bool IsNonPopulationRole(AgentRole role) =>
-            role is AgentRole.StreetVisitor or AgentRole.Maid or AgentRole.Handyman;
+            role is AgentRole.StreetVisitor or AgentRole.Maid or AgentRole.Handyman or AgentRole.Security;
 
         static bool IsEphemeralOrStaffRole(AgentRole role) =>
-            role is AgentRole.StreetVisitor or AgentRole.Maid or AgentRole.Handyman;
+            role is AgentRole.StreetVisitor or AgentRole.Maid or AgentRole.Handyman or AgentRole.Security;
 
         void UpdateCondo(Agent agent, GameClock clock, TowerGrid grid)
         {

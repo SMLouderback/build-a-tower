@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BuildATower
@@ -24,6 +25,7 @@ namespace BuildATower
         StarSystem _stars;
         MarketClimate _climate;
         readonly System.Random _climateRng = new();
+        readonly List<int> _patrolFloors = new();
         int _lastDayIndex;
         bool _subscribed;
 
@@ -114,13 +116,15 @@ namespace BuildATower
                 _clock,
                 build.Grid,
                 _stars?.CurrentStars ?? 0,
-                _climate);
+                _climate,
+                _crime);
+            _agents.CollectFloorsForRole(AgentRole.Security, _patrolFloors);
             _crime.Tick(
                 _clock.LastTickGameMinutes,
                 CrimeFloorLoads.ShopLoadByFloor(build.Grid),
                 CrimeFloorLoads.HotelLoadByFloor(build.Grid, _agents.Agents),
                 CountStaffedSecurity(build.Grid),
-                Array.Empty<int>(),
+                _patrolFloors,
                 Array.Empty<int>());
             if (agentView != null)
                 agentView.Sync(_agents.Agents);

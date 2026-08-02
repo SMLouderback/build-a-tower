@@ -7,7 +7,8 @@ namespace BuildATower
         CondoResident,
         StreetVisitor,
         Maid,
-        Handyman
+        Handyman,
+        Security
     }
 
     public enum AgentPhase
