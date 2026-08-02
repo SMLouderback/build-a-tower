@@ -182,6 +182,33 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void GetShaftsServingFloor_returns_shafts_covering_floor()
+        {
+            var system = DualShaftsServing0To4(out var first, out var second);
+
+            var serving = system.GetShaftsServingFloor(2);
+            Assert.AreEqual(2, serving.Count);
+            CollectionAssert.Contains(serving.Select(s => s.RoomInstanceId).ToList(), first.RoomInstanceId);
+            CollectionAssert.Contains(serving.Select(s => s.RoomInstanceId).ToList(), second.RoomInstanceId);
+
+            Assert.AreEqual(0, system.GetShaftsServingFloor(9).Count);
+
+            Assert.IsTrue(system.TrySetMaintenance(first.RoomInstanceId, true));
+            serving = system.GetShaftsServingFloor(2);
+            Assert.AreEqual(1, serving.Count);
+            Assert.AreEqual(second.RoomInstanceId, serving[0].RoomInstanceId);
+        }
+
+        [Test]
+        public void ClosestFloorOnShaft_clamps_to_min_max()
+        {
+            var shaft = new ElevatorShaftRuntime { MinFloor = 0, MaxFloor = 10 };
+            Assert.AreEqual(10, ElevatorSystem.ClosestFloorOnShaft(shaft, 11));
+            Assert.AreEqual(0, ElevatorSystem.ClosestFloorOnShaft(shaft, -1));
+            Assert.AreEqual(5, ElevatorSystem.ClosestFloorOnShaft(shaft, 5));
+        }
+
+        [Test]
         public void QueueLength_counts_agents_at_floor_and_direction()
         {
             var system = DualShaftsServing0To4(out var shaft, out _);

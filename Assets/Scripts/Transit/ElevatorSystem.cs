@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace BuildATower
 {
@@ -285,6 +286,30 @@ namespace BuildATower
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// All non-maintenance shafts that serve a single floor.
+        /// </summary>
+        public IReadOnlyList<ElevatorShaftRuntime> GetShaftsServingFloor(int floor)
+        {
+            var result = new List<ElevatorShaftRuntime>();
+            foreach (var shaft in _shafts)
+            {
+                if (shaft.InMaintenance) continue;
+                if (shaft.Serves(floor))
+                    result.Add(shaft);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Nearest floor on the shaft to the target (clamped to shaft span).
+        /// </summary>
+        public static int ClosestFloorOnShaft(ElevatorShaftRuntime shaft, int targetFloor)
+        {
+            return Mathf.Clamp(targetFloor, shaft.MinFloor, shaft.MaxFloor);
         }
 
         public int QueueLength(
