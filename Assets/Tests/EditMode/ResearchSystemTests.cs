@@ -60,6 +60,30 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void TickDayDecay_decays_stored_progress_after_branch_switch()
+        {
+            var research = new ResearchSystem();
+            Assert.IsTrue(research.TryStart(ResearchBranch.Marketing, 1));
+            research.TickProgress(200f, researcherPool: 1);
+            var storedBefore = research.ActiveProgress;
+            Assert.Greater(storedBefore, 0f);
+
+            Assert.IsTrue(research.TryStart(ResearchBranch.Elevator, 1));
+            research.TickProgress(100f, researcherPool: 1);
+            var activeBefore = research.ActiveProgress;
+            Assert.IsFalse(research.IsPaused);
+
+            research.TickDayDecay();
+
+            Assert.AreEqual(activeBefore, research.ActiveProgress, 0.0001f);
+
+            Assert.IsTrue(research.TryStart(ResearchBranch.Marketing, 1));
+            var expectedStored = storedBefore
+                - ResearchCatalog.DecayFractionPerDay * ResearchCatalog.BaseWorkMinutes(1);
+            Assert.AreEqual(expectedStored, research.ActiveProgress, 0.0001f);
+        }
+
+        [Test]
         public void Completing_level_I_unlocks_level_II()
         {
             var research = new ResearchSystem();

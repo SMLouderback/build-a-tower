@@ -18,6 +18,7 @@ namespace BuildATower
         public int ActiveLevel => _activeBranch.HasValue ? _activeLevel : 0;
         public float ActiveProgress =>
             _activeBranch.HasValue ? GetProgress(_activeBranch.Value, _activeLevel) : 0f;
+        public bool IsRunning => _activeBranch.HasValue;
         public bool IsPaused => _paused;
 
         public bool IsComplete(ResearchBranch branch, int level) =>
@@ -98,13 +99,26 @@ namespace BuildATower
 
         public void TickDayDecay()
         {
-            if (!_paused || !_activeBranch.HasValue)
+            // Spec §7.3: decay all incomplete stored nodes except the currently
+            // running unpaused project (switched-away progress still decays).
+            if (_progress.Count == 0)
                 return;
 
-            var key = (_activeBranch.Value, _activeLevel);
-            var baseWork = ResearchCatalog.BaseWorkMinutes(_activeLevel);
-            var decay = ResearchCatalog.DecayFractionPerDay * baseWork;
-            _progress[key] = Math.Max(0f, GetProgress(key.Item1, key.Item2) - decay);
+            var keys = new List<(ResearchBranch Branch, int Level)>(_progress.Keys);
+            foreach (var key in keys)
+            {
+                var isActiveRunningUnpaused =
+                    _activeBranch.HasValue &&
+                    !_paused &&
+                    key.Branch == _activeBranch.Value &&
+                    key.Level == _activeLevel;
+                if (isActiveRunningUnpaused)
+                    continue;
+
+                var baseWork = ResearchCatalog.BaseWorkMinutes(key.Level);
+                var decay = ResearchCatalog.DecayFractionPerDay * baseWork;
+                _progress[key] = Math.Max(0f, GetProgress(key.Branch, key.Level) - decay);
+            }
         }
 
         public float WorkPerGameMinute(int researcherPool) =>
