@@ -112,6 +112,27 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void EstimateEta_and_remaining_cost_lower_with_4_researchers_than_1()
+        {
+            var research = new ResearchSystem();
+            Assert.IsTrue(research.TryStart(ResearchBranch.Marketing, 1));
+            research.TickProgress(200f, researcherPool: 1);
+
+            const int labs = 2;
+            const float climateMult = 1.25f;
+
+            var etaOne = research.EstimateEtaMinutes(ResearchBranch.Marketing, 1, researcherPool: 1);
+            var etaFour = research.EstimateEtaMinutes(ResearchBranch.Marketing, 1, researcherPool: 4);
+            Assert.Less(etaFour, etaOne);
+
+            var costOne = research.EstimateRemainingCost(
+                ResearchBranch.Marketing, 1, researcherPool: 1, labs, climateMult);
+            var costFour = research.EstimateRemainingCost(
+                ResearchBranch.Marketing, 1, researcherPool: 4, labs, climateMult);
+            Assert.Less(costFour, costOne);
+        }
+
+        [Test]
         public void Catalog_base_work_and_display_names()
         {
             Assert.AreEqual(1440, ResearchCatalog.BaseWorkMinutes(1));
