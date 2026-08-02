@@ -131,18 +131,23 @@ namespace BuildATower.Tests
             var hk = Make("service_housekeeping", "Housekeeping", RoomCategory.Service, family: BuildFamily.Utility);
             var maint = Make("service_maintenance", "Maintenance", RoomCategory.Service, family: BuildFamily.Utility);
             var security = Make("service_security", "Security Post", RoomCategory.Service, family: BuildFamily.Utility);
+            var research = Make("service_research", "Research Lab", RoomCategory.Service, family: BuildFamily.Utility);
 
             var hkRoom = new RoomInstance(1, hk, Vector2Int.zero, hk.size);
             var maintRoom = new RoomInstance(2, maint, Vector2Int.zero, maint.size);
             var securityRoom = new RoomInstance(3, security, Vector2Int.zero, security.size);
+            var researchRoom = new RoomInstance(4, research, Vector2Int.zero, research.size);
 
             BuildController.ApplyAutoHireOnPlace(hkRoom);
             BuildController.ApplyAutoHireOnPlace(maintRoom);
             BuildController.ApplyAutoHireOnPlace(securityRoom);
+            BuildController.ApplyAutoHireOnPlace(researchRoom);
 
             Assert.AreEqual(1, hkRoom.StaffedWorkers);
             Assert.AreEqual(1, maintRoom.StaffedWorkers);
             Assert.AreEqual(1, securityRoom.StaffedWorkers);
+            Assert.AreEqual(1, researchRoom.StaffedWorkers);
+            Assert.IsTrue(BuildController.IsStaffedServiceRoom(research));
         }
     }
 }

@@ -354,5 +354,160 @@ namespace BuildATower.Tests
             BuildController.ApplyAutoHireOnPlace(room);
             Assert.AreEqual(1, room.StaffedWorkers);
         }
+
+        RoomTypeSO ResearchLab()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = EconomySystem.ResearchId;
+            so.category = RoomCategory.Service;
+            so.size = new Vector2Int(3, 1);
+            so.allowAboveGround = true;
+            return so;
+        }
+
+        [Test]
+        public void Research_is_staffed_service_and_auto_hires()
+        {
+            var so = ResearchLab();
+            Assert.IsTrue(BuildController.IsStaffedServiceRoom(so));
+            var room = new RoomInstance(1, so, Vector2Int.zero, so.size);
+            BuildController.ApplyAutoHireOnPlace(room);
+            Assert.AreEqual(1, room.StaffedWorkers);
+        }
+
+        [Test]
+        public void Midnight_charges_research_wages()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(ResearchLab(), new Vector2Int(0, 1), out var lab));
+            lab.SetStaffedWorkers(2);
+            var wallet = new FundsWallet(50_000);
+            var economy = new EconomySystem();
+
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+
+            var wages = 2 * EconomySystem.ResearchWagePerDay;
+            var idleBurn = ResearchCatalog.IdlePerLabPerDay;
+            Assert.AreEqual(wages, economy.LastWageExpense);
+            Assert.AreEqual(idleBurn, economy.LastResearchBurn);
+            Assert.AreEqual(50_000 - wages - idleBurn, wallet.Balance);
+            Assert.AreEqual(wages, economy.GetLastRoomExpense(lab));
+        }
+
+        [Test]
+        public void Midnight_charges_idle_research_burn_only_when_paused()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(ResearchLab(), new Vector2Int(0, 1), out var lab));
+            lab.SetStaffedWorkers(1);
+            var research = new ResearchSystem();
+            Assert.IsTrue(research.TryStart(ResearchBranch.Marketing, 1));
+            research.Pause();
+
+            var wallet = new FundsWallet(50_000);
+            var economy = new EconomySystem();
+            economy.OnNewDay(grid, new List<Agent>(), wallet, research: research, climateSpendMult: 1f);
+
+            var expectedWage = EconomySystem.ResearchWagePerDay;
+            var expectedBurn = ResearchCatalog.IdlePerLabPerDay;
+            Assert.AreEqual(expectedBurn, economy.LastResearchBurn);
+            Assert.AreEqual(50_000 - expectedWage - expectedBurn, wallet.Balance);
+            Assert.IsTrue(research.IsPaused);
+        }
+
+        [Test]
+        public void Midnight_charges_idle_plus_active_research_burn_when_running()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(ResearchLab(), new Vector2Int(0, 1), out var lab));
+            lab.SetStaffedWorkers(1);
+            var research = new ResearchSystem();
+            Assert.IsTrue(research.TryStart(ResearchBranch.Elevator, 1));
+
+            var wallet = new FundsWallet(50_000);
+            var economy = new EconomySystem();
+            economy.OnNewDay(grid, new List<Agent>(), wallet, research: research, climateSpendMult: 1f);
+
+            var expectedBurn = ResearchCatalog.IdlePerLabPerDay + ResearchCatalog.ActivePerDay;
+            Assert.AreEqual(expectedBurn, economy.LastResearchBurn);
+            Assert.AreEqual(
+                50_000 - EconomySystem.ResearchWagePerDay - expectedBurn,
+                wallet.Balance);
+            Assert.IsFalse(research.IsPaused);
+        }
+
+        [Test]
+        public void Midnight_research_burn_cheaper_in_recession_than_boom()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(ResearchLab(), new Vector2Int(0, 1), out var lab));
+            lab.SetStaffedWorkers(0);
+
+            var researchRecession = new ResearchSystem();
+            Assert.IsTrue(researchRecession.TryStart(ResearchBranch.Security, 1));
+            var researchBoom = new ResearchSystem();
+            Assert.IsTrue(researchBoom.TryStart(ResearchBranch.Security, 1));
+
+            // Match MarketClimate.SpendMultiplier for Recession / Boom.
+            const float recessionMult = 0.7f;
+            const float boomMult = 1.3f;
+
+            var walletRecession = new FundsWallet(50_000);
+            var economyRecession = new EconomySystem();
+            economyRecession.OnNewDay(
+                grid, new List<Agent>(), walletRecession,
+                research: researchRecession, climateSpendMult: recessionMult);
+
+            var walletBoom = new FundsWallet(50_000);
+            var economyBoom = new EconomySystem();
+            economyBoom.OnNewDay(
+                grid, new List<Agent>(), walletBoom,
+                research: researchBoom, climateSpendMult: boomMult);
+
+            var baseBurn = ResearchCatalog.IdlePerLabPerDay + ResearchCatalog.ActivePerDay;
+            Assert.AreEqual((int)System.Math.Round(baseBurn * recessionMult), economyRecession.LastResearchBurn);
+            Assert.AreEqual((int)System.Math.Round(baseBurn * boomMult), economyBoom.LastResearchBurn);
+            Assert.Less(economyRecession.LastResearchBurn, economyBoom.LastResearchBurn);
+        }
+
+        [Test]
+        public void Midnight_unaffordable_research_burn_pauses_and_charges_zero()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(ResearchLab(), new Vector2Int(0, 1), out var lab));
+            lab.SetStaffedWorkers(1);
+            var research = new ResearchSystem();
+            Assert.IsTrue(research.TryStart(ResearchBranch.Housekeeping, 1));
+            Assert.IsFalse(research.IsPaused);
+
+            // Enough for wage ($350) but not idle+active burn ($2500).
+            var wallet = new FundsWallet(EconomySystem.ResearchWagePerDay + 100);
+            var economy = new EconomySystem();
+            economy.OnNewDay(grid, new List<Agent>(), wallet, research: research, climateSpendMult: 1f);
+
+            Assert.AreEqual(0, economy.LastResearchBurn);
+            Assert.IsTrue(research.IsPaused);
+            Assert.AreEqual(100, wallet.Balance);
+        }
+
+        [Test]
+        public void Count_helpers_skip_broken_labs_and_sum_researcher_pool()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(ResearchLab(), new Vector2Int(0, 1), out var labA));
+            Assert.IsTrue(grid.TryPlace(ResearchLab(), new Vector2Int(3, 1), out var labB));
+            labA.SetStaffedWorkers(2);
+            labB.SetStaffedWorkers(3);
+            labB.Condition = 0;
+
+            Assert.AreEqual(1, EconomySystem.CountNonBrokenResearchLabs(grid));
+            Assert.AreEqual(2, EconomySystem.CountResearcherPool(grid));
+        }
     }
 }

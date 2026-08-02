@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace BuildATower
@@ -8,6 +9,8 @@ namespace BuildATower
         public const int MaidWagePerDay = 200;
         public const int HandymanWagePerDay = 300;
         public const int SecurityGuardWagePerDay = 250;
+        public const int ResearchWagePerDay = 350;
+        public const string ResearchId = "service_research";
 
         const string HousekeepingId = "service_housekeeping";
         const string MaintenanceId = "service_maintenance";
@@ -22,6 +25,7 @@ namespace BuildATower
         public int LastIncome { get; private set; }
         public int LastExpense { get; private set; }
         public int LastWageExpense { get; private set; }
+        public int LastResearchBurn { get; private set; }
         public int LastNet { get; private set; }
         /// <summary>Running average of <see cref="LastNet"/> across completed midnights.</summary>
         public float AverageDailyProfit { get; private set; }
@@ -37,11 +41,14 @@ namespace BuildATower
             IReadOnlyList<Agent> agents,
             FundsWallet wallet,
             int currentStars = 0,
-            int climateOffset = 0)
+            int climateOffset = 0,
+            ResearchSystem research = null,
+            float climateSpendMult = 1f)
         {
             LastIncome = 0;
             LastExpense = 0;
             LastWageExpense = 0;
+            LastResearchBurn = 0;
             _lastIncomeByRoom.Clear();
             _lastExpenseByRoom.Clear();
 
@@ -101,12 +108,68 @@ namespace BuildATower
 
             wallet.Add(LastIncome);
             wallet.Subtract(LastExpense);
+
+            var burn = ComputeResearchBurn(grid, research, climateSpendMult);
+            if (burn > 0)
+            {
+                if (wallet.TrySpend(burn))
+                {
+                    LastResearchBurn = burn;
+                    LastExpense += burn;
+                }
+                else
+                {
+                    research?.Pause();
+                    LastResearchBurn = 0;
+                }
+            }
+
             LastNet = LastIncome - LastExpense;
             _midnightCount++;
             _netSum += LastNet;
             AverageDailyProfit = (float)_netSum / _midnightCount;
             if (LastIncome > 0 || LastExpense > 0)
                 HasRecordedEconomyEvent = true;
+        }
+
+        public static int CountNonBrokenResearchLabs(TowerGrid grid)
+        {
+            if (grid == null) return 0;
+            var count = 0;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type?.id == ResearchId && !room.IsBroken)
+                    count++;
+            }
+
+            return count;
+        }
+
+        public static int CountResearcherPool(TowerGrid grid)
+        {
+            if (grid == null) return 0;
+            var total = 0;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type?.id != ResearchId || room.IsBroken)
+                    continue;
+                total += room.StaffedWorkers;
+            }
+
+            return total;
+        }
+
+        static int ComputeResearchBurn(TowerGrid grid, ResearchSystem research, float climateSpendMult)
+        {
+            var labs = CountNonBrokenResearchLabs(grid);
+            if (labs <= 0)
+                return 0;
+
+            var burn = ResearchCatalog.IdlePerLabPerDay * labs;
+            if (research != null && research.IsRunning && !research.IsPaused)
+                burn += ResearchCatalog.ActivePerDay;
+
+            return (int)Math.Round(burn * climateSpendMult);
         }
 
         public bool TrySellCondo(RoomInstance room, FundsWallet wallet)
@@ -152,6 +215,7 @@ namespace BuildATower
                 HousekeepingId => room.StaffedWorkers * MaidWagePerDay,
                 MaintenanceId => room.StaffedWorkers * HandymanWagePerDay,
                 SecurityId => room.StaffedWorkers * SecurityGuardWagePerDay,
+                ResearchId => room.StaffedWorkers * ResearchWagePerDay,
                 _ => 0
             };
         }
