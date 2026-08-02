@@ -38,6 +38,110 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Maid_idles_at_housekeeping_when_no_dirty_hotels()
+        {
+            var grid = ServiceTower(out var hk, out _, out var hotel, out _);
+            hk.SetStaffedWorkers(1);
+            Assert.IsFalse(hotel.Dirty);
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            var maid = agents.Agents.Single(a => a.Role == AgentRole.Maid);
+            var home = hk.Origin;
+            var clock = new GameClock(1f, 12 * 60);
+
+            PlaceAtRoom(maid, hk);
+            maid.Phase = AgentPhase.AtHome;
+
+            for (var i = 0; i < 10; i++)
+                agents.Tick(1f, clock, grid);
+
+            Assert.AreEqual(AgentPhase.AtHome, maid.Phase);
+            Assert.IsNull(maid.ServiceTarget);
+            Assert.AreEqual(home, maid.Cell);
+            Assert.IsFalse(hotel.Dirty);
+        }
+
+        [Test]
+        public void Maid_returns_home_after_clean_and_stays_when_no_more_dirty()
+        {
+            var grid = ServiceTower(out var hk, out _, out var hotel, out _);
+            hk.SetStaffedWorkers(1);
+            hotel.MarkDirty();
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            var maid = agents.Agents.Single(a => a.Role == AgentRole.Maid);
+            var clock = new GameClock(1f, 12 * 60);
+
+            Assert.IsTrue(agents.TryAssignServiceJobs(grid));
+            PlaceAtRoom(maid, hotel);
+            maid.Phase = AgentPhase.Working;
+            maid.ServiceWorkRemaining = RoomConditionRules.CleanMinutes(hotel.Type);
+
+            agents.Tick(RoomConditionRules.CleanBasicMinutes, clock, grid);
+            Assert.IsFalse(hotel.Dirty);
+            Assert.IsNull(maid.ServiceTarget);
+
+            // Allow return trip / idle snap.
+            for (var i = 0; i < 120; i++)
+                agents.Tick(1f, clock, grid);
+
+            Assert.AreEqual(AgentPhase.AtHome, maid.Phase);
+            Assert.AreEqual(hk.Origin, maid.Cell);
+            Assert.IsNull(maid.ServiceTarget);
+        }
+
+        [Test]
+        public void Maid_does_not_pursue_stale_goal_after_failed_job_path()
+        {
+            var grid = ServiceTower(out var hk, out _, out var hotel, out _);
+            hk.SetStaffedWorkers(1);
+            Assert.IsFalse(hotel.Dirty);
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            var maid = agents.Agents.Single(a => a.Role == AgentRole.Maid);
+            var clock = new GameClock(1f, 12 * 60);
+            PlaceAtRoom(maid, hk);
+
+            // Simulate a failed assign that used to leave GoalCell pointing at the hotel.
+            maid.ServiceTarget = null;
+            maid.GoalCell = hotel.Origin;
+            maid.PhaseAfterMove = AgentPhase.Working;
+            maid.Phase = AgentPhase.Moving;
+            maid.Path = new System.Collections.Generic.List<Vector2Int>();
+            maid.PathIndex = 0;
+
+            agents.Tick(1f, clock, grid);
+
+            Assert.IsNull(maid.ServiceTarget);
+            Assert.IsTrue(
+                maid.Phase == AgentPhase.AtHome ||
+                (maid.PhaseAfterMove == AgentPhase.AtHome && maid.GoalCell == hk.Origin),
+                "Without a valid claim the maid should idle or path home, not chase a stale hotel goal.");
+        }
+
+        [Test]
+        public void Handyman_idles_at_maintenance_when_all_rooms_at_full_condition()
+        {
+            var grid = ServiceTower(out _, out var maint, out var hotel, out var office);
+            maint.SetStaffedWorkers(1);
+            hotel.Condition = 100;
+            office.Condition = 100;
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            var handyman = agents.Agents.Single(a => a.Role == AgentRole.Handyman);
+            var clock = new GameClock(1f, 12 * 60);
+            PlaceAtRoom(handyman, maint);
+            handyman.Phase = AgentPhase.AtHome;
+
+            for (var i = 0; i < 10; i++)
+                agents.Tick(1f, clock, grid);
+
+            Assert.AreEqual(AgentPhase.AtHome, handyman.Phase);
+            Assert.IsNull(handyman.ServiceTarget);
+            Assert.AreEqual(maint.Origin, handyman.Cell);
+        }
+
+        [Test]
         public void Maid_clears_dirty_after_clean_minutes()
         {
             var grid = ServiceTower(out var hk, out _, out var hotel, out _);
@@ -163,6 +267,34 @@ namespace BuildATower.Tests
             Assert.IsTrue(agents.TryAssignServiceJobs(grid));
             Assert.AreSame(first, maid.ServiceTarget);
             Assert.Less(first.InstanceId, second.InstanceId);
+        }
+
+        [Test]
+        public void Maid_releases_claim_when_stalled_with_empty_path()
+        {
+            var grid = ServiceTower(out var hk, out _, out var hotel, out _);
+            hk.SetStaffedWorkers(1);
+            hotel.MarkDirty();
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            var maid = agents.Agents.Single(a => a.Role == AgentRole.Maid);
+            var clock = new GameClock(1f, 12 * 60);
+
+            Assert.IsTrue(agents.TryAssignServiceJobs(grid));
+            Assert.AreSame(hotel, maid.ServiceTarget);
+
+            // StallInPlace shape: Moving, empty path, claim held (the soft-lock that needed fire/rehire).
+            PlaceAtRoom(maid, hk);
+            maid.Phase = AgentPhase.Moving;
+            maid.Path = new System.Collections.Generic.List<Vector2Int>();
+            maid.PathIndex = 0;
+            maid.GoalCell = hotel.Origin;
+            maid.PhaseAfterMove = AgentPhase.Working;
+
+            agents.Tick(1f, clock, grid);
+
+            Assert.IsNull(maid.ServiceTarget, "Stalled maid must drop Dirty claim so another can clean.");
+            Assert.IsTrue(hotel.Dirty);
         }
 
         static TowerGrid ServiceTower(

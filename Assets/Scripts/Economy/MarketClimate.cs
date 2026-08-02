@@ -5,6 +5,8 @@ namespace BuildATower
     /// <summary>
     /// Tower-wide market climate on a 5-step scale. Advances with a weighted
     /// random walk each Gregorian month (caller invokes <see cref="OnMonthRolled"/>).
+    /// Extremes reflect instead of absorbing, with a soft pull toward Normal and a
+    /// hard cap on consecutive months at Recession/Boom.
     /// </summary>
     public sealed class MarketClimate
     {
@@ -13,6 +15,12 @@ namespace BuildATower
         public const int Normal = 2;
         public const int Strong = 3;
         public const int Boom = 4;
+
+        /// <summary>After this many consecutive months at Recession or Boom, force a step toward Normal.</summary>
+        public const int MaxConsecutiveExtremeMonths = 2;
+
+        /// <summary>Chance (0–100) after the walk to nudge one step toward Normal when not already there.</summary>
+        public const int MeanReversionChancePercent = 18;
 
         public static readonly string[] Labels =
         {
@@ -24,6 +32,9 @@ namespace BuildATower
         };
 
         public int Step { get; private set; } = Normal;
+
+        /// <summary>Consecutive months spent at the current step (for extreme escape).</summary>
+        public int MonthsAtCurrentStep { get; private set; }
 
         public string Name => Labels[Step];
 
@@ -39,8 +50,9 @@ namespace BuildATower
         public int ComfortTierOffset => Step - Normal;
 
         /// <summary>
-        /// Weighted monthly step: stay ~40%, ±1 ~45%, ±2 ~15%. Clamped to 0–4.
-        /// Uses <see cref="Random.Next(int)"/> with max 100.
+        /// Weighted monthly step: stay ~40%, ±1 ~45%, ±2 ~15%.
+        /// Out-of-range moves reflect (Recession −1 → Slow). Soft mean reversion toward Normal.
+        /// Cannot remain at Recession/Boom more than <see cref="MaxConsecutiveExtremeMonths"/> months.
         /// </summary>
         public void OnMonthRolled(Random rng)
         {
@@ -59,7 +71,42 @@ namespace BuildATower
             else
                 delta = 2;
 
-            Step = Math.Clamp(Step + delta, Recession, Boom);
+            var next = Reflect(Step + delta);
+
+            // Soft pull toward Normal so long Slow/Strong runs also drift back.
+            if (next != Normal && rng.Next(100) < MeanReversionChancePercent)
+                next = Reflect(next + Math.Sign(Normal - next));
+
+            // Hard escape: don't linger at Recession/Boom for months on end.
+            if (next == Step && IsExtreme(Step) &&
+                MonthsAtCurrentStep >= MaxConsecutiveExtremeMonths)
+            {
+                next = Reflect(Step + Math.Sign(Normal - Step));
+            }
+
+            if (next == Step)
+                MonthsAtCurrentStep++;
+            else
+                MonthsAtCurrentStep = 1;
+
+            Step = next;
+        }
+
+        static bool IsExtreme(int step) =>
+            step == Recession || step == Boom;
+
+        /// <summary>Bounce off 0/4 so downward rolls at Recession become recovery.</summary>
+        public static int Reflect(int step)
+        {
+            while (step < Recession || step > Boom)
+            {
+                if (step < Recession)
+                    step = Recession + (Recession - step);
+                if (step > Boom)
+                    step = Boom - (step - Boom);
+            }
+
+            return step;
         }
     }
 }

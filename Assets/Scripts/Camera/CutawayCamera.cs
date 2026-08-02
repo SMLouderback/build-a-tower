@@ -12,9 +12,9 @@ namespace BuildATower
 
         const float BoundsPadding = 5f;
         const float ScrollbarThickness = 18f;
-        const float FallbackMinX = -5f;
-        const float FallbackMaxX = 40f;
-        const float FallbackMinY = -5f;
+        const float FallbackMinX = -80f;
+        const float FallbackMaxX = 100f;
+        const float FallbackMinY = -15f;
         const float FallbackMaxY = 30f;
 
         Vector3 _lastMouse;
@@ -130,6 +130,11 @@ namespace BuildATower
                 minY = Mathf.Min(minY, room.Origin.y);
                 maxY = Mathf.Max(maxY, room.Origin.y + room.Size.y);
             }
+
+            // Always allow scrolling through the painted underground dirt band.
+            minY = Mathf.Min(minY, -10f);
+            minX = Mathf.Min(minX, -80f);
+            maxX = Mathf.Max(maxX, 100f);
 
             minY -= BoundsPadding;
             maxY += BoundsPadding;

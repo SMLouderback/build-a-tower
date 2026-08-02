@@ -18,7 +18,11 @@ namespace BuildATower
         readonly List<Vector3Int> _selectionCells = new();
         readonly List<Vector3Int> _handleCells = new();
 
-        public void PaintRoom(RoomInstance room)
+        /// <param name="skipCell">
+        /// When painting a non-transit room, skip these logic cells (e.g. stairs/elevator
+        /// still own the cell in the grid). Prevents underlay rooms from erasing transit tiles.
+        /// </param>
+        public void PaintRoom(RoomInstance room, System.Func<Vector2Int, bool> skipCell = null)
         {
             if (room?.Type == null) return;
 
@@ -39,6 +43,7 @@ namespace BuildATower
             var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
             foreach (var cell in occupied)
             {
+                if (skipCell != null && skipCell(cell)) continue;
                 var tile = GetTile(color, EdgeMaskFor(cell, occupied));
                 map.SetTile(ToTileCell(cell), tile);
             }
@@ -57,6 +62,17 @@ namespace BuildATower
 
             var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
             map.SetTile(ToTileCell(cell), tile);
+        }
+
+        /// <summary>Repaint every stairs/elevator room (call after underlay paints).</summary>
+        public void PaintTransitRooms(IEnumerable<RoomInstance> rooms)
+        {
+            if (rooms == null) return;
+            foreach (var room in rooms)
+            {
+                if (IsVisibleTransit(room))
+                    PaintRoom(room);
+            }
         }
 
         public void ClearRoom(RoomInstance room)
@@ -155,18 +171,31 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Visual-only starter band: dirt under the lobby, yellow Floor G strip where the lobby must be dragged.
-        /// G / ground / 1st floor are the same level. Does not occupy TowerGrid cells.
+        /// Visual-only starter band: yellow Floor G lobby drag hint, and a wide dirt fill
+        /// under ground for basement context. Does not occupy TowerGrid cells.
         /// </summary>
-        public void PaintStarterGuides(int minX, int maxX)
+        /// <param name="lobbyMinX">Inclusive left of lobby guide strip.</param>
+        /// <param name="lobbyMaxX">Inclusive right of lobby guide strip.</param>
+        /// <param name="dirtMinX">Inclusive left of underground dirt.</param>
+        /// <param name="dirtMaxX">Inclusive right of underground dirt.</param>
+        /// <param name="dirtDepth">How many floors below G to paint dirt (default 10).</param>
+        public void PaintStarterGuides(
+            int lobbyMinX,
+            int lobbyMaxX,
+            int dirtMinX,
+            int dirtMaxX,
+            int dirtDepth = 10)
         {
             var dirt = GetTile(new Color(0.45f, 0.32f, 0.22f, 1f), EdgeMask.None);
             var lobbyGuide = GetTile(new Color(0.95f, 0.82f, 0.28f, 1f), EdgeMask.None);
 
-            for (var x = minX; x <= maxX; x++)
-            {
+            for (var x = lobbyMinX; x <= lobbyMaxX; x++)
                 structureTilemap.SetTile(new Vector3Int(x, TowerGrid.LobbyFloor, 0), lobbyGuide);
-                for (var y = -1; y >= -5; y--)
+
+            var depth = Mathf.Max(1, dirtDepth);
+            for (var x = dirtMinX; x <= dirtMaxX; x++)
+            {
+                for (var y = -1; y >= -depth; y--)
                     structureTilemap.SetTile(new Vector3Int(x, y, 0), dirt);
             }
         }

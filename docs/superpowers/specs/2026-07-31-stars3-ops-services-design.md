@@ -14,7 +14,7 @@ Raise the star cap to **3★** with a focused unlock pack, and add a **visible o
 
 In Play Mode a player can:
 
-1. Earn **3★** with population, stress, lobby, elevator, **Security**, **Housekeeping**, and **Maintenance**.
+1. Earn **3★** with population, stress, lobby, elevator, **Housekeeping**, and **Maintenance**.
 2. Build **Housekeeping** and **Maintenance** at **2★** (auto-hire 1 worker); build **Security**, **Research Lab**, **Conference**, **Fine Dining** at **3★**.
 3. See hotel rooms go **Dirty** on checkout and stay unrentable until a **maid** finishes cleaning (15 / 30 game minutes).
 4. See eligible rooms lose **1 condition / day**; handymen restore **+10 per game hour**; at **0** the room shows **broken** and must be bulldozed (no handyman repair).
@@ -26,7 +26,7 @@ In Play Mode a player can:
 |----------|--------|
 | Scope | **One combined slice**: 3★ + unlock pack + condition + maids/handymen |
 | Unlock pack | Fine Dining, Conference, Security, Research Lab (3★); Housekeeping, Maintenance (2★) |
-| 3★ facilities | Security + Housekeeping + Maintenance (plus lobby + elevator) |
+| 3★ facilities | Housekeeping + Maintenance (plus lobby + elevator). Security is a **3★ unlock**, not a gate. |
 | 3★ pop / stress | ≥ **60** pop, ≤ **20** avg stress |
 | Ops workers | **Visible agents** pathfinding (not formula-only) |
 | HK/Maint on place | **Auto-hire 1** worker; Selection can set **0–4** |
@@ -58,7 +58,7 @@ Unchanged from current implementation:
 |--------|-----------|
 | Population | ≥ **60** |
 | Average stress | ≤ **20** |
-| Facilities | Lobby + ≥1 elevator + ≥1 **Security** + ≥1 **Housekeeping** + ≥1 **Maintenance** |
+| Facilities | Lobby + ≥1 elevator + ≥1 **Housekeeping** + ≥1 **Maintenance** |
 
 Facility rooms that are **Broken** do **not** count toward the 3★ facility gate until rebuilt.
 
@@ -66,7 +66,7 @@ Facility rooms that are **Broken** do **not** count toward the 3★ facility gat
 
 - Promotion: `TryPromote` as today (no demotion on promote path).
 - Demotion: quarterly `EvaluateQuarterly` (90 game days) as today.
-- `FormatNextStarGoal` lists 3★ pop/stress + Security / Housekeeping / Maintenance checks.
+- `FormatNextStarGoal` lists 3★ pop/stress + Housekeeping / Maintenance checks.
 
 ## 4. Room catalog
 
@@ -76,7 +76,7 @@ Facility rooms that are **Broken** do **not** count toward the 3★ facility gat
 |----------------|---------|--------|--------|-------|
 | `service_housekeeping` | Housekeeping | **2★** | Utility | Staff 0–4 maids; auto 1 on place |
 | `service_maintenance` | Maintenance | **2★** | Utility | Staff 0–4 handymen; auto 1 on place |
-| `service_security` | Security Post | **3★** | Utility | Facility gate only this slice |
+| `service_security` | Security Post | **3★** | Utility | Unlock reward after 3★; no gate role |
 | `service_research` | Research Lab | **3★** | Utility | Placeable; upgrades out of scope |
 | `service_conference` | Conference Room | **3★** | Utility (or Office service) | Placeable; light/no income MVP OK |
 | `shop_food_fine` | Fine Dining | **3★** | Shops → Food | `TrafficVariable`; higher $/visit than Restaurant (e.g. **$200**) |
@@ -185,7 +185,7 @@ Show Condition, Dirty, Broken; for HK/Maint show hired staff count with stepper 
 
 ## 9. Verification
 
-- EditMode: MaxStars 3; MeetsCriteria(3) requires Security+HK+Maint; Broken facility fails gate.  
+- EditMode: MaxStars 3; MeetsCriteria(3) requires HK+Maint (not Security); Broken facility fails gate.  
 - EditMode: checkout sets Dirty; maid clear after 15/30; check-in blocked while Dirty.  
 - EditMode: midnight −1 condition; handyman +10 after 60 min; Condition 0 → Broken; handyman ignores Broken.  
 - EditMode: place HK → StaffedWorkers == 1; wage expense counts hired.  

@@ -10,8 +10,9 @@ namespace BuildATower
         public const int ThreeStarPopulation = 60;
         public const float ThreeStarMaxStress = 20f;
         public const int MaxStars = 3;
+        /// <summary>HUD star track length (4–5★ content comes later; unearned slots stay grey).</summary>
+        public const int StarSlots = 5;
 
-        const string SecurityId = "service_security";
         const string HousekeepingId = "service_housekeeping";
         const string MaintenanceId = "service_maintenance";
 
@@ -19,16 +20,23 @@ namespace BuildATower
         public string LastResult { get; private set; }
 
         /// <summary>
-        /// Grants the next star as soon as its criteria are met. Never demotes.
+        /// Grants every consecutive star whose criteria are currently met. Never demotes.
+        /// Cascades (e.g. 0→2) so a single eligibility check cannot leave Goals all-✓ while stuck mid-tier.
         /// </summary>
         public bool TryPromote(TowerGrid grid, float averageStress, int population)
         {
             if (CurrentStars >= MaxStars) return false;
-            if (!MeetsCriteria(CurrentStars + 1, grid, averageStress, population)) return false;
 
-            CurrentStars++;
-            LastResult = $"Earned {CurrentStars}★.";
-            return true;
+            var promoted = false;
+            while (CurrentStars < MaxStars &&
+                   MeetsCriteria(CurrentStars + 1, grid, averageStress, population))
+            {
+                CurrentStars++;
+                promoted = true;
+                LastResult = $"Earned {CurrentStars}★.";
+            }
+
+            return promoted;
         }
 
         /// <summary>
@@ -71,7 +79,8 @@ namespace BuildATower
 
             var lines = $"Next ★ ({target}★) needs:";
             lines += $"\n  Pop {population}/{neededPopulation} {Mark(population >= neededPopulation)}";
-            lines += $"\n  Stress {averageStress:0}/{allowedStress:0} max {Mark(averageStress <= allowedStress)}";
+            // Show one decimal so HUD ✓ matches MeetsCriteria (≤) when avg is e.g. 25.4 vs max 25.
+            lines += $"\n  Stress {averageStress:0.#}/{allowedStress:0} max {Mark(averageStress <= allowedStress)}";
             lines += $"\n  Lobby {Mark(grid != null && grid.HasLobby)}";
 
             if (target >= 2)
@@ -79,7 +88,7 @@ namespace BuildATower
 
             if (target >= 3)
             {
-                lines += $"\n  Security {Mark(HasOperationalFacility(grid, SecurityId))}";
+                // Security is a 3★ unlock — do not require it to earn 3★ (chicken-and-egg).
                 lines += $"\n  Housekeeping {Mark(HasOperationalFacility(grid, HousekeepingId))}";
                 lines += $"\n  Maintenance {Mark(HasOperationalFacility(grid, MaintenanceId))}";
             }
@@ -124,7 +133,6 @@ namespace BuildATower
         }
 
         static bool HasOperationalServiceFacilities(TowerGrid grid) =>
-            HasOperationalFacility(grid, SecurityId) &&
             HasOperationalFacility(grid, HousekeepingId) &&
             HasOperationalFacility(grid, MaintenanceId);
 

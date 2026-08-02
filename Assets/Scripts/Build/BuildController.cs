@@ -26,6 +26,10 @@ namespace BuildATower
 
         const int GuideMinX = -5;
         const int GuideMaxX = 40;
+        /// <summary>Full-width underground dirt band (wider than lobby guides).</summary>
+        const int DirtMinX = -80;
+        const int DirtMaxX = 100;
+        const int DirtDepth = 10;
 
         bool _draggingLobby;
         int _dragStartX;
@@ -51,7 +55,7 @@ namespace BuildATower
         void Start()
         {
             if (view != null)
-                view.PaintStarterGuides(GuideMinX, GuideMaxX);
+                view.PaintStarterGuides(GuideMinX, GuideMaxX, DirtMinX, DirtMaxX, DirtDepth);
 
             if (worldCamera != null)
             {
@@ -185,7 +189,7 @@ namespace BuildATower
 
             SelectedRoom.SetStaffedWorkers(count);
             if (view != null)
-                view.PaintRoom(SelectedRoom);
+                PaintRoomKeepingTransitOnTop(SelectedRoom);
             NotifyGridChanged();
             RefreshHelpText();
             StateChanged?.Invoke();
@@ -394,21 +398,8 @@ namespace BuildATower
 
             foreach (var scaffold in clearedScaffolding)
                 view.ClearRoom(scaffold);
-            view.PaintRoom(room);
             // Transit sits on the rooms layer; keep it visible over rooms built behind.
-            if (IsVisibleTransit(room))
-            {
-                foreach (var c in room.OccupiedCells())
-                    view.PaintCell(c, room);
-            }
-            else
-            {
-                foreach (var c in room.OccupiedCells())
-                {
-                    if (Grid.TryGetRoomAt(c, out var at) && IsVisibleTransit(at))
-                        view.PaintCell(c, at);
-                }
-            }
+            PaintRoomKeepingTransitOnTop(room);
 
             RefreshHelpText();
             NotifyGridChanged();
@@ -573,7 +564,7 @@ namespace BuildATower
             foreach (var room in Grid.Rooms)
             {
                 if (room.InstanceId != instanceId) continue;
-                view.PaintRoom(room);
+                PaintRoomKeepingTransitOnTop(room);
                 break;
             }
         }
@@ -1019,10 +1010,14 @@ namespace BuildATower
                     continue;
 
                 _roomVisualState[room.InstanceId] = (dirty, broken);
-                view.PaintRoom(room);
+                // Rooms behind stairs share cells; never erase transit tiles.
+                PaintRoomKeepingTransitOnTop(room);
                 if (ReferenceEquals(room, SelectedRoom))
                     selectedChanged = true;
             }
+
+            // Batch underlay paints can still leave stacked transit stale — one final pass.
+            RepaintAllVisibleTransit();
 
             if (selectedChanged)
             {
@@ -1038,5 +1033,35 @@ namespace BuildATower
 
         static bool IsVisibleTransit(RoomInstance room) =>
             room?.Type != null && (room.Type.isStairs || room.Type.isElevatorShaft);
+
+        /// <summary>
+        /// Paint a room without erasing stairs/elevators that own shared cells, then
+        /// repaint all transit so stacked stairs/shafts stay fully visible.
+        /// </summary>
+        void PaintRoomKeepingTransitOnTop(RoomInstance room)
+        {
+            if (view == null || room?.Type == null) return;
+
+            if (IsVisibleTransit(room))
+            {
+                view.PaintRoom(room);
+                return;
+            }
+
+            // Never write underlay tiles onto cells the grid still attributes to transit.
+            view.PaintRoom(room, IsTransitOwnedCell);
+            RepaintAllVisibleTransit();
+        }
+
+        bool IsTransitOwnedCell(Vector2Int cell) =>
+            Grid != null &&
+            Grid.TryGetRoomAt(cell, out var at) &&
+            IsVisibleTransit(at);
+
+        void RepaintAllVisibleTransit()
+        {
+            if (view == null || Grid == null) return;
+            view.PaintTransitRooms(Grid.Rooms);
+        }
     }
 }

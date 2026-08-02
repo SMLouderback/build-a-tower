@@ -55,30 +55,66 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void Forced_negative_delta_clamps_at_recession()
+        public void Reflect_turns_recession_down_into_recovery()
         {
-            var climate = new MarketClimate();
-            // Normal (2) → Recession (0) via −2, then another −2 must stay at 0
-            climate.OnMonthRolled(new ScriptedRandom(DeltaMinus2Roll));
-            Assert.AreEqual(MarketClimate.Recession, climate.Step);
-            climate.OnMonthRolled(new ScriptedRandom(DeltaMinus2Roll));
-            Assert.AreEqual(MarketClimate.Recession, climate.Step);
-            Assert.AreEqual(-2, climate.ComfortTierOffset);
+            Assert.AreEqual(MarketClimate.Slow, MarketClimate.Reflect(-1));
+            Assert.AreEqual(MarketClimate.Normal, MarketClimate.Reflect(-2));
+            Assert.AreEqual(MarketClimate.Strong, MarketClimate.Reflect(5));
+            Assert.AreEqual(MarketClimate.Normal, MarketClimate.Reflect(6));
         }
 
         [Test]
-        public void Forced_positive_delta_clamps_at_boom()
+        public void Down_roll_at_recession_bounces_toward_recovery()
+        {
+            var climate = WalkToStep(MarketClimate.Recession);
+            // −2 at Recession reflects to Normal; suppress mean-reversion with high roll.
+            climate.OnMonthRolled(new ScriptedRandom(DeltaMinus2Roll, 99));
+            Assert.AreEqual(MarketClimate.Normal, climate.Step);
+        }
+
+        [Test]
+        public void Up_roll_at_boom_bounces_toward_normal()
+        {
+            var climate = WalkToStep(MarketClimate.Boom);
+            climate.OnMonthRolled(new ScriptedRandom(DeltaPlus2Roll, 99));
+            Assert.AreEqual(MarketClimate.Normal, climate.Step);
+        }
+
+        [Test]
+        public void Cannot_linger_at_recession_beyond_max_consecutive_months()
+        {
+            var climate = WalkToStep(MarketClimate.Recession);
+            Assert.AreEqual(1, climate.MonthsAtCurrentStep);
+
+            // One more stay is allowed (month 2 at Recession).
+            climate.OnMonthRolled(new ScriptedRandom(DeltaStayRoll, 99));
+            Assert.AreEqual(MarketClimate.Recession, climate.Step);
+            Assert.AreEqual(2, climate.MonthsAtCurrentStep);
+
+            // Third consecutive month must leave.
+            climate.OnMonthRolled(new ScriptedRandom(DeltaStayRoll, 99));
+            Assert.AreEqual(MarketClimate.Slow, climate.Step);
+        }
+
+        [Test]
+        public void Long_random_walk_does_not_spend_majority_in_recession()
         {
             var climate = new MarketClimate();
-            // Normal (2) → Boom (4) via +2, then another +2 must stay at 4
-            climate.OnMonthRolled(new ScriptedRandom(DeltaPlus2Roll));
-            Assert.AreEqual(MarketClimate.Boom, climate.Step);
-            climate.OnMonthRolled(new ScriptedRandom(DeltaPlus2Roll));
-            Assert.AreEqual(MarketClimate.Boom, climate.Step);
-            Assert.AreEqual(2, climate.ComfortTierOffset);
+            var rng = new Random(7);
+            var recessionMonths = 0;
+            const int months = 400;
+            for (var i = 0; i < months; i++)
+            {
+                climate.OnMonthRolled(rng);
+                if (climate.Step == MarketClimate.Recession)
+                    recessionMonths++;
+            }
+
+            Assert.Less(recessionMonths, months / 3, "Recession should not dominate a long walk.");
         }
 
         // Weight bands for Next(100): stay 0–39, −1 40–61, +1 62–84, −2 85–91, +2 92–99
+        const int DeltaStayRoll = 0;
         const int DeltaMinus2Roll = 85;
         const int DeltaPlus2Roll = 92;
         const int DeltaMinus1Roll = 40;
@@ -87,10 +123,11 @@ namespace BuildATower.Tests
         static MarketClimate WalkToStep(int targetStep)
         {
             var climate = new MarketClimate();
+            // Mean-reversion second roll: 99 = skip nudge.
             while (climate.Step < targetStep)
-                climate.OnMonthRolled(new ScriptedRandom(DeltaPlus1Roll));
+                climate.OnMonthRolled(new ScriptedRandom(DeltaPlus1Roll, 99));
             while (climate.Step > targetStep)
-                climate.OnMonthRolled(new ScriptedRandom(DeltaMinus1Roll));
+                climate.OnMonthRolled(new ScriptedRandom(DeltaMinus1Roll, 99));
             Assert.AreEqual(targetStep, climate.Step);
             return climate;
         }

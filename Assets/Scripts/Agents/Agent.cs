@@ -21,6 +21,9 @@ namespace BuildATower
         public bool CheckedOutToday { get; set; }
         public bool HasMovedIn { get; set; }
 
+        /// <summary>Occupant slot within <see cref="HomeRoom"/> for distinct home cells.</summary>
+        public int HomeSlot { get; set; }
+
         public List<Vector2Int> Path { get; set; }
         public int PathIndex { get; set; }
         public Vector2Int? GoalCell { get; set; }

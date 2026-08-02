@@ -369,7 +369,7 @@ namespace BuildATower
                 var stress = agents != null ? agents.AverageStress : averageStress;
                 DrawChip($"Pop {pop}", 64f);
                 DrawChip($"Stress {stress:0}", 78f);
-                DrawChip($"Crime {simulation.Crime?.AverageCrime ?? 0f:0}", 72f);
+                DrawChip($"Crime {simulation.Crime?.DisplayCrime ?? 0f:0}", 72f);
             }
 
             if (goalsUnlocked)

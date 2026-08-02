@@ -71,6 +71,21 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void DisplayCrime_lags_behind_raw_average_spikes()
+        {
+            var crime = new CrimeSystem();
+            var shop = new Dictionary<int, float> { [1] = 4f };
+            var empty = new Dictionary<int, float>();
+            crime.Tick(2f, shop, empty, 0, Array.Empty<int>(), Array.Empty<int>());
+            Assert.Greater(crime.AverageCrime, 0f);
+            Assert.Less(crime.DisplayCrime, crime.AverageCrime);
+
+            for (var i = 0; i < 40; i++)
+                crime.Tick(5f, empty, empty, 0, Array.Empty<int>(), Array.Empty<int>());
+            Assert.AreEqual(crime.AverageCrime, crime.DisplayCrime, 1.5f);
+        }
+
+        [Test]
         public void ShopLoadByFloor_counts_concurrent_visitors_on_shop_floor()
         {
             var grid = new TowerGrid();

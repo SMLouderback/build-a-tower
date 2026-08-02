@@ -21,6 +21,65 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Hotel_first_of_two_guests_checkout_does_not_dirty_while_other_stays()
+        {
+            var grid = LivingTower(Hotel(maxOccupants: 2), out var hotel);
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            Assert.AreEqual(2, agents.Agents.Count);
+
+            var clock = new GameClock(1f, 10 * 60);
+            clock.AdvanceMinutes(GameClock.MinutesPerDay);
+            var first = agents.Agents[0];
+            var second = agents.Agents[1];
+            PlaceAgentStayingOvernight(first, clock);
+            PlaceAgentStayingOvernight(second, clock);
+
+            // Only first guest reaches the checkout branch this tick.
+            second.CheckInDay = clock.DayIndex; // still "today" — not due to checkout
+
+            clock.AdvanceMinutes(1);
+            agents.Tick(1f, clock, grid);
+
+            Assert.IsTrue(first.CheckedOutToday);
+            Assert.IsFalse(second.CheckedOutToday);
+            Assert.IsFalse(hotel.Dirty, "Room must stay clean while another guest is still staying.");
+        }
+
+        [Test]
+        public void Hotel_last_guest_checkout_marks_room_dirty()
+        {
+            var grid = LivingTower(Hotel(maxOccupants: 2), out var hotel);
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            var clock = new GameClock(1f, 10 * 60);
+            clock.AdvanceMinutes(GameClock.MinutesPerDay);
+            foreach (var guest in agents.Agents)
+                PlaceAgentStayingOvernight(guest, clock);
+
+            clock.AdvanceMinutes(1);
+            agents.Tick(1f, clock, grid);
+
+            Assert.IsTrue(hotel.Dirty);
+            Assert.IsTrue(agents.Agents.All(a => a.CheckedOutToday));
+        }
+
+        [Test]
+        public void SyncHomes_assigns_distinct_home_slots()
+        {
+            var grid = LivingTower(Hotel(maxOccupants: 2), out var hotel);
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+
+            Assert.AreEqual(2, agents.Agents.Count);
+            Assert.AreEqual(0, agents.Agents[0].HomeSlot);
+            Assert.AreEqual(1, agents.Agents[1].HomeSlot);
+            Assert.AreNotEqual(agents.Agents[0].Cell, agents.Agents[1].Cell);
+            Assert.AreEqual(hotel.Origin.x, agents.Agents[0].Cell.x);
+            Assert.AreEqual(hotel.Origin.x + 1, agents.Agents[1].Cell.x);
+        }
+
+        [Test]
         public void SyncHomes_skips_dirty_hotel()
         {
             var grid = LivingTower(Hotel(), out var hotel);
@@ -191,13 +250,13 @@ namespace BuildATower.Tests
             return so;
         }
 
-        static RoomTypeSO Hotel()
+        static RoomTypeSO Hotel(int maxOccupants = 1)
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
             so.id = "hotel";
             so.category = RoomCategory.Hotel;
             so.size = new Vector2Int(9, 1);
-            so.maxOccupants = 1;
+            so.maxOccupants = maxOccupants;
             so.allowAboveGround = true;
             return so;
         }

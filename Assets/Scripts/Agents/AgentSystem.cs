@@ -7,6 +7,14 @@ namespace BuildATower
     {
         public const float StressGainPerSecond = 12f;
         public const float StressDecayPerSecond = 4f;
+        /// <summary>Elevator wait stress begins after this many game minutes in queue.</summary>
+        public const float ElevatorWaitStressStartMinutes = 5f;
+        /// <summary>At/above this wait, stress gain is at max elevator multiplier.</summary>
+        public const float ElevatorWaitStressFullMinutes = 25f;
+        public const float ElevatorWaitStressMinMult = 0.4f;
+        public const float ElevatorWaitStressMaxMult = 2.0f;
+        /// <summary>Maids/handymen drop a claimed job after waiting this long for an elevator.</summary>
+        public const float ServiceAbandonWaitMinutes = 45f;
         public const float LowConditionStressPerDay = 8f;
         public const float CrimeStressPerDayAtMax = 12f;
         public const float CriminalProximityStressPerMinute = 0.4f;
@@ -149,7 +157,10 @@ namespace BuildATower
                 while (existing < want)
                 {
                     var homeCell = HomeCell(room, existing);
-                    var agent = new Agent(_nextId++, role, room, homeCell);
+                    var agent = new Agent(_nextId++, role, room, homeCell)
+                    {
+                        HomeSlot = existing
+                    };
                     ConfigureSchedule(agent);
                     _agents.Add(agent);
                     existing++;
@@ -354,6 +365,7 @@ namespace BuildATower
                     var homeCell = HomeCell(room, existing);
                     var agent = new Agent(_nextId++, role, room, homeCell)
                     {
+                        HomeSlot = existing,
                         Phase = AgentPhase.AtHome,
                         Visible = true
                     };
@@ -399,8 +411,37 @@ namespace BuildATower
             if (agent.ServiceTarget != null)
             {
                 if (agent.Phase == AgentPhase.Working) return;
-                if (agent.Phase is AgentPhase.Moving or AgentPhase.WaitingAtElevator or AgentPhase.Riding)
+
+                // Healthy wait/ride: do not replan every tick (duplicate queue IDs).
+                if (agent.Phase is AgentPhase.WaitingAtElevator or AgentPhase.Riding)
+                {
+                    // Extreme wait: drop claim so another worker can clean/repair.
+                    if (agent.ElevatorWaitMinutes > ServiceAbandonWaitMinutes)
+                    {
+                        ClearServiceClaim(agent);
+                        AbandonServiceTripToHome(agent, grid);
+                    }
                     return;
+                }
+
+                if (agent.Phase == AgentPhase.Moving)
+                {
+                    var exhausted = agent.Path == null || agent.Path.Count == 0 ||
+                                    agent.PathIndex >= agent.Path.Count;
+                    if (exhausted)
+                    {
+                        ReplanTrip(agent, allowReplan: true);
+                        // Still stalled with an empty path → release Dirty/repair claim.
+                        if (agent.Phase == AgentPhase.Moving &&
+                            (agent.Path == null || agent.Path.Count == 0 ||
+                             agent.PathIndex >= agent.Path.Count))
+                        {
+                            ClearServiceClaim(agent);
+                            AbandonServiceTripToHome(agent, grid);
+                        }
+                    }
+                    return;
+                }
 
                 // Claim lost its trip — re-path or drop.
                 if (!BeginTrip(
@@ -421,11 +462,17 @@ namespace BuildATower
 
             if (agent.Phase != AgentPhase.AtHome)
             {
-                BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, 0), AgentPhase.AtHome, grid);
+                BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, agent.HomeSlot), AgentPhase.AtHome, grid);
                 return;
             }
 
             agent.Visible = true;
+        }
+
+        void AbandonServiceTripToHome(Agent agent, TowerGrid grid)
+        {
+            if (agent?.HomeRoom == null || grid == null) return;
+            BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, agent.HomeSlot), AgentPhase.AtHome, grid);
         }
 
         void UpdateCriminalAgent(Agent agent, TowerGrid grid, CrimeSystem crime)
@@ -493,7 +540,7 @@ namespace BuildATower
                 agent.PhaseAfterMove == AgentPhase.Outside)
                 return;
 
-            var exitCell = LobbyExitCell(grid);
+            var exitCell = LobbyExitCell(grid, agent.Cell.x);
             BeginTrip(agent, agent.Cell, exitCell, AgentPhase.Outside, grid);
         }
 
@@ -512,7 +559,7 @@ namespace BuildATower
 
             if (agent.Phase == AgentPhase.Outside)
             {
-                if (BeginTrip(agent, LobbyExitCell(grid), cell.Value, AgentPhase.Working, grid))
+                if (BeginTrip(agent, LobbyExitCell(grid, cell.Value.x), cell.Value, AgentPhase.Working, grid))
                     return true;
                 // Path unavailable — still enter on the roam floor (avoids Outside + life soft-lock).
                 PlaceCriminalWorkingAt(agent, cell.Value);
@@ -606,7 +653,7 @@ namespace BuildATower
 
             if (agent.Phase != AgentPhase.AtHome)
             {
-                BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, 0), AgentPhase.AtHome, grid);
+                BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, agent.HomeSlot), AgentPhase.AtHome, grid);
                 return;
             }
 
@@ -735,7 +782,7 @@ namespace BuildATower
                 if (agent.ServiceWorkRemaining > 0f) return;
                 agent.ServiceWorkRemaining = 0f;
                 if (!TryStartPatrol(agent, grid, _crime))
-                    BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, 0), AgentPhase.AtHome, grid);
+                    BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, agent.HomeSlot), AgentPhase.AtHome, grid);
                 return;
             }
 
@@ -746,7 +793,7 @@ namespace BuildATower
             {
                 ClearServiceClaim(agent);
                 if (!TryAssignJobFor(agent, grid))
-                    BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, 0), AgentPhase.AtHome, grid);
+                    BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, agent.HomeSlot), AgentPhase.AtHome, grid);
                 return;
             }
 
@@ -755,7 +802,7 @@ namespace BuildATower
 
             FinishServiceJob(agent);
             if (!TryAssignJobFor(agent, grid))
-                BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, 0), AgentPhase.AtHome, grid);
+                BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, agent.HomeSlot), AgentPhase.AtHome, grid);
         }
 
         bool TryAssignJobFor(Agent agent, TowerGrid grid)
@@ -883,10 +930,10 @@ namespace BuildATower
             if (agent.HasMovedIn || agent.Phase == AgentPhase.AtHome)
                 return;
 
-            var home = HomeCell(agent.HomeRoom, 0);
+            var home = HomeCell(agent.HomeRoom, agent.HomeSlot);
             if (agent.Phase == AgentPhase.Outside)
             {
-                BeginTrip(agent, LobbyExitCell(grid), home, AgentPhase.AtHome, grid);
+                BeginTrip(agent, LobbyExitCell(grid, home.x), home, AgentPhase.AtHome, grid);
                 return;
             }
 
@@ -899,8 +946,8 @@ namespace BuildATower
         void UpdateOffice(Agent agent, GameClock clock, TowerGrid grid)
         {
             var minute = clock.MinuteOfDay;
-            var exitCell = LobbyExitCell(grid);
-            var home = HomeCell(agent.HomeRoom, 0);
+            var home = HomeCell(agent.HomeRoom, agent.HomeSlot);
+            var exitCell = LobbyExitCell(grid, home.x);
 
             if (agent.Phase == AgentPhase.Outside &&
                 !agent.CheckedOutToday &&
@@ -913,7 +960,7 @@ namespace BuildATower
             }
 
             if (agent.Phase == AgentPhase.Working && agent.WorkedMinutes >= agent.WorkMinutes)
-                BeginTrip(agent, agent.Cell, exitCell, AgentPhase.Outside, grid);
+                BeginTrip(agent, agent.Cell, LobbyExitCell(grid, agent.Cell.x), AgentPhase.Outside, grid);
 
             if (agent.Phase == AgentPhase.Working &&
                 minute >= 11 * 60 + 30 &&
@@ -1000,8 +1047,8 @@ namespace BuildATower
         }
 
         bool CanReachShopFromLobby(TowerGrid grid, RoomInstance shop) =>
-            _router.TryPlanTrip(LobbyExitCell(grid), ShopEntryCell(shop), out var legs) &&
-            legs.Count > 0;
+            _router.TryPlanTrip(LobbyExitCell(grid, ShopEntryCell(shop).x), ShopEntryCell(shop), out var legs) &&
+                   legs.Count > 0;
 
         static Vector2Int ShopEntryCell(RoomInstance shop) =>
             shop == null ? Vector2Int.zero : shop.Origin;
@@ -1071,7 +1118,8 @@ namespace BuildATower
             var shop = shops[_rng.Next(shops.Count)];
             if (!shop.TryOccupyVisitorSlot()) return false;
 
-            var exitCell = LobbyExitCell(grid);
+            var shopCell = ShopEntryCell(shop);
+            var exitCell = LobbyExitCell(grid, shopCell.x);
             var agent = new Agent(_nextId++, AgentRole.StreetVisitor, shop, exitCell)
             {
                 VisitTarget = shop,
@@ -1082,7 +1130,7 @@ namespace BuildATower
                 DisposableDayIndex = clock.DayIndex
             };
             _agents.Add(agent);
-            if (BeginTrip(agent, exitCell, ShopEntryCell(shop), AgentPhase.VisitingShop, grid))
+            if (BeginTrip(agent, exitCell, shopCell, AgentPhase.VisitingShop, grid))
                 return true;
 
             CancelCommercialVisit(agent);
@@ -1202,8 +1250,8 @@ namespace BuildATower
         void UpdateHotel(Agent agent, GameClock clock, TowerGrid grid)
         {
             var minute = clock.MinuteOfDay;
-            var exitCell = LobbyExitCell(grid);
-            var home = HomeCell(agent.HomeRoom, 0);
+            var home = HomeCell(agent.HomeRoom, agent.HomeSlot);
+            var exitCell = LobbyExitCell(grid, home.x);
 
             if (agent.Phase == AgentPhase.Outside &&
                 minute >= 16 * 60 &&
@@ -1223,7 +1271,7 @@ namespace BuildATower
                 agent.CheckInDay < clock.DayIndex &&
                 !agent.CheckedOutToday)
             {
-                BeginTrip(agent, agent.Cell, exitCell, AgentPhase.Outside, grid);
+                BeginTrip(agent, agent.Cell, LobbyExitCell(grid, agent.Cell.x), AgentPhase.Outside, grid);
                 agent.CheckedOutToday = true;
                 agent.HomeRoom?.MarkDirty();
             }
@@ -1401,15 +1449,30 @@ namespace BuildATower
 
         void UpdateStress(Agent agent, float deltaGameMinutes)
         {
-            var stuck = (agent.Phase == AgentPhase.Moving &&
-                         (agent.Path == null || agent.Path.Count == 0) &&
-                         agent.GoalCell.HasValue) ||
-                        (agent.Phase == AgentPhase.WaitingAtElevator &&
-                         agent.ElevatorWaitMinutes > 10f);
-            if (stuck)
+            var pathStuck = agent.Phase == AgentPhase.Moving &&
+                            (agent.Path == null || agent.Path.Count == 0) &&
+                            agent.GoalCell.HasValue;
+            if (pathStuck)
+            {
                 agent.Stress = Mathf.Min(100f, agent.Stress + StressGainPerSecond * deltaGameMinutes);
-            else
-                agent.Stress = Mathf.Max(0f, agent.Stress - StressDecayPerSecond * deltaGameMinutes);
+                return;
+            }
+
+            if (agent.Phase == AgentPhase.WaitingAtElevator &&
+                agent.ElevatorWaitMinutes > ElevatorWaitStressStartMinutes)
+            {
+                var t = Mathf.InverseLerp(
+                    ElevatorWaitStressStartMinutes,
+                    ElevatorWaitStressFullMinutes,
+                    agent.ElevatorWaitMinutes);
+                var mult = Mathf.Lerp(ElevatorWaitStressMinMult, ElevatorWaitStressMaxMult, t);
+                agent.Stress = Mathf.Min(
+                    100f,
+                    agent.Stress + StressGainPerSecond * mult * deltaGameMinutes);
+                return;
+            }
+
+            agent.Stress = Mathf.Max(0f, agent.Stress - StressDecayPerSecond * deltaGameMinutes);
         }
 
         void StartLeg(Agent agent, TransitLeg leg, bool allowReplan = true)
@@ -1751,9 +1814,10 @@ namespace BuildATower
 
         bool CanReachCondoFromLobby(TowerGrid grid, RoomInstance room)
         {
+            var home = HomeCell(room, 0);
             return _router.TryPlanTrip(
-                       LobbyExitCell(grid),
-                       HomeCell(room, 0),
+                       LobbyExitCell(grid, home.x),
+                       home,
                        out var legs) &&
                    legs.Count > 0;
         }
@@ -1781,6 +1845,17 @@ namespace BuildATower
         }
 
         public static Vector2Int LobbyExitCell(TowerGrid grid) =>
-            grid.HasLobby ? new Vector2Int(grid.MinX, TowerGrid.LobbyFloor) : Vector2Int.zero;
+            LobbyExitCell(grid, grid != null && grid.HasLobby ? grid.MinX : 0);
+
+        /// <summary>
+        /// Lobby entry/exit on Floor G, clamped to the lobby span, preferring <paramref name="preferX"/>
+        /// (typically the destination room's x) so traffic uses both sides of the lobby.
+        /// </summary>
+        public static Vector2Int LobbyExitCell(TowerGrid grid, int preferX)
+        {
+            if (grid == null || !grid.HasLobby) return Vector2Int.zero;
+            var x = Mathf.Clamp(preferX, grid.MinX, grid.MaxX);
+            return new Vector2Int(x, TowerGrid.LobbyFloor);
+        }
     }
 }

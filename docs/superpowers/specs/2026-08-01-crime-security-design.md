@@ -5,7 +5,7 @@
 **Depends on:** Stars3 ops (Security Post placeable + staffed-service pattern); agents + transit; commercial shop visits; hotel occupancy; stress / star gates  
 **Engine target:** Unity (2D Tilemap), desktop/Editor-first  
 **Parent roadmap:** Deeper economy → higher stars → **ops usefulness** → more transit → evaluation/heatmaps → polish  
-**Follow-up slice:** Research Lab upgrades (deferred — see §8)
+**Follow-up slice:** Research Lab tech tree — see `docs/superpowers/specs/2026-08-02-research-lab-design.md`
 
 ## 1. Goals
 

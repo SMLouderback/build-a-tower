@@ -6,16 +6,19 @@ namespace BuildATower
     public sealed class CrimeSystem
     {
         public const float MaxCrime = 100f;
-        public const float ShopRaisePerVisitorPerMinute = 0.8f;
-        public const float HotelRaisePerGuestPerMinute = 0.35f;
-        public const float NaturalDecayPerMinute = 0.05f;
-        public const float BaselineDecayPerStaffPerMinute = 0.08f;
-        public const float PatrolDecayPerMinute = 1.2f;
+        public const float ShopRaisePerVisitorPerMinute = 0.55f;
+        public const float HotelRaisePerGuestPerMinute = 0.25f;
+        public const float NaturalDecayPerMinute = 0.04f;
+        public const float BaselineDecayPerStaffPerMinute = 0.06f;
+        public const float PatrolDecayPerMinute = 0.7f;
         public const float PatrolAdjacentFactor = 0.5f;
-        public const float CriminalRaisePerMinute = 2.5f;
-        public const float CaptureCrimeDrop = 10f;
+        public const float CriminalRaisePerMinute = 1.5f;
+        public const float CaptureCrimeDrop = 8f;
+        /// <summary>EMA rate toward raw average (~12–15 game minutes to mostly catch up).</summary>
+        public const float SentimentAlphaPerMinute = 0.08f;
 
         readonly Dictionary<int, float> _crime = new();
+        float _sentiment;
 
         public float GetCrime(int floor) =>
             _crime.TryGetValue(floor, out var value) ? value : 0f;
@@ -34,6 +37,9 @@ namespace BuildATower
                 return sum / _crime.Count;
             }
         }
+
+        /// <summary>Smoothed tower crime for HUD / “sentiment” (lags raw <see cref="AverageCrime"/>).</summary>
+        public float DisplayCrime => _sentiment;
 
         public void Tick(
             float deltaGameMinutes,
@@ -85,6 +91,10 @@ namespace BuildATower
                     decay += patrol;
                 Add(floor, -decay);
             }
+
+            // Smooth HUD sentiment toward the current tower average.
+            var blend = 1f - Mathf.Exp(-SentimentAlphaPerMinute * deltaGameMinutes);
+            _sentiment = Mathf.Lerp(_sentiment, AverageCrime, blend);
         }
 
         public void ApplyCaptureDrop(int floor) =>

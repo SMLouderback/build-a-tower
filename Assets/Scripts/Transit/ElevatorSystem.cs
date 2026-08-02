@@ -199,8 +199,8 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Drops an agent from every landing queue and forgets its destination.
-        /// Used when a trip is abandoned so stale entries cannot strand anyone.
+        /// Drops an agent from every landing queue, car passenger list, and destination map.
+        /// Used when a trip is abandoned so stale entries cannot strand anyone or fill the car.
         /// </summary>
         public bool RemoveFromQueues(int agentId)
         {
@@ -209,6 +209,9 @@ namespace BuildATower
             {
                 removed |= RemoveFromQueueMap(shaft.UpQueues, agentId);
                 removed |= RemoveFromQueueMap(shaft.DownQueues, agentId);
+                if (shaft.Car?.PassengerIds != null &&
+                    shaft.Car.PassengerIds.Remove(agentId))
+                    removed = true;
             }
 
             _passengerDestFloor.Remove(agentId);
@@ -391,6 +394,14 @@ namespace BuildATower
                         shaft.Car.StateMinutes = 0f;
                         shaft.Car.Floor += shaft.Car.Direction == ElevatorDirection.Up ? 1 : -1;
 
+                        // Never walk the car off the shaft (ghost passengers / cleared dest).
+                        if (shaft.Car.Floor > shaft.MaxFloor || shaft.Car.Floor < shaft.MinFloor)
+                        {
+                            shaft.Car.Floor = Clamp(shaft.Car.Floor, shaft.MinFloor, shaft.MaxFloor);
+                            OpenDoors(shaft);
+                            break;
+                        }
+
                         if (ShouldStop(shaft))
                             OpenDoors(shaft);
                         break;
@@ -523,7 +534,15 @@ namespace BuildATower
             {
                 var agentId = shaft.Car.PassengerIds[i];
                 if (!_passengerDestFloor.TryGetValue(agentId, out var destination) ||
-                    destination != shaft.Car.Floor)
+                    !shaft.Serves(destination))
+                {
+                    // No/invalid destination — eject so ghosts cannot fill capacity forever.
+                    shaft.Car.PassengerIds.RemoveAt(i);
+                    _passengerDestFloor.Remove(agentId);
+                    continue;
+                }
+
+                if (destination != shaft.Car.Floor)
                     continue;
 
                 shaft.Car.PassengerIds.RemoveAt(i);
