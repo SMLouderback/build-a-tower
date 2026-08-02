@@ -200,9 +200,6 @@ namespace BuildATower
                 advanced = Mathf.Max(0, total - _lastTotalMinutes);
             _lastTotalMinutes = total;
 
-            // Capture before AI replans so same-floor pairs from the prior frame resolve.
-            TryCaptureCriminals(_crime);
-
             for (var i = 0; i < _agents.Count; i++)
             {
                 var agent = _agents[i];
@@ -231,6 +228,7 @@ namespace BuildATower
 
             UpdateStreetTraffic(clock, grid, currentStars, advanced);
             UpdateCriminalTraffic(deltaGameMinutes, grid, _crime);
+            // Single capture pass after movement so one Security captures at most one Criminal per Tick.
             TryCaptureCriminals(_crime);
             DespawnFinishedStreetVisitors();
             DespawnFinishedCriminals();
@@ -470,12 +468,18 @@ namespace BuildATower
             if (agent.VisitDwellRemaining > 0f) return;
             agent.VisitDwellRemaining = 0f;
             if (!TryStartCriminalRoam(agent, grid, _crime))
+            {
+                // No roam target: end life so leave/despawn frees the concurrent slot.
+                agent.CriminalDwellRemaining = 0f;
                 BeginLeaveTower(agent, grid);
+            }
         }
 
         void BeginLeaveTower(Agent agent, TowerGrid grid)
         {
             if (agent == null || grid == null) return;
+            if (agent.Role == AgentRole.Criminal)
+                agent.CriminalDwellRemaining = 0f;
             if (agent.Phase == AgentPhase.Outside) return;
             if (agent.Phase is AgentPhase.WaitingAtElevator or AgentPhase.Riding) return;
             if (agent.Phase == AgentPhase.Moving &&
@@ -501,19 +505,16 @@ namespace BuildATower
 
             if (agent.Phase == AgentPhase.Outside)
             {
-                return BeginTrip(agent, LobbyExitCell(grid), cell.Value, AgentPhase.Working, grid);
+                if (BeginTrip(agent, LobbyExitCell(grid), cell.Value, AgentPhase.Working, grid))
+                    return true;
+                // Path unavailable — still enter on the roam floor (avoids Outside + life soft-lock).
+                PlaceCriminalWorkingAt(agent, cell.Value);
+                return true;
             }
 
             if (agent.Cell.y == floor.Value)
             {
-                agent.Phase = AgentPhase.Working;
-                agent.PhaseAfterMove = AgentPhase.Working;
-                agent.GoalCell = null;
-                agent.Path?.Clear();
-                agent.PathIndex = 0;
-                agent.TripLegs?.Clear();
-                agent.TripLegIndex = 0;
-                ClearElevatorTripState(agent);
+                PlaceCriminalWorkingAt(agent, agent.Cell);
                 return true;
             }
 
@@ -524,6 +525,21 @@ namespace BuildATower
             return false;
         }
 
+        static void PlaceCriminalWorkingAt(Agent agent, Vector2Int cell)
+        {
+            agent.Cell = cell;
+            agent.WorldPosition = new Vector2(cell.x + 0.5f, cell.y + 0.5f);
+            agent.Phase = AgentPhase.Working;
+            agent.PhaseAfterMove = AgentPhase.Working;
+            agent.GoalCell = null;
+            agent.Path?.Clear();
+            agent.PathIndex = 0;
+            agent.TripLegs?.Clear();
+            agent.TripLegIndex = 0;
+            ClearElevatorTripState(agent);
+            agent.Visible = true;
+        }
+
         int? PickCriminalRoamFloor(CrimeSystem crime, TowerGrid grid)
         {
             if (grid == null) return null;
@@ -531,7 +547,8 @@ namespace BuildATower
             _criminalFloorScratch.Clear();
             foreach (var room in grid.Rooms)
             {
-                if (room?.Type == null) continue;
+                // Use `is null` (not ==) so net8 hosts can use uninitialized RoomTypeSO fixtures.
+                if (room is null || room.Type is null) continue;
                 var isTarget =
                     ShopVisitRules.IsShop(room.Type) ||
                     room.Type.category == RoomCategory.Hotel;
@@ -690,7 +707,7 @@ namespace BuildATower
             RoomInstance best = null;
             foreach (var room in grid.Rooms)
             {
-                if (room?.Type == null) continue;
+                if (room is null || room.Type is null) continue;
                 if (floor < room.Origin.y || floor >= room.Origin.y + room.Size.y) continue;
                 if (best == null || room.InstanceId < best.InstanceId)
                     best = room;
@@ -1125,13 +1142,12 @@ namespace BuildATower
             if (TryStartCriminalRoam(agent, grid, crime))
                 return true;
 
-            // No roam target — linger at lobby so capture/floor contribution still work.
-            agent.Cell = exitCell;
-            agent.WorldPosition = new Vector2(exitCell.x + 0.5f, exitCell.y + 0.5f);
-            agent.Phase = AgentPhase.Working;
-            agent.Visible = true;
-            agent.VisitDwellRemaining = CriminalFloorDwellMinutes;
-            return true;
+            // No roam target — do not consume a concurrent slot (Outside + life > 0 soft-lock).
+            agent.CriminalDwellRemaining = 0f;
+            agent.Phase = AgentPhase.Outside;
+            agent.Visible = false;
+            _agents.Remove(agent);
+            return false;
         }
 
         int CountCriminals()
@@ -1161,7 +1177,9 @@ namespace BuildATower
                 var agent = _agents[i];
                 if (agent.Role != AgentRole.Criminal) continue;
                 if (agent.Phase != AgentPhase.Outside) continue;
-                if (agent.CriminalDwellRemaining > 0f) continue;
+                // Outside criminals never linger: life should already be 0 after leave/spawn-fail.
+                // Clear any leftover life so a stuck Outside agent cannot hold a concurrent slot.
+                agent.CriminalDwellRemaining = 0f;
                 _agents.RemoveAt(i);
             }
         }
@@ -1437,7 +1455,11 @@ namespace BuildATower
                     _onCondoResidentMovedIn?.Invoke(agent.HomeRoom);
             }
             if (agent.Phase == AgentPhase.Outside)
+            {
                 agent.Visible = false;
+                if (agent.Role == AgentRole.Criminal)
+                    agent.CriminalDwellRemaining = 0f;
+            }
         }
 
         /// <summary>
