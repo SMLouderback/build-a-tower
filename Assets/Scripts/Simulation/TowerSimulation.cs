@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace BuildATower
@@ -18,6 +19,7 @@ namespace BuildATower
         ElevatorSystem _elevators;
         TransitRouter _router;
         AgentSystem _agents;
+        CrimeSystem _crime;
         EconomySystem _economy;
         StarSystem _stars;
         MarketClimate _climate;
@@ -27,6 +29,7 @@ namespace BuildATower
 
         public GameClock Clock => _clock;
         public AgentSystem Agents => _agents;
+        public CrimeSystem Crime => _crime;
         public EconomySystem Economy => _economy;
         public StarSystem Stars => _stars;
         public MarketClimate Climate => _climate;
@@ -51,6 +54,7 @@ namespace BuildATower
             _pathfinder = new StairsPathfinder();
             _router = new TransitRouter(_pathfinder, _elevators);
             _agents = new AgentSystem(_router);
+            _crime = new CrimeSystem();
             _economy = new EconomySystem();
             _stars = new StarSystem();
             _climate = new MarketClimate();
@@ -111,6 +115,13 @@ namespace BuildATower
                 build.Grid,
                 _stars?.CurrentStars ?? 0,
                 _climate);
+            _crime.Tick(
+                _clock.LastTickGameMinutes,
+                CrimeFloorLoads.ShopLoadByFloor(build.Grid),
+                CrimeFloorLoads.HotelLoadByFloor(build.Grid, _agents.Agents),
+                CountStaffedSecurity(build.Grid),
+                Array.Empty<int>(),
+                Array.Empty<int>());
             if (agentView != null)
                 agentView.Sync(_agents.Agents);
         }
@@ -161,6 +172,21 @@ namespace BuildATower
             }
 
             _lastDayIndex = _clock.DayIndex;
+        }
+
+        static int CountStaffedSecurity(TowerGrid grid)
+        {
+            if (grid == null) return 0;
+
+            var total = 0;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type?.id != "service_security") continue;
+                if (room.IsBroken) continue;
+                total += room.StaffedWorkers;
+            }
+
+            return total;
         }
     }
 }
