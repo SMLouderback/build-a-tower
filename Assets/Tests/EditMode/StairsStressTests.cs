@@ -57,6 +57,28 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Stair_crossing_within_comfort_adds_no_overcap_stress()
+        {
+            var a = new Agent(1, AgentRole.OfficeWorker, null, Vector2Int.zero);
+            a.Stress = 10f;
+            Assert.IsTrue(AgentSystem.TryApplyStairFloorCrossing(a, floorsCrossedAfterStep: 3, out var refused));
+            Assert.IsFalse(refused);
+            Assert.AreEqual(10f, a.Stress);
+        }
+
+        [Test]
+        public void Stair_crossing_over_cap_adds_stress_and_refuses_at_100()
+        {
+            var a = new Agent(1, AgentRole.OfficeWorker, null, Vector2Int.zero);
+            a.Stress = 90f;
+            Assert.IsTrue(AgentSystem.TryApplyStairFloorCrossing(a, 4, out var refused));
+            Assert.IsFalse(refused);
+            Assert.AreEqual(100f, a.Stress); // 90+25 capped
+            Assert.IsFalse(AgentSystem.TryApplyStairFloorCrossing(a, 5, out refused));
+            Assert.IsTrue(refused);
+        }
+
+        [Test]
         public void Pathfinder_comfort_span_rejects_long_stairs_unlimited_succeeds()
         {
             var grid = new TowerGrid();

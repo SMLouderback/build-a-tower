@@ -1303,7 +1303,7 @@ namespace BuildATower
                 agent.Visible = true;
             }
 
-            if (_router.TryPlanTrip(agent.Cell, to, out var legs) && legs.Count > 0)
+            if (_router.TryPlanTrip(agent.Cell, to, agent.Stress, out var legs) && legs.Count > 0)
             {
                 agent.TripLegs = legs;
                 agent.TripLegIndex = 0;
@@ -1313,6 +1313,40 @@ namespace BuildATower
 
             StallInPlace(agent);
             return false;
+        }
+
+        /// <summary>
+        /// Applies over-cap stair stress for a floor crossing on a Stairs leg.
+        /// Comfort floors (1–3) add no stress. Floor 4+ adds
+        /// <see cref="ElevatorRouting.StairsOverCapStressPerFloor"/> when stress &lt; 100
+        /// before the step (clamped to 100). Returns false and sets <paramref name="refused"/>
+        /// when stress is already ≥ 100 on an over-cap floor.
+        /// </summary>
+        public static bool TryApplyStairFloorCrossing(
+            Agent agent,
+            int floorsCrossedAfterStep,
+            out bool refused)
+        {
+            refused = false;
+            if (agent == null)
+            {
+                refused = true;
+                return false;
+            }
+
+            if (floorsCrossedAfterStep <= ElevatorRouting.StairsComfortFloorSpan)
+                return true;
+
+            if (agent.Stress >= 100f)
+            {
+                refused = true;
+                return false;
+            }
+
+            agent.Stress = Mathf.Min(
+                100f,
+                agent.Stress + ElevatorRouting.StairsOverCapStressPerFloor);
+            return true;
         }
 
         void StepMovement(Agent agent, float deltaGameMinutes)
@@ -1375,6 +1409,23 @@ namespace BuildATower
 
                 if (distance <= maxStep)
                 {
+                    var previousCell = agent.Cell;
+                    if (IsCurrentStairsLeg(agent) && target.y != previousCell.y)
+                    {
+                        agent.StairsFloorsCrossedThisLeg++;
+                        if (!TryApplyStairFloorCrossing(
+                                agent,
+                                agent.StairsFloorsCrossedThisLeg,
+                                out _))
+                        {
+                            agent.StairsFloorsCrossedThisLeg--;
+                            agent.Path.Clear();
+                            agent.PathIndex = 0;
+                            ReplanTrip(agent, allowReplan: true);
+                            break;
+                        }
+                    }
+
                     agent.WorldPosition = targetPos;
                     agent.Cell = target;
                     agent.PathIndex++;
@@ -1479,6 +1530,8 @@ namespace BuildATower
         {
             if (leg.Kind != TransitLegKind.Elevator)
             {
+                if (leg.Kind == TransitLegKind.Stairs)
+                    agent.StairsFloorsCrossedThisLeg = 0;
                 agent.Path = leg.Cells ?? new List<Vector2Int>();
                 agent.PathIndex = 0;
                 agent.Phase = AgentPhase.Moving;
@@ -1778,7 +1831,7 @@ namespace BuildATower
                 return;
             }
 
-            if (_router.TryPlanTrip(agent.Cell, agent.GoalCell.Value, out var legs) &&
+            if (_router.TryPlanTrip(agent.Cell, agent.GoalCell.Value, agent.Stress, out var legs) &&
                 legs.Count > 0)
             {
                 agent.TripLegs = legs;
@@ -1788,6 +1841,15 @@ namespace BuildATower
             }
 
             StallInPlace(agent);
+        }
+
+        static bool IsCurrentStairsLeg(Agent agent)
+        {
+            if (agent.TripLegs == null ||
+                agent.TripLegIndex < 0 ||
+                agent.TripLegIndex >= agent.TripLegs.Count)
+                return false;
+            return agent.TripLegs[agent.TripLegIndex].Kind == TransitLegKind.Stairs;
         }
 
         static void ClearElevatorTripState(Agent agent)

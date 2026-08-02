@@ -33,6 +33,9 @@ namespace BuildATower
         public int ElevatorDestFloor { get; set; }
         public int ElevatorEntryFloor { get; set; }
 
+        /// <summary>Floors already crossed on the current Stairs leg (for comfort/over-cap).</summary>
+        public int StairsFloorsCrossedThisLeg { get; set; }
+
         /// <summary>
         /// Shaft the agent is committed to (room instance id), or 0 when none.
         /// Resolved by id so maintenance mode cannot orphan a waiter or rider.
