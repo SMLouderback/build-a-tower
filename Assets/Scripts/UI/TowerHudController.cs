@@ -4,7 +4,7 @@ using UnityEngine;
 namespace BuildATower
 {
     /// <summary>
-    /// Progressive IMGUI HUD: core strip + accordion sections.
+    /// Progressive IMGUI HUD: core strip + accordion sections + compact icon build grid.
     /// Keep the Game tab Scale at 1x (or Scale to Fit). Zoom &gt; 1x crops the HUD.
     /// </summary>
     public sealed class TowerHudController : MonoBehaviour
@@ -18,18 +18,34 @@ namespace BuildATower
         [SerializeField] float panelWidth = 280f;
         [SerializeField] float edgeGapPixels = 12f;
 
+        const float IconSize = 36f;
+        const float IconGap = 4f;
+
         Rect _panelRect;
+        Rect _topBarRect;
+        Rect _goalsDropdownRect;
         readonly List<RoomTypeSO> _roomButtons = new();
         List<BuildCatalogFamily> _catalog = new();
 
         bool _goalsOpen;
-        bool _economyOpen;
         bool _buildOpen = true;
         bool _selectionOpen = true;
         BuildFamily? _expandedFamily;
         BuildSubgroup? _expandedShopSubgroup;
+        Vector2 _scroll;
+        float _contentHeight = 400f;
+
+        Texture2D _whiteTex;
+        string _hoverTooltip;
 
         public Rect PanelScreenRect => _panelRect;
+        public Rect TopBarScreenRect => _topBarRect;
+
+        /// <summary>True when the GUI point (IMGUI / flipped Y) is over the top bar, goals dropdown, or side panel.</summary>
+        public bool ContainsGuiPoint(Vector2 guiPoint) =>
+            _topBarRect.Contains(guiPoint) ||
+            _panelRect.Contains(guiPoint) ||
+            (_goalsOpen && _goalsDropdownRect.Contains(guiPoint));
 
         void Awake()
         {
@@ -91,14 +107,11 @@ namespace BuildATower
             if (simulation == null)
                 simulation = build.GetComponent<TowerSimulation>() ?? FindAnyObjectByType<TowerSimulation>();
 
+            _hoverTooltip = null;
+
             var gap = edgeGapPixels;
-            var x = gap;
-            var y = gap;
-            var width = Mathf.Min(panelWidth, Screen.width - gap * 2f);
-            var inner = Mathf.Max(80f, width - 16f);
-            const float row = 22f;
-            const float btnH = 26f;
-            const float roomBtnH = 34f;
+            const float row = 20f;
+            const float btnH = 22f;
 
             var label = new GUIStyle(GUI.skin.label)
             {
@@ -115,21 +128,29 @@ namespace BuildATower
 
             var section = new GUIStyle(GUI.skin.button)
             {
-                fontSize = 12,
+                fontSize = 11,
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleLeft
             };
-            var roomButton = new GUIStyle(GUI.skin.button)
+            var iconStyle = new GUIStyle(GUI.skin.button)
             {
-                fontSize = 10,
+                fontSize = 11,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                padding = new RectOffset(2, 2, 2, 2),
+                margin = new RectOffset(0, 0, 0, 0)
+            };
+            var barLabel = new GUIStyle(label)
+            {
+                alignment = TextAnchor.MiddleLeft,
+                fontSize = 12
+            };
+            var barButton = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = 11,
+                fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter
             };
-
-            var help = string.IsNullOrEmpty(build.HelpText) ? "—" : build.HelpText;
-            var helpHeight = Mathf.Clamp(
-                label.CalcHeight(new GUIContent(help), inner),
-                row,
-                row * 3f);
 
             var stars = simulation?.Stars;
             var agents = simulation?.Agents;
@@ -139,94 +160,59 @@ namespace BuildATower
             var economyUnlocked = simulation?.Economy != null && simulation.Economy.HasRecordedEconomyEvent;
             var hasSelection = build.SelectedRoom != null;
 
-            // First pass estimate; final rect set from cy. Tall box so expanded Build stays covered.
-            _panelRect = new Rect(x, y, width, Mathf.Max(240f, Screen.height - y - gap));
+            var topBarHeight = DrawTopInfoBar(
+                gap,
+                barLabel,
+                barButton,
+                title,
+                label,
+                stars,
+                agents,
+                population,
+                averageStress,
+                goalsUnlocked,
+                economyUnlocked);
+
+            var x = gap;
+            var y = gap + topBarHeight + 6f;
+            var width = Mathf.Min(panelWidth, Screen.width - gap * 2f);
+            var inner = Mathf.Max(80f, width - 16f);
+            var maxPanelHeight = Mathf.Max(160f, Screen.height - y - gap);
+            var panelHeight = Mathf.Clamp(_contentHeight + 16f, 160f, maxPanelHeight);
+
+            var help = string.IsNullOrEmpty(build.HelpText) ? "—" : build.HelpText;
+            var helpHeight = Mathf.Clamp(
+                label.CalcHeight(new GUIContent(help), inner),
+                row,
+                row * 3f);
+
+            _panelRect = new Rect(x, y, width, panelHeight);
             GUI.Box(_panelRect, GUIContent.none);
 
-            var cx = x + 8f;
-            var cy = y + 8f;
+            var viewRect = new Rect(x + 4f, y + 4f, width - 8f, panelHeight - 8f);
+            var contentWidth = inner;
+            var contentRect = new Rect(0f, 0f, contentWidth - 12f, Mathf.Max(_contentHeight, viewRect.height));
+            _scroll = GUI.BeginScrollView(viewRect, _scroll, contentRect, false, true);
 
-            GUI.Label(new Rect(cx, cy, inner, row), "Build-A-Tower", title);
+            var cx = 4f;
+            var cy = 0f;
+            var contentInner = contentWidth - 20f;
+
+            GUI.Label(new Rect(cx, cy, contentInner, row), "Build", title);
             cy += row;
 
-            GUI.Label(new Rect(cx, cy, inner, helpHeight), help, label);
+            GUI.Label(new Rect(cx, cy, contentInner, helpHeight), help, label);
             cy += helpHeight + 4f;
 
-            GUI.Label(new Rect(cx, cy, inner, row), $"Funds: ${build.Wallet.Balance:N0}", label);
-            cy += row;
-
-            GUI.Label(
-                new Rect(cx, cy, inner, row),
-                stars != null ? $"Stars: {stars.CurrentStars}/{StarSystem.MaxStars}" : "Stars: —",
-                label);
-            cy += row;
-
-            var clockText = simulation?.Clock != null ? simulation.Clock.FormatHud() : "—";
-            GUI.Label(new Rect(cx, cy, inner, row), $"Time: {clockText}", label);
-            cy += row;
-
-            var climateName = simulation?.Climate?.Name ?? "—";
-            GUI.Label(new Rect(cx, cy, inner, row), $"Climate: {climateName}", label);
-            cy += row;
-
-            DrawTimeSpeedButtons(cx, cy, inner, btnH);
-            cy += btnH + 6f;
-
-            if (goalsUnlocked)
-            {
-                if (DrawSectionHeader(ref cy, cx, inner, btnH, section, "Goals", ref _goalsOpen))
-                {
-                    var starGoalLines = stars != null
-                        ? stars.FormatNextStarGoal(build.Grid, averageStress, population).Split('\n')
-                        : new[] { "Next ★: —" };
-                    foreach (var goalLine in starGoalLines)
-                    {
-                        GUI.Label(new Rect(cx, cy, inner, row), goalLine, label);
-                        cy += row;
-                    }
-
-                    cy += 4f;
-                }
-            }
-
-            if (economyUnlocked)
-            {
-                if (DrawSectionHeader(ref cy, cx, inner, btnH, section, "Economy", ref _economyOpen))
-                {
-                    if (agents != null)
-                    {
-                        GUI.Label(
-                            new Rect(cx, cy, inner, row),
-                            $"Population: {agents.Population} | Stress: {agents.AverageStress:0}",
-                            label);
-                    }
-                    else
-                    {
-                        GUI.Label(new Rect(cx, cy, inner, row), "Population: —", label);
-                    }
-
-                    cy += row;
-
-                    var economy = simulation?.Economy;
-                    GUI.Label(
-                        new Rect(cx, cy, inner, row),
-                        economy != null
-                            ? $"Last Net: ${economy.LastNet:N0} (${economy.LastIncome:N0} / -${economy.LastExpense:N0})"
-                            : "Last Net: —",
-                        label);
-                    cy += row + 4f;
-                }
-            }
-
-            if (DrawSectionHeader(ref cy, cx, inner, btnH, section, "Build", ref _buildOpen))
+            if (DrawSectionHeader(ref cy, cx, contentInner, btnH, section, "Catalog", ref _buildOpen))
             {
                 var roomName = build.SelectedRoomType != null ? build.SelectedRoomType.displayName : "—";
-                GUI.Label(new Rect(cx, cy, inner, row), $"Tool: {build.CurrentTool} / {roomName}", label);
+                GUI.Label(new Rect(cx, cy, contentInner, row), $"Tool: {build.CurrentTool} / {roomName}", label);
                 cy += row;
 
                 foreach (var economyLine in SelectedEconomyLines(build.SelectedRoomType))
                 {
-                    GUI.Label(new Rect(cx, cy, inner, row), economyLine, label);
+                    GUI.Label(new Rect(cx, cy, contentInner, row), economyLine, label);
                     cy += row;
                 }
 
@@ -234,44 +220,34 @@ namespace BuildATower
                 {
                     var c = build.HoverCell.Value;
                     var floorLabel = c.y > 0 ? c.y.ToString() : c.y < 0 ? $"B{-c.y}" : "G";
-                    GUI.Label(new Rect(cx, cy, inner, row), $"Cell: ({c.x}, floor {floorLabel})", label);
+                    GUI.Label(new Rect(cx, cy, contentInner, row), $"Cell: ({c.x}, floor {floorLabel})", label);
                 }
                 else
                 {
-                    GUI.Label(new Rect(cx, cy, inner, row), "Cell: —", label);
+                    GUI.Label(new Rect(cx, cy, contentInner, row), "Cell: —", label);
                 }
 
                 cy += row + 4f;
 
-                cy = DrawNestedCatalog(cx, cy, inner, row, btnH, roomBtnH, roomButton, section, stars);
+                cy = DrawIconCatalog(cx, cy, contentInner, row, iconStyle, stars);
                 cy += 4f;
 
-                GUI.Label(new Rect(cx, cy, inner, row), "Tools", title);
+                GUI.Label(new Rect(cx, cy, contentInner, row), "Tools");
                 cy += row;
-
-                if (GUI.Button(new Rect(cx, cy, inner, btnH), "Selector"))
-                    build.SelectTool();
-                cy += btnH + 4f;
-
-                if (GUI.Button(new Rect(cx, cy, inner, btnH), "Extend Lobby"))
-                    build.SelectLobbyTool();
-                cy += btnH + 4f;
-
-                if (GUI.Button(new Rect(cx, cy, inner, btnH), "Bulldoze"))
-                    build.SetTool(BuildTool.Bulldoze);
-                cy += btnH + 6f;
+                cy = DrawToolIcons(cx, cy, contentInner, iconStyle);
+                cy += 6f;
             }
 
             if (hasSelection)
             {
-                if (DrawSectionHeader(ref cy, cx, inner, btnH, section, "Selection", ref _selectionOpen))
+                if (DrawSectionHeader(ref cy, cx, contentInner, btnH, section, "Selection", ref _selectionOpen))
                 {
                     var selection = build.GetSelectionSummary();
                     if (selection != null)
                     {
                         foreach (var line in selection.Split('\n'))
                         {
-                            GUI.Label(new Rect(cx, cy, inner, row), line, label);
+                            GUI.Label(new Rect(cx, cy, contentInner, row), line, label);
                             cy += row;
                         }
                     }
@@ -281,25 +257,25 @@ namespace BuildATower
                                  agents?.Agents,
                                  simulation?.Economy))
                     {
-                        GUI.Label(new Rect(cx, cy, inner, row), line, label);
+                        GUI.Label(new Rect(cx, cy, contentInner, row), line, label);
                         cy += row;
                     }
 
                     if (PricePricing.IsPricedRoom(build.SelectedRoom?.Type))
-                        cy = DrawPriceTierButtons(cx, cy, inner, btnH, row, label, stars);
+                        cy = DrawPriceTierButtons(cx, cy, contentInner, btnH, row, label, stars);
 
                     if (BuildController.IsStaffedServiceRoom(build.SelectedRoom?.Type))
-                        cy = DrawStaffStepper(cx, cy, inner, btnH, row, label);
+                        cy = DrawStaffStepper(cx, cy, contentInner, btnH, row, label);
 
                     var elevStatus = build.GetElevatorStatusText();
                     if (elevStatus != null)
                     {
-                        GUI.Label(new Rect(cx, cy, inner, row), $"Elevator: {elevStatus}", label);
+                        GUI.Label(new Rect(cx, cy, contentInner, row), $"Elevator: {elevStatus}", label);
                         cy += row;
                         var simElev = simulation?.Elevators?.FindByRoomId(build.SelectedRoom.InstanceId);
                         var inMaint = simElev != null && simElev.InMaintenance;
                         var maintLabel = inMaint ? "Exit Maintenance" : "Enter Maintenance";
-                        if (GUI.Button(new Rect(cx, cy, inner, btnH), maintLabel))
+                        if (GUI.Button(new Rect(cx, cy, contentInner, btnH), maintLabel))
                             build.TrySetSelectedElevatorMaintenance(!inMaint);
                         cy += btnH;
                     }
@@ -308,7 +284,162 @@ namespace BuildATower
                 }
             }
 
-            _panelRect = new Rect(x, y, width, cy + 8f - y);
+            _contentHeight = cy + 8f;
+            GUI.EndScrollView();
+
+            DrawHoverTooltip(label);
+        }
+
+        /// <summary>
+        /// Full-width status strip. Returns fixed bar height only — Goals dropdown overlays
+        /// and must not push the left build panel down.
+        /// </summary>
+        float DrawTopInfoBar(
+            float gap,
+            GUIStyle barLabel,
+            GUIStyle barButton,
+            GUIStyle title,
+            GUIStyle wrapLabel,
+            StarSystem stars,
+            AgentSystem agents,
+            int population,
+            float averageStress,
+            bool goalsUnlocked,
+            bool economyUnlocked)
+        {
+            const float barH = 36f;
+            const float pad = 8f;
+            var barWidth = Screen.width - gap * 2f;
+            _topBarRect = new Rect(gap, gap, barWidth, barH);
+            _goalsDropdownRect = Rect.zero;
+            GUI.Box(_topBarRect, GUIContent.none);
+
+            var x = gap + pad;
+            var y = gap + 6f;
+            var lineH = 24f;
+            var right = gap + barWidth - pad;
+
+            void DrawChip(string text, float width)
+            {
+                GUI.Label(new Rect(x, y, width, lineH), text, barLabel);
+                x += width + 10f;
+            }
+
+            GUI.Label(new Rect(x, y, 100f, lineH), "Build-A-Tower", title);
+            x += 108f;
+
+            // Savings / income / expenses / avg daily profit stay grouped together.
+            var economy = simulation?.Economy;
+            if (economyUnlocked && economy != null)
+            {
+                DrawChip($"Save ${build.Wallet.Balance:N0}", 118f);
+                DrawChip($"+${economy.LastIncome:N0}", 88f);
+                DrawChip($"-${economy.LastExpense:N0}", 88f);
+                DrawChip($"Avg ${economy.LastNet:N0}/d", 110f);
+            }
+            else
+            {
+                DrawChip($"Save ${build.Wallet.Balance:N0}", 118f);
+            }
+
+            x = DrawStarTrack(x, y, lineH, stars != null ? stars.CurrentStars : 0);
+
+            var clockText = simulation?.Clock != null ? simulation.Clock.FormatHud() : "—";
+            DrawChip(clockText, 150f);
+
+            var climateName = simulation?.Climate?.Name ?? "—";
+            DrawChip(climateName, 78f);
+
+            var speedWidth = 236f;
+            if (x + speedWidth < right - 200f)
+            {
+                DrawTimeSpeedButtons(x, y, speedWidth, lineH);
+                x += speedWidth + 10f;
+            }
+
+            if (goalsUnlocked)
+            {
+                var pop = agents != null ? agents.Population : population;
+                var stress = agents != null ? agents.AverageStress : averageStress;
+                DrawChip($"Pop {pop}", 64f);
+                DrawChip($"Stress {stress:0}", 78f);
+                DrawChip($"Crime {simulation.Crime?.AverageCrime ?? 0f:0}", 72f);
+            }
+
+            if (goalsUnlocked)
+            {
+                var goalsBtnW = 72f;
+                var goalsX = right - goalsBtnW;
+                var goalsRect = new Rect(goalsX, y, goalsBtnW, lineH);
+                var arrow = _goalsOpen ? "▼" : "▶";
+                if (GUI.Button(goalsRect, $"{arrow} Goals", barButton))
+                    _goalsOpen = !_goalsOpen;
+
+                if (_goalsOpen)
+                {
+                    var goalLines = stars != null
+                        ? stars.FormatNextStarGoal(build.Grid, averageStress, population).Split('\n')
+                        : new[] { "Next ★: —" };
+                    var dropW = Mathf.Min(320f, barWidth);
+                    var dropH = 8f + goalLines.Length * 18f + 8f;
+                    _goalsDropdownRect = new Rect(right - dropW, gap + barH, dropW, dropH);
+                    GUI.Box(_goalsDropdownRect, GUIContent.none);
+                    var gy = _goalsDropdownRect.y + 6f;
+                    foreach (var goalLine in goalLines)
+                    {
+                        GUI.Label(
+                            new Rect(_goalsDropdownRect.x + 8f, gy, dropW - 16f, 18f),
+                            goalLine,
+                            wrapLabel);
+                        gy += 18f;
+                    }
+                }
+            }
+
+            // Fixed height so opening Goals never shifts the left HUD.
+            return barH;
+        }
+
+        /// <summary>
+        /// Draws all <see cref="StarSystem.StarSlots"/> stars: grey until earned, gold when earned.
+        /// Returns the next x after the track (+ trailing gap).
+        /// </summary>
+        static float DrawStarTrack(float x, float y, float lineH, int earnedStars)
+        {
+            const float starW = 16f;
+            var gold = new Color(1f, 0.84f, 0.2f, 1f);
+            var grey = new Color(0.42f, 0.42f, 0.42f, 1f);
+            var style = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 16,
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = FontStyle.Bold
+            };
+
+            var filled = Mathf.Clamp(earnedStars, 0, StarSystem.StarSlots);
+            for (var i = 1; i <= StarSystem.StarSlots; i++)
+            {
+                style.normal.textColor = i <= filled ? gold : grey;
+                GUI.Label(new Rect(x, y - 1f, starW, lineH), "★", style);
+                x += starW;
+            }
+
+            return x + 10f;
+        }
+
+        void DrawHoverTooltip(GUIStyle label)
+        {
+            var tip = string.IsNullOrEmpty(_hoverTooltip) ? GUI.tooltip : _hoverTooltip;
+            if (string.IsNullOrEmpty(tip)) return;
+
+            var mouse = Event.current.mousePosition;
+            var width = 220f;
+            var height = label.CalcHeight(new GUIContent(tip), width - 12f) + 10f;
+            var tipX = Mathf.Min(mouse.x + 14f, Screen.width - width - 8f);
+            var tipY = Mathf.Min(mouse.y + 18f, Screen.height - height - 8f);
+            var rect = new Rect(tipX, tipY, width, height);
+            GUI.Box(rect, GUIContent.none);
+            GUI.Label(new Rect(rect.x + 6f, rect.y + 4f, rect.width - 12f, rect.height - 8f), tip, label);
         }
 
         static bool DrawSectionHeader(
@@ -327,92 +458,348 @@ namespace BuildATower
             return open;
         }
 
-        float DrawNestedCatalog(
+        float DrawIconCatalog(
             float cx,
             float cy,
             float inner,
             float row,
-            float btnH,
-            float roomBtnH,
-            GUIStyle roomButton,
-            GUIStyle section,
+            GUIStyle iconStyle,
             StarSystem stars)
         {
+            GUI.Label(new Rect(cx, cy, inner, row), "Categories");
+            cy += row;
+
+            cy = DrawIconRow(
+                cx,
+                cy,
+                inner,
+                _catalog.Count,
+                i =>
+                {
+                    var family = _catalog[i];
+                    var selected = _expandedFamily == family.Family;
+                    var tip = $"{family.Label}\nClick to {(selected ? "collapse" : "expand")}";
+                    if (DrawIconButton(
+                            IconRect(cx, cy, inner, i),
+                            FamilyGlyph(family.Family),
+                            tip,
+                            FamilyColor(family.Family),
+                            selected,
+                            enabled: true,
+                            iconStyle))
+                    {
+                        _expandedFamily = selected ? null : family.Family;
+                        if (_expandedFamily != BuildFamily.Shops)
+                            _expandedShopSubgroup = null;
+                    }
+                });
+
+            if (!_expandedFamily.HasValue)
+                return cy;
+
+            BuildCatalogFamily active = null;
             foreach (var family in _catalog)
             {
-                var expanded = _expandedFamily == family.Family;
-                var arrow = expanded ? "▼" : "▶";
-                if (GUI.Button(new Rect(cx, cy, inner, btnH), $"{arrow} {family.Label}", section))
-                    _expandedFamily = expanded ? null : family.Family;
-                cy += btnH + 4f;
-
-                if (_expandedFamily != family.Family)
-                    continue;
-
-                if (family.Family == BuildFamily.Shops)
+                if (family.Family == _expandedFamily)
                 {
-                    foreach (var subgroup in family.Subgroups)
-                    {
-                        var subOpen = _expandedShopSubgroup == subgroup.Subgroup;
-                        var subArrow = subOpen ? "▼" : "▶";
-                        if (GUI.Button(
-                                new Rect(cx + 8f, cy, inner - 8f, btnH),
-                                $"{subArrow} {subgroup.Label}",
-                                section))
-                            _expandedShopSubgroup = subOpen ? null : subgroup.Subgroup;
-                        cy += btnH + 4f;
+                    active = family;
+                    break;
+                }
+            }
 
-                        if (_expandedShopSubgroup == subgroup.Subgroup)
-                            cy = DrawRoomGrid(cx + 8f, cy, inner - 8f, roomBtnH, roomButton, subgroup.Rooms, stars);
+            if (active == null)
+                return cy;
+
+            GUI.Label(new Rect(cx, cy, inner, row), active.Label);
+            cy += row;
+
+            if (active.Family == BuildFamily.Shops)
+            {
+                cy = DrawIconRow(
+                    cx,
+                    cy,
+                    inner,
+                    active.Subgroups.Count,
+                    i =>
+                    {
+                        var subgroup = active.Subgroups[i];
+                        var selected = _expandedShopSubgroup == subgroup.Subgroup;
+                        var tip = $"{active.Label} → {subgroup.Label}";
+                        if (DrawIconButton(
+                                IconRect(cx, cy, inner, i),
+                                SubgroupGlyph(subgroup.Subgroup),
+                                tip,
+                                FamilyColor(BuildFamily.Shops),
+                                selected,
+                                enabled: true,
+                                iconStyle))
+                            _expandedShopSubgroup = selected ? null : subgroup.Subgroup;
+                    });
+
+                if (_expandedShopSubgroup.HasValue)
+                {
+                    foreach (var subgroup in active.Subgroups)
+                    {
+                        if (subgroup.Subgroup != _expandedShopSubgroup) continue;
+                        GUI.Label(new Rect(cx, cy, inner, row), subgroup.Label);
+                        cy += row;
+                        cy = DrawRoomIconGrid(cx, cy, inner, iconStyle, subgroup.Rooms, stars);
+                        break;
                     }
                 }
-                else
-                {
-                    cy = DrawRoomGrid(cx + 8f, cy, inner - 8f, roomBtnH, roomButton, family.Rooms, stars);
-                }
+            }
+            else
+            {
+                cy = DrawRoomIconGrid(cx, cy, inner, iconStyle, active.Rooms, stars);
             }
 
             return cy;
         }
 
-        float DrawRoomGrid(
+        float DrawRoomIconGrid(
             float cx,
             float cy,
             float inner,
-            float roomBtnH,
-            GUIStyle roomButton,
+            GUIStyle iconStyle,
             List<RoomTypeSO> rooms,
             StarSystem stars)
         {
-            var col = 0;
-            var rowY = cy;
+            var count = 0;
             foreach (var room in rooms)
             {
-                if (room == null) continue;
-                var captured = room;
-                var nameText = ShortLabel(room.displayName);
-                var bw = (inner - 4f) * 0.5f;
-                var bx = cx + col * (bw + 4f);
-                var canBuild = stars == null || stars.CanBuild(room);
-                if (!canBuild)
-                    nameText = $"{nameText} ({room.requiredStars}★)";
-                var labelText = $"{nameText}\n{RoomEconomyFormat.ButtonTag(room)}";
-                var wasEnabled = GUI.enabled;
-                GUI.enabled = wasEnabled && canBuild;
-                if (GUI.Button(new Rect(bx, rowY, bw, roomBtnH), labelText, roomButton))
-                    build.SetRoomType(captured);
-                GUI.enabled = wasEnabled;
-
-                col++;
-                if (col >= 2)
-                {
-                    col = 0;
-                    rowY += roomBtnH + 4f;
-                }
+                if (room != null) count++;
             }
 
-            if (col != 0) rowY += roomBtnH + 4f;
-            return rowY + 4f;
+            return DrawIconRow(
+                cx,
+                cy,
+                inner,
+                count,
+                i =>
+                {
+                    RoomTypeSO room = null;
+                    var n = 0;
+                    foreach (var candidate in rooms)
+                    {
+                        if (candidate == null) continue;
+                        if (n == i)
+                        {
+                            room = candidate;
+                            break;
+                        }
+
+                        n++;
+                    }
+
+                    if (room == null) return;
+
+                    var canBuild = stars == null || stars.CanBuild(room);
+                    var tip = RoomTooltip(room, canBuild);
+                    var color = room.placeholderColor;
+                    if (!canBuild)
+                        color = Color.Lerp(color, Color.gray, 0.55f);
+
+                    var wasEnabled = GUI.enabled;
+                    GUI.enabled = wasEnabled && canBuild;
+                    if (DrawIconButton(
+                            IconRect(cx, cy, inner, i),
+                            RoomGlyph(room),
+                            tip,
+                            color,
+                            selected: build.SelectedRoomType == room &&
+                                      build.CurrentTool == BuildTool.PlaceRoom,
+                            enabled: canBuild,
+                            iconStyle))
+                        build.SetRoomType(room);
+                    GUI.enabled = wasEnabled;
+                });
+        }
+
+        float DrawToolIcons(float cx, float cy, float inner, GUIStyle iconStyle)
+        {
+            var tools = new (string glyph, string tip, System.Action onClick, bool selected, Color color)[]
+            {
+                ("Sel", "Selector\nClick rooms on the tower to inspect them.",
+                    () => build.SelectTool(),
+                    build.CurrentTool == BuildTool.Select,
+                    new Color(0.55f, 0.55f, 0.6f)),
+                ("Lob", "Extend Lobby\nDrag to widen the lobby on floor G.",
+                    () => build.SelectLobbyTool(),
+                    build.CurrentTool == BuildTool.PlaceRoom &&
+                    build.SelectedRoomType != null &&
+                    build.SelectedRoomType.isLobby,
+                    new Color(0.75f, 0.65f, 0.35f)),
+                ("X", "Bulldoze\nDemolish a non-lobby room (grace refund if eligible).",
+                    () => build.SetTool(BuildTool.Bulldoze),
+                    build.CurrentTool == BuildTool.Bulldoze,
+                    new Color(0.75f, 0.3f, 0.28f))
+            };
+
+            return DrawIconRow(
+                cx,
+                cy,
+                inner,
+                tools.Length,
+                i =>
+                {
+                    var tool = tools[i];
+                    if (DrawIconButton(
+                            IconRect(cx, cy, inner, i),
+                            tool.glyph,
+                            tool.tip,
+                            tool.color,
+                            tool.selected,
+                            enabled: true,
+                            iconStyle))
+                        tool.onClick();
+                });
+        }
+
+        float DrawIconRow(
+            float cx,
+            float cy,
+            float inner,
+            int count,
+            System.Action<int> drawIndex)
+        {
+            if (count <= 0) return cy;
+            var cols = Mathf.Max(1, Mathf.FloorToInt((inner + IconGap) / (IconSize + IconGap)));
+            for (var i = 0; i < count; i++)
+                drawIndex(i);
+
+            var rows = Mathf.CeilToInt(count / (float)cols);
+            return cy + rows * (IconSize + IconGap) + 4f;
+        }
+
+        static Rect IconRect(float cx, float cy, float inner, int index)
+        {
+            var cols = Mathf.Max(1, Mathf.FloorToInt((inner + IconGap) / (IconSize + IconGap)));
+            var col = index % cols;
+            var row = index / cols;
+            return new Rect(
+                cx + col * (IconSize + IconGap),
+                cy + row * (IconSize + IconGap),
+                IconSize,
+                IconSize);
+        }
+
+        bool DrawIconButton(
+            Rect rect,
+            string glyph,
+            string tooltip,
+            Color color,
+            bool selected,
+            bool enabled,
+            GUIStyle style)
+        {
+            EnsureWhiteTex();
+            var prevBg = GUI.backgroundColor;
+            var prevContent = GUI.contentColor;
+
+            var fill = color;
+            fill.a = enabled ? 0.85f : 0.35f;
+            if (selected)
+                fill = Color.Lerp(fill, Color.white, 0.25f);
+
+            GUI.DrawTexture(rect, _whiteTex, ScaleMode.StretchToFill, false, 0f, fill, 0f, 0f);
+            if (selected)
+            {
+                var outline = new Color(1f, 0.9f, 0.4f, 1f);
+                GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, 2f), _whiteTex, ScaleMode.StretchToFill, false, 0f, outline, 0f, 0f);
+                GUI.DrawTexture(new Rect(rect.x, rect.yMax - 2f, rect.width, 2f), _whiteTex, ScaleMode.StretchToFill, false, 0f, outline, 0f, 0f);
+                GUI.DrawTexture(new Rect(rect.x, rect.y, 2f, rect.height), _whiteTex, ScaleMode.StretchToFill, false, 0f, outline, 0f, 0f);
+                GUI.DrawTexture(new Rect(rect.xMax - 2f, rect.y, 2f, rect.height), _whiteTex, ScaleMode.StretchToFill, false, 0f, outline, 0f, 0f);
+            }
+
+            GUI.backgroundColor = new Color(1f, 1f, 1f, 0.15f);
+            GUI.contentColor = Luminance(color) > 0.55f ? Color.black : Color.white;
+            var clicked = GUI.Button(rect, new GUIContent(glyph, tooltip), style);
+            GUI.backgroundColor = prevBg;
+            GUI.contentColor = prevContent;
+
+            if (rect.Contains(Event.current.mousePosition) && !string.IsNullOrEmpty(tooltip))
+                _hoverTooltip = tooltip;
+
+            return clicked;
+        }
+
+        void EnsureWhiteTex()
+        {
+            if (_whiteTex != null) return;
+            _whiteTex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            _whiteTex.SetPixel(0, 0, Color.white);
+            _whiteTex.Apply();
+            _whiteTex.hideFlags = HideFlags.HideAndDontSave;
+        }
+
+        static float Luminance(Color c) => 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+
+        static string RoomTooltip(RoomTypeSO room, bool canBuild)
+        {
+            var lines = $"{room.displayName}";
+            if (!canBuild)
+                lines += $"\nLocked — needs {room.requiredStars}★";
+            lines += $"\n{RoomEconomyFormat.CostLine(room)}";
+            lines += $"\n{RoomEconomyFormat.IncomeLine(room)}";
+            var upkeep = RoomEconomyFormat.UpkeepLine(room);
+            if (upkeep != null)
+                lines += $"\n{upkeep}";
+            lines += $"\nSize {room.size.x}×{room.size.y}";
+            return lines;
+        }
+
+        static string FamilyGlyph(BuildFamily family) => family switch
+        {
+            BuildFamily.Office => "Of",
+            BuildFamily.Hotel => "Ht",
+            BuildFamily.Condo => "Co",
+            BuildFamily.Shops => "Sh",
+            BuildFamily.Utility => "Ut",
+            BuildFamily.Transit => "Tr",
+            _ => "?"
+        };
+
+        static string SubgroupGlyph(BuildSubgroup subgroup) => subgroup switch
+        {
+            BuildSubgroup.Food => "Fd",
+            BuildSubgroup.Retail => "Rt",
+            _ => "?"
+        };
+
+        static Color FamilyColor(BuildFamily family) => family switch
+        {
+            BuildFamily.Office => new Color(0.35f, 0.55f, 0.85f),
+            BuildFamily.Hotel => new Color(0.62f, 0.35f, 0.85f),
+            BuildFamily.Condo => new Color(0.35f, 0.75f, 0.45f),
+            BuildFamily.Shops => new Color(0.9f, 0.6f, 0.25f),
+            BuildFamily.Utility => new Color(0.45f, 0.7f, 0.75f),
+            BuildFamily.Transit => new Color(0.7f, 0.7f, 0.35f),
+            _ => Color.gray
+        };
+
+        static string RoomGlyph(RoomTypeSO room)
+        {
+            if (room == null) return "?";
+            if (room.isElevatorShaft) return "El";
+            if (room.isStairs) return "St";
+            if (!string.IsNullOrEmpty(room.id))
+            {
+                if (room.id.Contains("premium")) return "P" + FamilyGlyph(room.ResolvedBuildFamily())[0];
+                if (room.id.Contains("housekeeping")) return "Hk";
+                if (room.id.Contains("maintenance")) return "Mn";
+                if (room.id.Contains("security")) return "Sc";
+                if (room.id.Contains("restaurant")) return "Rn";
+                if (room.id.Contains("research")) return "Lb";
+                if (room.id.Contains("conference")) return "Cf";
+                if (room.id.Contains("fine")) return "Fn";
+                if (room.id.Contains("fast")) return "FF";
+                if (room.id.Contains("retail")) return "Rt";
+            }
+
+            var shortName = ShortLabel(room.displayName);
+            if (shortName.Length <= 2) return shortName;
+            if (shortName.StartsWith("Prem")) return "P" + shortName[shortName.Length - 1];
+            return shortName.Substring(0, 2);
         }
 
         float DrawPriceTierButtons(
@@ -487,18 +874,34 @@ namespace BuildATower
 
             var labels = new[] { "||", "1x", "2x", "5x", "10x", "60x" };
             var speeds = new[] { 0f, 1f, 2f, 5f, 10f, 60f };
-            const float gap = 4f;
-            var buttonWidth = (width - gap * (labels.Length - 1)) / labels.Length;
+            const float gap = 3f;
+            // Weight later buttons slightly wider so "10x" / "60x" are not clipped.
+            var weights = new[] { 0.85f, 0.9f, 0.9f, 0.9f, 1.2f, 1.25f };
+            var weightSum = 0f;
+            foreach (var w in weights)
+                weightSum += w;
+            var unit = (width - gap * (labels.Length - 1)) / weightSum;
             var clock = simulation.Clock;
+            var style = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = 11,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                clipping = TextClipping.Overflow,
+                padding = new RectOffset(1, 1, 1, 1)
+            };
 
+            var cursor = x;
             for (var i = 0; i < labels.Length; i++)
             {
                 var active = i == 0
                     ? clock.Paused
                     : !clock.Paused && Mathf.Approximately(clock.MinutesPerRealSecond, speeds[i]);
-                var rect = new Rect(x + i * (buttonWidth + gap), y, buttonWidth, height);
-                if (GUI.Toggle(rect, active, labels[i], GUI.skin.button) && !active)
+                var buttonWidth = unit * weights[i];
+                var rect = new Rect(cursor, y, buttonWidth, height);
+                if (GUI.Toggle(rect, active, labels[i], style) && !active)
                     simulation.SetSpeedPreset(speeds[i], paused: i == 0);
+                cursor += buttonWidth + gap;
             }
         }
 

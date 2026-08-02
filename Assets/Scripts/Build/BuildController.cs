@@ -228,6 +228,8 @@ namespace BuildATower
                 $"Condition {room.Condition}  {flags}";
             if (IsStaffedServiceRoom(room.Type))
                 summary += $"\nStaff {room.StaffedWorkers}/4";
+            if (room.Type.id == "service_security")
+                summary += $"\nGuards on patrol: {CountSecurityAgentsForHome(room)}";
             var now = Time.realtimeSinceStartup;
             if (RoomInstance.IsGraceRefundEligible(room.Type) && room.IsInBuildGrace(now))
             {
@@ -258,6 +260,22 @@ namespace BuildATower
             if (shaft == null) return "Service";
             if (!shaft.InMaintenance) return "Service";
             return sim.Elevators.IsDrained(shaft) ? "Ready to shorten" : "Draining";
+        }
+
+        int CountSecurityAgentsForHome(RoomInstance home)
+        {
+            var agents = GetComponent<TowerSimulation>()?.Agents?.Agents;
+            if (agents == null || home == null) return 0;
+            var count = 0;
+            for (var i = 0; i < agents.Count; i++)
+            {
+                var agent = agents[i];
+                if (agent != null &&
+                    agent.Role == AgentRole.Security &&
+                    ReferenceEquals(agent.HomeRoom, home))
+                    count++;
+            }
+            return count;
         }
 
         static string FloorLabel(int y) =>
