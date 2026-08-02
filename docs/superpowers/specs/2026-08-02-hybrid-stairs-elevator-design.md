@@ -1,7 +1,7 @@
 # Build-A-Tower — Hybrid Stairs + Elevator Pathing
 
 **Date:** 2026-08-02  
-**Status:** Draft (awaiting implementation)  
+**Status:** Implemented  
 **Depends on:** `TransitRouter`, `StairsPathfinder`, `ElevatorSystem`, agent trip execution + stress  
 **Engine target:** Unity (2D Tilemap), desktop/Editor-first  
 **Parent roadmap:** Deeper economy → higher stars → more transit → evaluation/heatmaps → polish  
