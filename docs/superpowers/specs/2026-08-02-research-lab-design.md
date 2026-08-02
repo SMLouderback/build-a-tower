@@ -1,7 +1,7 @@
 # Build-A-Tower — Research Lab Tech Tree & Daily Burn
 
 **Date:** 2026-08-02  
-**Status:** Implemented — plan (`docs/superpowers/plans/2026-08-02-research-lab.md`)  
+**Status:** Implemented (Play Mode pending) — plan (`docs/superpowers/plans/2026-08-02-research-lab.md`)  
 **Depends on:** Stars3 (`service_research` placeable); staffed-service pattern; `MarketClimate`; shop spend; elevators; crime/security; maid/handyman timings  
 **Engine target:** Unity (2D Tilemap), desktop/Editor-first  
 **Parent roadmap:** Deeper economy → higher stars → ops usefulness → **research** → more transit → evaluation/heatmaps → polish  
