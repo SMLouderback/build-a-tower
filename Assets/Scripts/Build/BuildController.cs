@@ -272,7 +272,8 @@ namespace BuildATower
                 var agent = agents[i];
                 if (agent != null &&
                     agent.Role == AgentRole.Security &&
-                    ReferenceEquals(agent.HomeRoom, home))
+                    ReferenceEquals(agent.HomeRoom, home) &&
+                    agent.Phase is not (AgentPhase.AtHome or AgentPhase.Outside))
                     count++;
             }
             return count;

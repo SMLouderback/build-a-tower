@@ -335,7 +335,7 @@ namespace BuildATower
                 DrawChip($"Save ${build.Wallet.Balance:N0}", 118f);
                 DrawChip($"+${economy.LastIncome:N0}", 88f);
                 DrawChip($"-${economy.LastExpense:N0}", 88f);
-                DrawChip($"Avg ${economy.LastNet:N0}/d", 110f);
+                DrawChip($"Avg ${economy.AverageDailyProfit:N0}/d", 110f);
             }
             else
             {

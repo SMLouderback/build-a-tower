@@ -16,11 +16,15 @@ namespace BuildATower
         readonly Dictionary<int, int> _lastIncomeByRoom = new();
         readonly Dictionary<int, int> _lastExpenseByRoom = new();
         System.Random _rng;
+        int _midnightCount;
+        long _netSum;
 
         public int LastIncome { get; private set; }
         public int LastExpense { get; private set; }
         public int LastWageExpense { get; private set; }
         public int LastNet { get; private set; }
+        /// <summary>Running average of <see cref="LastNet"/> across completed midnights.</summary>
+        public float AverageDailyProfit { get; private set; }
         public bool HasRecordedEconomyEvent { get; private set; }
 
         public EconomySystem(int? seed = null)
@@ -98,6 +102,9 @@ namespace BuildATower
             wallet.Add(LastIncome);
             wallet.Subtract(LastExpense);
             LastNet = LastIncome - LastExpense;
+            _midnightCount++;
+            _netSum += LastNet;
+            AverageDailyProfit = (float)_netSum / _midnightCount;
             if (LastIncome > 0 || LastExpense > 0)
                 HasRecordedEconomyEvent = true;
         }

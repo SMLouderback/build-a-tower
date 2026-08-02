@@ -323,6 +323,28 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void AverageDailyProfit_tracks_running_average_of_LastNet()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Office(baseIncome: 3000), new Vector2Int(0, 1), out var office));
+            var agents = new List<Agent> { new Agent(1, AgentRole.OfficeWorker, office, office.Origin) };
+            var wallet = new FundsWallet(100_000);
+            var economy = new EconomySystem();
+
+            Assert.AreEqual(0f, economy.AverageDailyProfit);
+
+            economy.OnNewDay(grid, agents, wallet);
+            Assert.AreEqual(3000, economy.LastNet);
+            Assert.AreEqual(3000f, economy.AverageDailyProfit);
+
+            // Second midnight with no occupants → LastNet 0; average falls to 1500.
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+            Assert.AreEqual(0, economy.LastNet);
+            Assert.AreEqual(1500f, economy.AverageDailyProfit);
+        }
+
+        [Test]
         public void Security_is_staffed_service_and_auto_hires()
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
