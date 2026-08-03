@@ -20,6 +20,10 @@ namespace BuildATower
         public int CheckInDay { get; set; } = -1;
         public bool CheckedOutToday { get; set; }
         /// <summary>
+        /// Minute of day to start check-in (clamped to the hotel 4:00–7:00 PM window).
+        /// </summary>
+        public int CheckInMinute { get; set; } = 16 * 60;
+        /// <summary>
         /// Minute of day to start checkout the morning after check-in
         /// (clamped to the hotel 6:00–11:00 window).
         /// </summary>

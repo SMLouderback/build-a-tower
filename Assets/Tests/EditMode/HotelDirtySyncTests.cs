@@ -148,12 +148,54 @@ namespace BuildATower.Tests
             agent.Phase = AgentPhase.Outside;
             agent.CheckInDay = -1;
             agent.CheckedOutToday = true;
+            agent.CheckInMinute = AgentSystem.HotelCheckInMinute;
             clock.AdvanceMinutes(16 * 60 - clock.MinuteOfDay);
 
             agents.Tick(1f, clock, grid);
 
             Assert.AreEqual(AgentPhase.Outside, agent.Phase);
             Assert.AreEqual(-1, agent.CheckInDay);
+        }
+
+        [Test]
+        public void Hotel_guest_does_not_check_in_before_personal_time()
+        {
+            var (grid, _, agents, agent, clock) = SetupHotelAtMinute(16 * 60);
+            agent.Phase = AgentPhase.Outside;
+            agent.Visible = false;
+            agent.CheckInDay = -1;
+            agent.CheckedOutToday = false;
+            agent.CheckInMinute = 18 * 60; // 6pm
+
+            agents.Tick(1f, clock, grid);
+            Assert.AreEqual(AgentPhase.Outside, agent.Phase);
+            Assert.AreEqual(-1, agent.CheckInDay);
+
+            clock.AdvanceMinutes(18 * 60 - clock.MinuteOfDay);
+            agents.Tick(1f, clock, grid);
+            Assert.AreNotEqual(-1, agent.CheckInDay);
+        }
+
+        [Test]
+        public void RollHotelCheckInMinute_stays_in_4pm_to_7pm_window()
+        {
+            var rng = new System.Random(0);
+            for (var i = 0; i < 200; i++)
+            {
+                var m = AgentSystem.RollHotelCheckInMinute(rng);
+                Assert.GreaterOrEqual(m, AgentSystem.HotelCheckInMinute);
+                Assert.LessOrEqual(m, AgentSystem.HotelCheckInLatestMinute);
+            }
+        }
+
+        [Test]
+        public void IsHotelCheckInDue_respects_earliest_and_personal_time()
+        {
+            Assert.IsFalse(AgentSystem.IsHotelCheckInDue(15 * 60 + 59, 16 * 60));
+            Assert.IsTrue(AgentSystem.IsHotelCheckInDue(16 * 60, 16 * 60));
+            Assert.IsFalse(AgentSystem.IsHotelCheckInDue(17 * 60, 18 * 60));
+            Assert.IsTrue(AgentSystem.IsHotelCheckInDue(18 * 60, 18 * 60));
+            Assert.IsTrue(AgentSystem.IsHotelCheckInDue(19 * 60, 18 * 60));
         }
 
         [Test]

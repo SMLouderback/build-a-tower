@@ -19,6 +19,8 @@ namespace BuildATower
         public const float PathStuckReplanIntervalMinutes = 5f;
         /// <summary>Hotel guests may begin check-in from this minute of day (4:00 PM).</summary>
         public const int HotelCheckInMinute = 16 * 60;
+        /// <summary>Latest staggered hotel check-in (7:00 PM).</summary>
+        public const int HotelCheckInLatestMinute = 19 * 60;
         /// <summary>Earliest hotel checkout on the morning after check-in (6:00 AM).</summary>
         public const int HotelCheckoutEarliestMinute = 6 * 60;
         /// <summary>Latest / typical hotel checkout deadline (11:00 AM).</summary>
@@ -1265,11 +1267,11 @@ namespace BuildATower
             var exitCell = LobbyExitCell(grid, home.x);
 
             if (agent.Phase == AgentPhase.Outside &&
-                minute >= HotelCheckInMinute &&
                 agent.CheckInDay != clock.DayIndex &&
                 agent.HomeRoom != null &&
                 !agent.HomeRoom.Dirty &&
-                !agent.HomeRoom.IsBroken)
+                !agent.HomeRoom.IsBroken &&
+                IsHotelCheckInDue(minute, agent.CheckInMinute))
             {
                 BeginTrip(agent, exitCell, home, AgentPhase.Staying, grid);
                 agent.CheckInDay = clock.DayIndex;
@@ -1285,6 +1287,7 @@ namespace BuildATower
             {
                 BeginTrip(agent, agent.Cell, LobbyExitCell(grid, agent.Cell.x), AgentPhase.Outside, grid);
                 agent.CheckedOutToday = true;
+                agent.CheckInMinute = RollHotelCheckInMinute(_rng);
                 agent.HomeRoom?.MarkDirty();
             }
 
@@ -1293,6 +1296,31 @@ namespace BuildATower
                 minute <= 21 * 60 &&
                 agent.CommercialTripDay != clock.DayIndex)
                 TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Staying);
+        }
+
+        /// <summary>
+        /// Check-in times fall in 4:00–7:00 PM, biased toward 4:00 PM.
+        /// </summary>
+        public static int RollHotelCheckInMinute(System.Random rng)
+        {
+            if (rng == null) rng = new System.Random();
+            var u = (float)rng.NextDouble();
+            // Quadratic ease toward 0 → most samples near HotelCheckInMinute (4:00 PM).
+            var t = u * u;
+            var span = HotelCheckInLatestMinute - HotelCheckInMinute;
+            return HotelCheckInMinute + Mathf.RoundToInt(t * span);
+        }
+
+        public static bool IsHotelCheckInDue(int minuteOfDay, int checkInMinute)
+        {
+            if (minuteOfDay < HotelCheckInMinute)
+                return false;
+            var due = checkInMinute;
+            if (due < HotelCheckInMinute)
+                due = HotelCheckInMinute;
+            if (due > HotelCheckInLatestMinute)
+                due = HotelCheckInLatestMinute;
+            return minuteOfDay >= due || minuteOfDay >= HotelCheckInLatestMinute;
         }
 
         /// <summary>
@@ -1961,6 +1989,13 @@ namespace BuildATower
 
         void ConfigureSchedule(Agent agent)
         {
+            if (agent.Role == AgentRole.HotelGuest)
+            {
+                agent.CheckInMinute = RollHotelCheckInMinute(_rng);
+                agent.CheckoutMinute = RollHotelCheckoutMinute(_rng);
+                return;
+            }
+
             if (agent.Role != AgentRole.OfficeWorker) return;
             agent.ArrivalMinute = 6 * 60 + _rng.Next(0, 3 * 60);
             var overtime = _rng.NextDouble() < 0.08;
