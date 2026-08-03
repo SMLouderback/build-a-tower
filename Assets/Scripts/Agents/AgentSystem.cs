@@ -13,6 +13,10 @@ namespace BuildATower
         public const float ElevatorWaitStressFullMinutes = 25f;
         public const float ElevatorWaitStressMinMult = 0.4f;
         public const float ElevatorWaitStressMaxMult = 2.0f;
+        /// <summary>
+        /// While path-stuck (Moving, has goal, no walkable path progress), replan this often.
+        /// </summary>
+        public const float PathStuckReplanIntervalMinutes = 5f;
         /// <summary>Maids/handymen drop a claimed job after waiting this long for an elevator.</summary>
         public const float ServiceAbandonWaitMinutes = 45f;
         public const float LowConditionStressPerDay = 8f;
@@ -237,6 +241,7 @@ namespace BuildATower
                 }
 
                 StepMovement(agent, deltaGameMinutes);
+                RecoverIfPathStuck(agent, deltaGameMinutes);
                 UpdateVisitingShop(agent, deltaGameMinutes, grid);
                 UpdateServiceWork(agent, deltaGameMinutes, grid);
                 UpdateCriminalWork(agent, deltaGameMinutes, grid);
@@ -1290,8 +1295,14 @@ namespace BuildATower
             AgentPhase after,
             TowerGrid grid)
         {
+            // Stalled Moving (empty/exhausted path) must not look like a healthy trip —
+            // otherwise lobby spawn / schedule never retries after StallInPlace.
             if (agent.GoalCell == to &&
-                agent.Phase is AgentPhase.Moving or AgentPhase.WaitingAtElevator or AgentPhase.Riding)
+                agent.Phase is AgentPhase.WaitingAtElevator or AgentPhase.Riding)
+                return true;
+            if (agent.GoalCell == to &&
+                agent.Phase == AgentPhase.Moving &&
+                !IsMovementStuck(agent))
                 return true;
 
             agent.GoalCell = to;
@@ -1500,10 +1511,7 @@ namespace BuildATower
 
         void UpdateStress(Agent agent, float deltaGameMinutes)
         {
-            var pathStuck = agent.Phase == AgentPhase.Moving &&
-                            (agent.Path == null || agent.Path.Count == 0) &&
-                            agent.GoalCell.HasValue;
-            if (pathStuck)
+            if (IsMovementStuck(agent))
             {
                 agent.Stress = Mathf.Min(100f, agent.Stress + StressGainPerSecond * deltaGameMinutes);
                 return;
@@ -1535,6 +1543,8 @@ namespace BuildATower
                 agent.Path = leg.Cells ?? new List<Vector2Int>();
                 agent.PathIndex = 0;
                 agent.Phase = AgentPhase.Moving;
+                if (agent.Path.Count > 0)
+                    agent.PathStuckMinutes = 0f;
                 return;
             }
 
@@ -1822,12 +1832,42 @@ namespace BuildATower
             return true;
         }
 
+        /// <summary>
+        /// Moving toward a goal but not making path progress: empty path, or index past end.
+        /// Matches service-agent exhausted-path detection; lobby stalls use the empty-path form.
+        /// </summary>
+        public static bool IsMovementStuck(Agent agent)
+        {
+            if (agent == null || agent.Phase != AgentPhase.Moving || !agent.GoalCell.HasValue)
+                return false;
+            return agent.Path == null ||
+                   agent.Path.Count == 0 ||
+                   agent.PathIndex >= agent.Path.Count;
+        }
+
+        void RecoverIfPathStuck(Agent agent, float deltaGameMinutes)
+        {
+            if (!IsMovementStuck(agent))
+            {
+                agent.PathStuckMinutes = 0f;
+                return;
+            }
+
+            agent.PathStuckMinutes += deltaGameMinutes;
+            if (agent.PathStuckMinutes < PathStuckReplanIntervalMinutes)
+                return;
+
+            agent.PathStuckMinutes = 0f;
+            ReplanTrip(agent, allowReplan: true);
+        }
+
         void ReplanTrip(Agent agent, bool allowReplan)
         {
             ClearElevatorTripState(agent);
             if (!agent.GoalCell.HasValue)
             {
                 agent.Phase = agent.PhaseAfterMove;
+                agent.PathStuckMinutes = 0f;
                 return;
             }
 
@@ -1836,6 +1876,7 @@ namespace BuildATower
             {
                 agent.TripLegs = legs;
                 agent.TripLegIndex = 0;
+                agent.PathStuckMinutes = 0f;
                 StartLeg(agent, legs[0], allowReplan);
                 return;
             }
@@ -1858,7 +1899,7 @@ namespace BuildATower
             agent.ElevatorWaitMinutes = 0f;
         }
 
-        /// <summary>No route available: hold position and let stress build.</summary>
+        /// <summary>No route available: hold position and let stress build until stuck replan.</summary>
         static void StallInPlace(Agent agent)
         {
             agent.TripLegs = new List<TransitLeg>();
@@ -1866,6 +1907,7 @@ namespace BuildATower
             agent.Path = new List<Vector2Int>();
             agent.PathIndex = 0;
             agent.Phase = AgentPhase.Moving;
+            // Keep PathStuckMinutes so an immediate prior replan failure still counts toward the next GC.
         }
 
         static void FollowElevatorCar(Agent agent, ElevatorShaftRuntime shaft)

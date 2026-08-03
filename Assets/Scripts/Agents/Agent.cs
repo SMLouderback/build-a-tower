@@ -56,6 +56,12 @@ namespace BuildATower
         /// </summary>
         public float NextElevatorRescoreTotalMinutes { get; set; }
 
+        /// <summary>
+        /// Game minutes spent <see cref="AgentSystem.IsMovementStuck"/> with a goal
+        /// (empty/exhausted path while Moving). Reset when movement resumes.
+        /// </summary>
+        public float PathStuckMinutes { get; set; }
+
         public int CommercialTripDay { get; set; } = -1;
         public RoomInstance VisitTarget { get; set; }
         public float VisitDwellRemaining { get; set; }

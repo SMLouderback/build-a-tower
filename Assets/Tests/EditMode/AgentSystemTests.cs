@@ -277,6 +277,64 @@ namespace BuildATower.Tests
             return room;
         }
 
+        [Test]
+        public void IsMovementStuck_true_when_moving_with_goal_and_empty_path()
+        {
+            var agent = new Agent(1, AgentRole.OfficeWorker, null, new Vector2Int(5, 0));
+            agent.Phase = AgentPhase.Moving;
+            agent.GoalCell = new Vector2Int(5, 4);
+            agent.Path = new List<Vector2Int>();
+            Assert.IsTrue(AgentSystem.IsMovementStuck(agent));
+
+            agent.Path = new List<Vector2Int> { new Vector2Int(5, 0), new Vector2Int(5, 1) };
+            agent.PathIndex = 0;
+            Assert.IsFalse(AgentSystem.IsMovementStuck(agent));
+
+            agent.PathIndex = 2;
+            Assert.IsTrue(AgentSystem.IsMovementStuck(agent));
+        }
+
+        [Test]
+        public void Path_stuck_replan_recovers_when_route_appears()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Office(true), new Vector2Int(0, 1), out _));
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router);
+            var clock = new GameClock();
+
+            agents.SyncHomes(grid);
+            Assert.Greater(agents.Agents.Count, 0);
+            var agent = agents.Agents[0];
+            agent.Cell = new Vector2Int(5, 0);
+            agent.WorldPosition = new Vector2(5.5f, 0.5f);
+            agent.Phase = AgentPhase.Moving;
+            agent.GoalCell = new Vector2Int(4, 1);
+            agent.PhaseAfterMove = AgentPhase.Working;
+            agent.Path = new List<Vector2Int>();
+            agent.PathIndex = 0;
+            agent.TripLegs = new List<TransitLeg>();
+            agent.PathStuckMinutes = AgentSystem.PathStuckReplanIntervalMinutes;
+
+            // Still no vertical route → replan keeps stall.
+            agents.Tick(1f, clock, grid);
+            Assert.IsTrue(AgentSystem.IsMovementStuck(agent));
+
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(8, 0), out _));
+            router.Rebuild(grid);
+            agent.Phase = AgentPhase.Moving;
+            agent.GoalCell = new Vector2Int(4, 1);
+            agent.Path = new List<Vector2Int>();
+            agent.PathIndex = 0;
+            agent.PathStuckMinutes = AgentSystem.PathStuckReplanIntervalMinutes;
+            agents.Tick(1f, clock, grid);
+
+            Assert.IsFalse(AgentSystem.IsMovementStuck(agent));
+            Assert.IsTrue(agent.Path != null && agent.Path.Count > 0);
+        }
+
         static TowerGrid CreateFourFloorOfficeTower()
         {
             var grid = new TowerGrid();
