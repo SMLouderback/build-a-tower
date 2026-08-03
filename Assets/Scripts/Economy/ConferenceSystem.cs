@@ -183,6 +183,44 @@ namespace BuildATower
             return total;
         }
 
+        /// <summary>
+        /// Estimated daily meeting payout for one Conference hall (0 if ineligible / booked / broken).
+        /// </summary>
+        public int ComputeDailyMeetingsForHall(
+            RoomInstance hall,
+            TowerGrid grid,
+            int officeWorkerCount,
+            int stars,
+            float climateSpendMult)
+        {
+            if (!IsEligibleDailyConference(hall) || grid == null)
+                return 0;
+
+            var hallCapacity = ResolveCapacity(hall);
+            if (hallCapacity <= 0)
+                return 0;
+
+            var totalEligibleCapacity = 0;
+            foreach (var room in grid.Rooms)
+            {
+                if (!IsEligibleDailyConference(room))
+                    continue;
+                var capacity = ResolveCapacity(room);
+                if (capacity > 0)
+                    totalEligibleCapacity += capacity;
+            }
+
+            if (totalEligibleCapacity <= 0)
+                return 0;
+
+            return ConferenceMath.DailyMeetingPayout(
+                officeWorkerCount,
+                hallCapacity,
+                totalEligibleCapacity,
+                stars,
+                climateSpendMult);
+        }
+
         void TrySchedule(int dayIndex, TowerGrid grid, System.Random rng)
         {
             if (grid == null || rng == null)

@@ -9,6 +9,20 @@ namespace BuildATower
     /// </summary>
     public sealed class TowerSimulation : MonoBehaviour
     {
+        public const int OpsDirtyHotelThreshold = 5;
+        public const float OpsAvgCrimeThreshold = 35f;
+        public const float OpsAvgStressThreshold = 40f;
+        public const int QuirkEveryNDays = 3;
+
+        static readonly string[] QuirkLines =
+        {
+            "Someone held an elevator for a sandwich run on floor 3.",
+            "A lobby plant was renamed 'Steve' by anonymous vote.",
+            "Office workers debated the ethics of microwave fish.",
+            "A courier left a mysterious box labeled 'do not open until Friday'.",
+            "Security clocked a raccoon as a VIP visitor. Briefly."
+        };
+
         [SerializeField] BuildController build;
         [SerializeField] AgentView agentView;
         [SerializeField] ElevatorView elevatorView;
@@ -29,6 +43,7 @@ namespace BuildATower
         MarketClimate _climate;
         readonly System.Random _climateRng = new();
         readonly System.Random _conferenceRng = new();
+        readonly System.Random _newsRng = new();
         readonly List<int> _patrolFloors = new();
         readonly List<int> _criminalFloors = new();
         int _lastDayIndex;
@@ -206,6 +221,12 @@ namespace BuildATower
 
                 _agents.SyncEventVisitors(_conference, build.Grid, _clock);
 
+                PushOpsAndQuirkNews(
+                    day,
+                    build.Grid,
+                    _agents.AverageStress,
+                    _crime?.AverageCrime ?? 0f);
+
                 // §7.3: decay all incomplete stored progress except active running unpaused.
                 _research?.TickDayDecay();
 
@@ -216,6 +237,77 @@ namespace BuildATower
             }
 
             _lastDayIndex = _clock.DayIndex;
+        }
+
+        void PushOpsAndQuirkNews(int dayIndex, TowerGrid grid, float averageStress, float averageCrime)
+        {
+            if (_news == null) return;
+
+            var dirtyHotels = CountDirtyHotels(grid);
+            if (dirtyHotels >= OpsDirtyHotelThreshold)
+            {
+                PushOps(
+                    dayIndex,
+                    "Housekeeping backlog: dirty rooms may miss afternoon check-ins.",
+                    priority: 8);
+            }
+
+            if (averageCrime >= OpsAvgCrimeThreshold)
+            {
+                PushOps(
+                    dayIndex,
+                    "Crime spike across the tower — tenants are on edge.",
+                    priority: 9);
+            }
+
+            if (averageStress >= OpsAvgStressThreshold)
+            {
+                PushOps(
+                    dayIndex,
+                    "Elevator waits and crowding are stressing tenants.",
+                    priority: 7);
+            }
+
+            if (dayIndex > 0 && dayIndex % QuirkEveryNDays == 0 && QuirkLines.Length > 0)
+            {
+                var line = QuirkLines[_newsRng.Next(0, QuirkLines.Length)];
+                _news.Push(new TowerNewsItem
+                {
+                    Category = TowerNewsCategory.Quirk,
+                    Priority = 1,
+                    Text = line,
+                    CreatedDayIndex = dayIndex,
+                    ExpireDayIndex = dayIndex + 3
+                });
+            }
+        }
+
+        void PushOps(int dayIndex, string text, int priority)
+        {
+            _news.Push(new TowerNewsItem
+            {
+                Category = TowerNewsCategory.OpsSerious,
+                Priority = priority,
+                Text = text,
+                CreatedDayIndex = dayIndex,
+                ExpireDayIndex = dayIndex + 5
+            });
+        }
+
+        static int CountDirtyHotels(TowerGrid grid)
+        {
+            if (grid == null) return 0;
+
+            var total = 0;
+            foreach (var room in grid.Rooms)
+            {
+                if (room == null || ReferenceEquals(room.Type, null)) continue;
+                if (room.Type.category != RoomCategory.Hotel) continue;
+                if (room.Dirty)
+                    total++;
+            }
+
+            return total;
         }
 
         static int CountStaffedSecurity(TowerGrid grid)

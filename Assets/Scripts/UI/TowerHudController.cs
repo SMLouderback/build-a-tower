@@ -40,6 +40,7 @@ namespace BuildATower
 
         Texture2D _whiteTex;
         string _hoverTooltip;
+        readonly TowerNewsHud _newsHud = new();
 
         public Rect PanelScreenRect => _panelRect;
         public Rect TopBarScreenRect => _topBarRect;
@@ -48,7 +49,8 @@ namespace BuildATower
         public bool ContainsGuiPoint(Vector2 guiPoint) =>
             _topBarRect.Contains(guiPoint) ||
             _panelRect.Contains(guiPoint) ||
-            (_goalsOpen && _goalsDropdownRect.Contains(guiPoint));
+            (_goalsOpen && _goalsDropdownRect.Contains(guiPoint)) ||
+            _newsHud.ContainsGuiPoint(guiPoint);
 
         void Awake()
         {
@@ -177,8 +179,17 @@ namespace BuildATower
                 goalsUnlocked,
                 economyUnlocked);
 
+            var dayIndex = simulation?.Clock != null ? simulation.Clock.DayIndex : 0;
+            var newsStripHeight = _newsHud.Draw(
+                simulation?.News,
+                dayIndex,
+                gap,
+                gap + topBarHeight,
+                barLabel,
+                barButton);
+
             var x = gap;
-            var y = gap + topBarHeight + 6f;
+            var y = gap + topBarHeight + newsStripHeight + 6f;
             var width = Mathf.Min(panelWidth, Screen.width - gap * 2f);
             var inner = Mathf.Max(80f, width - 16f);
             var maxPanelHeight = Mathf.Max(160f, Screen.height - y - gap);
@@ -260,6 +271,12 @@ namespace BuildATower
                                  build.SelectedRoom,
                                  agents?.Agents,
                                  simulation?.Economy))
+                    {
+                        GUI.Label(new Rect(cx, cy, contentInner, row), line, label);
+                        cy += row;
+                    }
+
+                    foreach (var line in ConferenceSelectionLines(build.SelectedRoom))
                     {
                         GUI.Label(new Rect(cx, cy, contentInner, row), line, label);
                         cy += row;
@@ -843,6 +860,44 @@ namespace BuildATower
                 label);
             cy += row + 4f;
             return cy;
+        }
+
+        IEnumerable<string> ConferenceSelectionLines(RoomInstance room)
+        {
+            if (room?.Type == null)
+                yield break;
+
+            var id = room.Type.id;
+            if (id != ConferenceSystem.ConferenceId && id != ConferenceSystem.EventHallId)
+                yield break;
+
+            var conference = simulation?.Conference;
+            if (conference == null)
+                yield break;
+
+            if (id == ConferenceSystem.ConferenceId)
+            {
+                var officeWorkers = EconomySystem.CountOfficeWorkers(simulation?.Agents?.Agents);
+                var stars = simulation?.Stars?.CurrentStars ?? 0;
+                var climateMult = simulation?.Climate?.SpendMultiplier ?? 1f;
+                var estimate = conference.ComputeDailyMeetingsForHall(
+                    room,
+                    build.Grid,
+                    officeWorkers,
+                    stars,
+                    climateMult);
+                yield return $"Est. daily meetings: ${estimate:N0}";
+            }
+
+            if (conference.IsHallBooked(room))
+            {
+                var active = conference.Active;
+                var name = string.IsNullOrEmpty(active?.Name) ? "Event" : active.Name;
+                var endDay = active != null ? active.EndDayIndex : -1;
+                yield return endDay >= 0
+                    ? $"Booked: {name} through day {endDay}"
+                    : $"Booked: {name}";
+            }
         }
 
         float DrawStaffStepper(

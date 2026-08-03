@@ -252,7 +252,7 @@ namespace BuildATower
             return false;
         }
 
-        static int CountOfficeWorkers(IReadOnlyList<Agent> agents)
+        public static int CountOfficeWorkers(IReadOnlyList<Agent> agents)
         {
             if (agents == null)
                 return 0;
