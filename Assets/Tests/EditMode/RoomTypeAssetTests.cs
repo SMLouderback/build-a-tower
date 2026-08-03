@@ -49,7 +49,7 @@ namespace BuildATower.Tests
             var fine = Resources.Load<RoomTypeSO>("Rooms/ShopFineDining");
             Assert.AreEqual(BuildSubgroup.Food, fine.ResolvedBuildSubgroup());
             Assert.AreEqual(IncomeModel.TrafficVariable, fine.incomeModel);
-            Assert.AreEqual(200, fine.baseIncome);
+            Assert.AreEqual(150, fine.baseIncome);
         }
 
         [Test]

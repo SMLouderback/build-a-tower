@@ -17,7 +17,7 @@ In Play Mode a player can:
 
 1. Place Research Labs (3★), hire **0–4** researchers (auto-hire **1**), and see pooled researcher count.
 2. Open Selection on a lab and pick an unlocked tech (branch level I–III with prerequisites).
-3. See **ETA**, **est. remaining $**, idle vs active rates, and a climate note before/while researching.
+3. See **ETA**, **est. remaining $**, idle vs active rates, a **tech effect summary** for the selected level, and a climate note before/while researching.
 4. Watch progress advance faster with more researchers / more labs; higher levels take longer.
 5. Pay idle daily when idle and higher burn while a project is active; costs move with Recession↔Boom.
 6. Auto-pause when broke or when researcher pool hits 0; progress **decays slowly** while paused.

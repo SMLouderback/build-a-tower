@@ -39,6 +39,9 @@ namespace BuildATower
         /// <summary>Gregorian date for the current <see cref="DayIndex"/> (time-of-day is midnight on that date).</summary>
         public DateTime CalendarDate => Epoch.AddDays(DayIndex);
 
+        /// <summary>Gregorian date for an arbitrary day index (same epoch as <see cref="CalendarDate"/>).</summary>
+        public static DateTime DateForDayIndex(int dayIndex) => Epoch.AddDays(dayIndex);
+
         public event Action DayRolled;
         public event Action MonthRolled;
 

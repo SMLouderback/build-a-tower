@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace BuildATower
@@ -32,6 +33,19 @@ namespace BuildATower
         public void Push(TowerNewsItem item)
         {
             if (item == null) return;
+
+            // Same headline already on the wire — refresh expiry/priority instead of stacking.
+            for (var i = 0; i < _items.Count; i++)
+            {
+                var existing = _items[i];
+                if (existing.Category != item.Category) continue;
+                if (!string.Equals(existing.Text, item.Text, StringComparison.Ordinal)) continue;
+
+                existing.ExpireDayIndex = Math.Max(existing.ExpireDayIndex, item.ExpireDayIndex);
+                if (item.Priority > existing.Priority)
+                    existing.Priority = item.Priority;
+                return;
+            }
 
             _items.Add(item);
             while (_items.Count > MaxItems)

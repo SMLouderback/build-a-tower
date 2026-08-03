@@ -75,9 +75,10 @@ namespace BuildATower.Tests
             Assert.IsTrue(agents.TryAssignServiceJobs(grid));
             PlaceAtRoom(maid, hotel);
             maid.Phase = AgentPhase.Working;
-            maid.ServiceWorkRemaining = RoomConditionRules.CleanMinutes(hotel.Type);
+            // Keep ServiceCleanProgress from TryAssign; only ensure dwell finishes this tick.
+            maid.ServiceWorkRemaining = Mathf.Max(0.1f, maid.ServiceCleanProgress);
 
-            agents.Tick(RoomConditionRules.CleanBasicMinutes, clock, grid);
+            agents.Tick(maid.ServiceWorkRemaining, clock, grid);
             Assert.IsFalse(hotel.Dirty);
             Assert.IsNull(maid.ServiceTarget);
 
@@ -157,9 +158,9 @@ namespace BuildATower.Tests
 
             PlaceAtRoom(maid, hotel);
             maid.Phase = AgentPhase.Working;
-            maid.ServiceWorkRemaining = RoomConditionRules.CleanMinutes(hotel.Type);
+            maid.ServiceWorkRemaining = Mathf.Max(0.1f, maid.ServiceCleanProgress);
 
-            agents.Tick(RoomConditionRules.CleanBasicMinutes, clock, grid);
+            agents.Tick(maid.ServiceWorkRemaining, clock, grid);
 
             Assert.IsFalse(hotel.Dirty);
             Assert.IsNull(maid.ServiceTarget);
@@ -297,6 +298,194 @@ namespace BuildATower.Tests
             Assert.IsTrue(hotel.Dirty);
         }
 
+        [Test]
+        public void Two_maids_can_claim_same_event_hall_with_clean_work_pool()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 28, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(14, 0), out _));
+            Assert.IsTrue(grid.TryPlace(Housekeeping(), new Vector2Int(0, 1), out var hk));
+            Assert.IsTrue(grid.TryPlace(EventHall(), new Vector2Int(4, 1), out var hall));
+            hk.SetStaffedWorkers(2);
+            hall.QueueCleaning(2, ConferenceSystem.EventPostCleanMinutes);
+
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            Assert.AreEqual(2, agents.Agents.Count(a => a.Role == AgentRole.Maid));
+            Assert.IsTrue(agents.TryAssignServiceJobs(grid));
+
+            var maids = agents.Agents.Where(a => a.Role == AgentRole.Maid).ToList();
+            Assert.AreSame(hall, maids[0].ServiceTarget);
+            Assert.AreSame(hall, maids[1].ServiceTarget);
+            Assert.AreEqual(AgentSystem.MaidCleanShiftMinutes, maids[0].ServiceCleanProgress);
+            Assert.AreEqual(AgentSystem.MaidCleanShiftMinutes, maids[1].ServiceCleanProgress);
+        }
+
+        [Test]
+        public void Maid_prefers_dirty_hotel_over_event_hall()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 28, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(14, 0), out _));
+            Assert.IsTrue(grid.TryPlace(Housekeeping(), new Vector2Int(0, 1), out var hk));
+            Assert.IsTrue(grid.TryPlace(EventHall(), new Vector2Int(4, 1), out var hall));
+            Assert.IsTrue(grid.TryPlace(Hotel(), new Vector2Int(18, 1), out var hotel));
+            hk.SetStaffedWorkers(1);
+            hall.QueueCleaning(2, ConferenceSystem.EventPostCleanMinutes);
+            hotel.QueueCleanWork(RoomConditionRules.CleanBasicMinutes);
+
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            var maid = agents.Agents.Single(a => a.Role == AgentRole.Maid);
+            Assert.IsTrue(agents.TryAssignServiceJobs(grid));
+            Assert.AreSame(hotel, maid.ServiceTarget);
+        }
+
+        [Test]
+        public void Handyman_takes_queued_event_hall_repair_job()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 28, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(14, 0), out _));
+            Assert.IsTrue(grid.TryPlace(Maintenance(), new Vector2Int(0, 1), out var maint));
+            Assert.IsTrue(grid.TryPlace(EventHall(), new Vector2Int(4, 1), out var hall));
+            maint.SetStaffedWorkers(1);
+            hall.QueueRepairs(1, ConferenceSystem.EventPostRepairMinutes);
+
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            var handyman = agents.Agents.Single(a => a.Role == AgentRole.Handyman);
+            Assert.IsTrue(agents.TryAssignServiceJobs(grid));
+            Assert.AreSame(hall, handyman.ServiceTarget);
+            Assert.AreEqual(ConferenceSystem.EventPostRepairMinutes, handyman.ServiceWorkRemaining);
+        }
+
+        [Test]
+        public void Maid_failed_job_path_snaps_idle_and_can_claim_other_dirty_hotel()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(20, 0), out _)); // covers floors 0–1
+            Assert.IsTrue(grid.TryPlace(Housekeeping(), new Vector2Int(0, 1), out var hk));
+            Assert.IsTrue(grid.TryPlace(Hotel(), new Vector2Int(6, 1), out var reachable));
+            // Support pad so floor-3 hotel can be built, but no stairs/elevator reach it.
+            Assert.IsTrue(grid.TryPlace(Scaffold(), new Vector2Int(6, 2), out _));
+            Assert.IsTrue(grid.TryPlace(Hotel(), new Vector2Int(6, 3), out var unreachable));
+            hk.SetStaffedWorkers(1);
+            reachable.QueueCleanWork(RoomConditionRules.CleanBasicMinutes);
+            unreachable.QueueCleanWork(RoomConditionRules.CleanBasicMinutes * 4f);
+
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            var maid = agents.Agents.Single(a => a.Role == AgentRole.Maid);
+            PlaceAtRoom(maid, hk);
+            maid.Phase = AgentPhase.AtHome;
+            var clock = new GameClock(1f, 12 * 60);
+
+            Assert.IsTrue(agents.TryAssignServiceJobs(grid));
+            Assert.AreSame(reachable, maid.ServiceTarget,
+                "After unreachable path fails, maid must claim the reachable dirty hotel.");
+            Assert.IsFalse(IsMovementStuck(maid), "Failed path must not leave maid soft-locked Moving.");
+            Assert.AreNotEqual(AgentPhase.Moving, maid.Phase);
+        }
+
+        static RoomTypeSO Scaffold()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "scaffold";
+            so.isScaffolding = true;
+            so.allowAboveGround = true;
+            so.size = new Vector2Int(9, 1);
+            return so;
+        }
+
+        [Test]
+        public void Maid_releases_claim_after_long_travel_without_arriving()
+        {
+            var grid = ServiceTower(out var hk, out _, out var hotel, out _);
+            hk.SetStaffedWorkers(1);
+            hotel.QueueCleanWork(RoomConditionRules.CleanBasicMinutes);
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            var maid = agents.Agents.Single(a => a.Role == AgentRole.Maid);
+            var clock = new GameClock(1f, 12 * 60);
+
+            Assert.IsTrue(agents.TryAssignServiceJobs(grid));
+            Assert.AreSame(hotel, maid.ServiceTarget);
+
+            // Simulate endless transit (stairs queue / congestion) — Moving with a non-empty path.
+            PlaceAtRoom(maid, hk);
+            maid.Phase = AgentPhase.Moving;
+            maid.Path = new System.Collections.Generic.List<Vector2Int>
+            {
+                hk.Origin,
+                new Vector2Int(hk.Origin.x + 1, hk.Origin.y),
+                hotel.Origin
+            };
+            maid.PathIndex = 0;
+            maid.GoalCell = hotel.Origin;
+            maid.PhaseAfterMove = AgentPhase.Working;
+            // Already traveled past the abandon threshold (e.g. overnight stair queue).
+            maid.ServiceTravelMinutes = AgentSystem.ServiceTravelAbandonMinutes;
+
+            agents.Tick(1f, clock, grid);
+
+            Assert.IsNull(maid.ServiceTarget,
+                "Claim must release after long travel so another maid can clean.");
+            Assert.IsTrue(hotel.Dirty);
+        }
+
+        [Test]
+        public void Idle_maid_claims_dirty_hotel_still_dirty_after_day_boundary()
+        {
+            var grid = ServiceTower(out var hk, out _, out var hotel, out _);
+            hk.SetStaffedWorkers(1);
+            hotel.QueueCleanWork(RoomConditionRules.CleanBasicMinutes);
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            var maid = agents.Agents.Single(a => a.Role == AgentRole.Maid);
+            PlaceAtRoom(maid, hk);
+            maid.Phase = AgentPhase.AtHome;
+
+            // Simulate soft-lock that used to strand maids overnight: Moving, no claim, stale Working goal.
+            maid.ServiceTarget = null;
+            maid.GoalCell = hotel.Origin;
+            maid.PhaseAfterMove = AgentPhase.Working;
+            maid.Phase = AgentPhase.Moving;
+            maid.Path = new System.Collections.Generic.List<Vector2Int>();
+            maid.PathIndex = 0;
+
+            var clock = new GameClock(1f, 23 * 60);
+            agents.Tick(1f, clock, grid);
+            // Cross midnight.
+            clock.AdvanceMinutes(GameClock.MinutesPerDay - clock.MinuteOfDay + 8 * 60);
+            for (var i = 0; i < 5; i++)
+                agents.Tick(1f, clock, grid);
+
+            Assert.IsTrue(hotel.Dirty);
+            Assert.IsTrue(
+                maid.ServiceTarget == hotel ||
+                maid.Phase == AgentPhase.AtHome ||
+                maid.PhaseAfterMove == AgentPhase.AtHome ||
+                maid.PhaseAfterMove == AgentPhase.Working,
+                "Maid must recover from stale Moving after day rollover and pursue cleaning.");
+            // Stronger: eventually claims or is actively cleaning/traveling to the dirty hotel.
+            var claimedOrCleaning = false;
+            for (var i = 0; i < 30; i++)
+            {
+                agents.Tick(1f, clock, grid);
+                if (maid.ServiceTarget == hotel)
+                {
+                    claimedOrCleaning = true;
+                    break;
+                }
+            }
+
+            Assert.IsTrue(claimedOrCleaning, "Idle capacity after midnight must re-claim dirty hotels.");
+        }
+
+        static bool IsMovementStuck(Agent agent) => AgentSystem.IsMovementStuck(agent);
+
         static TowerGrid ServiceTower(
             out RoomInstance hk,
             out RoomInstance maint,
@@ -391,6 +580,18 @@ namespace BuildATower.Tests
             so.id = "office";
             so.category = RoomCategory.Office;
             so.size = new Vector2Int(9, 1);
+            so.maxOccupants = 0;
+            so.allowAboveGround = true;
+            return so;
+        }
+
+        static RoomTypeSO EventHall()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = ConferenceSystem.EventHallId;
+            so.category = RoomCategory.Service;
+            so.size = new Vector2Int(12, 2);
+            so.eventCapacity = 120;
             so.maxOccupants = 0;
             so.allowAboveGround = true;
             return so;

@@ -13,8 +13,12 @@ namespace BuildATower
     {
         public static WealthBand ResolveBand(AgentRole role, RoomTypeSO homeType)
         {
-            if (role is AgentRole.StreetVisitor or AgentRole.EventVisitor)
+            if (role == AgentRole.StreetVisitor)
                 return WealthBand.Street;
+
+            // Convention / event attendees spend more like office workers than street walk-ins.
+            if (role == AgentRole.EventVisitor)
+                return WealthBand.Basic;
 
             if (IsPremiumLiving(homeType))
                 return WealthBand.Premium;
@@ -30,8 +34,17 @@ namespace BuildATower
             return Math.Max(0, scaled);
         }
 
-        public static bool CanAfford(int remaining, RoomTypeSO shop) =>
-            ShopVisitRules.PayPerVisit(shop) <= remaining;
+        /// <summary>
+        /// Soft gate: visitors can enter if they cover a meaningful fraction of list price.
+        /// Actual spend is still <see cref="RollSpend"/> (1 … min(price, remaining)).
+        /// </summary>
+        public static bool CanAfford(int remaining, RoomTypeSO shop)
+        {
+            var price = ShopVisitRules.PayPerVisit(shop);
+            if (price <= 0 || remaining <= 0) return false;
+            var gate = Math.Min(price, Math.Max(25, price / 2));
+            return remaining >= gate;
+        }
 
         public static int RollSpend(int remaining, RoomTypeSO shop, Random rng)
         {
@@ -43,9 +56,9 @@ namespace BuildATower
 
         static (int lo, int hi) BandRange(WealthBand band) => band switch
         {
-            WealthBand.Street => (20, 60),
-            WealthBand.Premium => (90, 200),
-            _ => (40, 100)
+            WealthBand.Street => (35, 90),
+            WealthBand.Premium => (120, 280),
+            _ => (70, 160)
         };
 
         static bool IsPremiumLiving(RoomTypeSO homeType)

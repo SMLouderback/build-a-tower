@@ -13,6 +13,10 @@ namespace BuildATower
         public const float BannerHeight = 28f;
         public const float TickerHeight = 18f;
         public const float StripGap = 2f;
+        /// <summary>Pixels per second — kept slow so the same strip is not a blur of repeats.</summary>
+        public const float TickerPixelsPerSecond = 16f;
+        public const float TickerLoopGapPixels = 160f;
+        const string ItemSeparator = "        ·        ";
 
         TowerNewsItem _bannerItem;
         TowerNewsItem _bannerHandled;
@@ -111,19 +115,20 @@ namespace BuildATower
                 return;
             }
 
-            var sb = new StringBuilder(items.Count * 40);
+            var sb = new StringBuilder(items.Count * 48);
             for (var i = 0; i < items.Count; i++)
             {
-                if (i > 0) sb.Append("   ·   ");
+                if (i > 0) sb.Append(ItemSeparator);
                 sb.Append(items[i].Text);
             }
 
             var joined = sb.ToString();
             var content = new GUIContent(joined);
             var textWidth = Mathf.Max(_tickerRect.width, label.CalcSize(content).x + 40f);
-            _tickerScroll += Time.unscaledDeltaTime * 40f;
-            if (_tickerScroll > textWidth)
-                _tickerScroll = 0f;
+            var loopWidth = textWidth + TickerLoopGapPixels;
+            _tickerScroll += Time.unscaledDeltaTime * TickerPixelsPerSecond;
+            if (_tickerScroll >= loopWidth)
+                _tickerScroll %= loopWidth;
 
             var clip = _tickerRect;
             GUI.BeginGroup(clip);
@@ -131,9 +136,9 @@ namespace BuildATower
                 new Rect(8f - _tickerScroll, 1f, textWidth, TickerHeight - 2f),
                 joined,
                 label);
-            // Loop: second copy so the strip feels continuous.
+            // Loop: second copy so the strip feels continuous (with a readable pause gap).
             GUI.Label(
-                new Rect(8f - _tickerScroll + textWidth + 48f, 1f, textWidth, TickerHeight - 2f),
+                new Rect(8f - _tickerScroll + loopWidth, 1f, textWidth, TickerHeight - 2f),
                 joined,
                 label);
             GUI.EndGroup();

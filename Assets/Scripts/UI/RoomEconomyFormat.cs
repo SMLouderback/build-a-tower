@@ -72,7 +72,12 @@ namespace BuildATower
                     lines.Add($"Earnings today: ${room.ShopEarningsToday:N0}");
                     break;
                 default:
-                    lines.Add("Status: Non-revenue unit");
+                    if (type.id == ConferenceSystem.ConferenceId)
+                        lines.Add("Status: Daily meeting venue");
+                    else if (type.id == ConferenceSystem.EventHallId)
+                        lines.Add("Status: Major-event venue");
+                    else
+                        lines.Add("Status: Non-revenue unit");
                     break;
             }
 

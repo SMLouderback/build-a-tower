@@ -1,7 +1,7 @@
 # Build-A-Tower — Crime Pressure, Security Patrols & Criminals
 
 **Date:** 2026-08-01  
-**Status:** Implemented  
+**Status:** Implemented — crime raise/decay retuned 2026-08-03 (softer early-game; fewer posts needed at low occupancy)  
 **Depends on:** Stars3 ops (Security Post placeable + staffed-service pattern); agents + transit; commercial shop visits; hotel occupancy; stress / star gates  
 **Engine target:** Unity (2D Tilemap), desktop/Editor-first  
 **Parent roadmap:** Deeper economy → higher stars → **ops usefulness** → more transit → evaluation/heatmaps → polish  
@@ -221,20 +221,24 @@ Keep crime math out of `StarSystem`. Prefer pure helpers testable without Play M
 
 ## 10. Tuning defaults (starting points)
 
-| Constant | Suggested start |
-|----------|-----------------|
-| Crime clamp | 0–100 |
-| Natural decay | Low (busy floor stays elevated without security) |
-| Baseline per staffed post | Mild tower-wide |
-| Patrol decay | Clearly stronger than baseline on local floor |
-| ±1 floor patrol bleed | 50% of patrol rate (optional) |
-| Criminal concurrent cap | 3 |
-| Security wage | $250/day |
-| Staff range | 0–4, auto 1 on place |
-| Capture | Same floor |
-| Crime stress | Noticeable at crime ≥ 40 on populated floors |
+| Constant | Suggested start | Live (2026-08-03 retune) |
+|----------|-----------------|--------------------------|
+| Crime clamp | 0–100 | 0–100 |
+| Shop raise / visitor / min | Busy floor stays elevated without security | `0.22` (was `0.55`) |
+| Hotel raise / guest / min | — | `0.10` (was `0.25`) |
+| Natural decay / min | Low | `0.08` (was `0.04`) |
+| Baseline per staff / min | Mild tower-wide | `0.14` (was `0.06`) |
+| Patrol decay | Clearly stronger than baseline on local floor | `0.7` |
+| ±1 floor patrol bleed | 50% of patrol rate (optional) | 50% |
+| Criminal spawn min avg crime | — | `28` (was `15`) |
+| Criminal spawn chance / min | — | `0.04` (was `0.08`) |
+| Criminal concurrent cap | 3 | 3 |
+| Security wage | $250/day | $250/day |
+| Staff range | 0–4, auto 1 on place | 0–4, auto 1 |
+| Capture | Same floor | Same floor |
+| Crime stress | Noticeable at crime ≥ 40 on populated floors | unchanged |
 
-Exact numbers locked during implementation/tests; behavior and relative strengths above are normative.
+Exact numbers locked during implementation/tests; behavior and relative strengths above are normative. Intent of the 2026-08-03 retune: **1–2 lightly staffed Security Posts** should cover a quiet / low-pop tower; heavy shop floors and criminals still reward patrols.
 
 ## 11. Test plan (acceptance)
 

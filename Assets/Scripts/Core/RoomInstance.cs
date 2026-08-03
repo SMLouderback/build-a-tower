@@ -16,6 +16,15 @@ namespace BuildATower
         public int Condition { get; set; } = 100;
         public bool IsBroken => Condition <= 0;
         public bool Dirty { get; private set; }
+        /// <summary>
+        /// Total maid-minutes of cleaning still owed (shared pool). Multiple maids chip away
+        /// in short shifts instead of locking exclusive multi-hour jobs.
+        /// </summary>
+        public float CleanWorkRemaining { get; private set; }
+        /// <summary>Handyman repair shifts still outstanding (venue post-event work).</summary>
+        public int RepairJobsRemaining { get; private set; }
+        /// <summary>Game minutes for each outstanding repair shift (0 = use default chunk time).</summary>
+        public float RepairJobMinutes { get; private set; }
         /// <summary>Hired staff count for housekeeping/maintenance rooms. Clamped 0–4.</summary>
         public int StaffedWorkers { get; private set; }
         public bool CondoSold { get; set; }
@@ -111,9 +120,62 @@ namespace BuildATower
         public static bool IsGraceRefundEligible(RoomTypeSO type) =>
             type != null && !type.isLobby && !type.isScaffolding;
 
-        public void MarkDirty() => Dirty = true;
+        public void MarkDirty()
+        {
+            Dirty = true;
+        }
 
-        public void ClearDirty() => Dirty = false;
+        /// <summary>Marks dirty and adds maid-minutes (hotels on checkout, venues after use).</summary>
+        public void QueueCleanWork(float minutes)
+        {
+            if (minutes <= 0f) return;
+            Dirty = true;
+            CleanWorkRemaining += minutes;
+        }
+
+        /// <summary>
+        /// Legacy helper: <paramref name="jobs"/> maid-shifts × <paramref name="minutesPerJob"/>
+        /// added to the shared clean pool.
+        /// </summary>
+        public void QueueCleaning(int jobs, float minutesPerJob)
+        {
+            if (jobs <= 0 || minutesPerJob <= 0f) return;
+            QueueCleanWork(jobs * minutesPerJob);
+        }
+
+        public void ClearDirty()
+        {
+            Dirty = false;
+            CleanWorkRemaining = 0f;
+        }
+
+        /// <summary>Applies completed maid progress; clears Dirty when the pool hits zero.</summary>
+        public void ApplyCleanWork(float minutes)
+        {
+            if (minutes <= 0f) return;
+            CleanWorkRemaining = Mathf.Max(0f, CleanWorkRemaining - minutes);
+            if (CleanWorkRemaining <= 0.001f)
+                ClearDirty();
+        }
+
+        public void QueueRepairs(int jobs, float minutesPerJob)
+        {
+            if (jobs <= 0) return;
+            RepairJobsRemaining += jobs;
+            if (minutesPerJob > 0f)
+                RepairJobMinutes = minutesPerJob;
+        }
+
+        public void CompleteRepairJob()
+        {
+            if (RepairJobsRemaining > 0)
+                RepairJobsRemaining--;
+            if (RepairJobsRemaining <= 0)
+            {
+                RepairJobsRemaining = 0;
+                RepairJobMinutes = 0f;
+            }
+        }
 
         public void SetStaffedWorkers(int count) =>
             StaffedWorkers = Mathf.Clamp(count, 0, 4);

@@ -12,7 +12,7 @@ namespace BuildATower
         public const int OpsDirtyHotelThreshold = 5;
         public const float OpsAvgCrimeThreshold = 35f;
         public const float OpsAvgStressThreshold = 40f;
-        public const int QuirkEveryNDays = 3;
+        public const int QuirkEveryNDays = 2;
 
         static readonly string[] QuirkLines =
         {
@@ -20,8 +20,52 @@ namespace BuildATower
             "A lobby plant was renamed 'Steve' by anonymous vote.",
             "Office workers debated the ethics of microwave fish.",
             "A courier left a mysterious box labeled 'do not open until Friday'.",
-            "Security clocked a raccoon as a VIP visitor. Briefly."
+            "Security clocked a raccoon as a VIP visitor. Briefly.",
+            "The coffee machine on 7 declared war on oat milk. Again.",
+            "Lost-and-found now claims three left shoes and one right sock.",
+            "A meeting was postponed because nobody could find the clicker.",
+            "Night cleaning found a sticky note that just said 'trust the stairs'.",
+            "Two guests argued about which floor has the best window glare.",
+            "Facilities booked a ladder for a lightbulb that was already fine.",
+            "Someone rated the lobby scent 'aggressively citrus' in a survey.",
+            "An office pool started on which elevator arrives last.",
+            "A whiteboard still says 'synergy' from last quarter. Nobody erased it.",
+            "The gift shop sold out of tiny tower magnets before lunch.",
+            "A guest asked if the stairs count as cardio. Staff said yes.",
+            "Maintenance hummed an elevator jingle that does not exist.",
+            "A vendor delivered 40 chairs and one suspiciously heavy box of air.",
+            "Floor 2's vending machine dispensed two bags of chips for the price of one.",
+            "Anonymous tip: the best wifi is mysteriously near the janitor closet.",
+            "A tourist asked which floor has the 'main character energy'. Staff pointed at Lobby.",
+            "Someone laminated a meme and hung it in the copy room. It has tenure now.",
+            "The revolving door collected three umbrellas and one strongly worded note.",
+            "Break-room fridge trial continues: unlabeled soup enters day four. Nobody blinks.",
+            "A delivery drone buzzed the atrium. Security wrote 'sky raccoon?' on the log.",
+            "Floor directory stickers keep migrating overnight. Suspect: interns or ghosts."
         };
+
+        static readonly string[] OpsDirtyHotelLines =
+        {
+            "Housekeeping backlog: dirty rooms may miss afternoon check-ins.",
+            "Housekeeping is swamped — turnovers are slipping into the evening.",
+            "Too many dirty hotel rooms; front desk is delaying some arrivals."
+        };
+
+        static readonly string[] OpsCrimeLines =
+        {
+            "Crime spike across the tower — tenants are on edge.",
+            "Security reports elevated incidents; guests are uneasy.",
+            "Average crime is high — patrol coverage may be thin."
+        };
+
+        static readonly string[] OpsStressLines =
+        {
+            "Elevator waits and crowding are stressing tenants.",
+            "Transit delays are wearing on the tower — stress is climbing.",
+            "Crowded lobbies and slow rides are fraying nerves."
+        };
+
+        int _lastQuirkIndex = -1;
 
         [SerializeField] BuildController build;
         [SerializeField] AgentView agentView;
@@ -148,7 +192,8 @@ namespace BuildATower
                 _stars?.CurrentStars ?? 0,
                 _climate,
                 _crime,
-                research);
+                research,
+                _conference);
             _agents.CollectFloorsForRole(AgentRole.Security, _patrolFloors);
             _agents.CollectFloorsForRole(AgentRole.Criminal, _criminalFloors);
             _crime.Tick(
@@ -199,16 +244,7 @@ namespace BuildATower
             var climateSpendMult = _climate?.SpendMultiplier ?? 1f;
             for (var day = _lastDayIndex + 1; day <= _clock.DayIndex; day++)
             {
-                _economy.OnNewDay(
-                    build.Grid,
-                    _agents.Agents,
-                    build.Wallet,
-                    _stars.CurrentStars,
-                    climateOffset,
-                    _research,
-                    climateSpendMult,
-                    _conference);
-
+                // Event schedule first so pending lump / daily credits land in OnNewDay.
                 _conference?.TickDay(
                     day,
                     build.Grid,
@@ -218,6 +254,16 @@ namespace BuildATower
                     build.Wallet,
                     _news,
                     _conferenceRng);
+
+                _economy.OnNewDay(
+                    build.Grid,
+                    _agents.Agents,
+                    build.Wallet,
+                    _stars.CurrentStars,
+                    climateOffset,
+                    _research,
+                    climateSpendMult,
+                    _conference);
 
                 _agents.SyncEventVisitors(_conference, build.Grid, _clock);
 
@@ -245,41 +291,68 @@ namespace BuildATower
 
             var dirtyHotels = CountDirtyHotels(grid);
             if (dirtyHotels >= OpsDirtyHotelThreshold)
-            {
-                PushOps(
-                    dayIndex,
-                    "Housekeeping backlog: dirty rooms may miss afternoon check-ins.",
-                    priority: 8);
-            }
+                PushOps(dayIndex, PickLine(OpsDirtyHotelLines), priority: 8);
 
             if (averageCrime >= OpsAvgCrimeThreshold)
-            {
-                PushOps(
-                    dayIndex,
-                    "Crime spike across the tower — tenants are on edge.",
-                    priority: 9);
-            }
+                PushOps(dayIndex, PickLine(OpsCrimeLines), priority: 9);
 
             if (averageStress >= OpsAvgStressThreshold)
-            {
-                PushOps(
-                    dayIndex,
-                    "Elevator waits and crowding are stressing tenants.",
-                    priority: 7);
-            }
+                PushOps(dayIndex, PickLine(OpsStressLines), priority: 7);
+
+            PushHolidayNews(dayIndex);
 
             if (dayIndex > 0 && dayIndex % QuirkEveryNDays == 0 && QuirkLines.Length > 0)
             {
-                var line = QuirkLines[_newsRng.Next(0, QuirkLines.Length)];
+                var line = PickQuirkLine();
                 _news.Push(new TowerNewsItem
                 {
                     Category = TowerNewsCategory.Quirk,
                     Priority = 1,
                     Text = line,
                     CreatedDayIndex = dayIndex,
+                    ExpireDayIndex = dayIndex + 4
+                });
+            }
+        }
+
+        void PushHolidayNews(int dayIndex)
+        {
+            var date = GameClock.DateForDayIndex(dayIndex);
+            var matches = HolidayNewsCatalog.MatchesFor(date);
+            for (var i = 0; i < matches.Count; i++)
+            {
+                var match = matches[i];
+                if (match.Lines == null || match.Lines.Length == 0) continue;
+                var line = PickLine(match.Lines);
+                if (string.IsNullOrEmpty(line)) continue;
+                _news.Push(new TowerNewsItem
+                {
+                    Category = TowerNewsCategory.Quirk,
+                    Priority = 3,
+                    Text = line,
+                    CreatedDayIndex = dayIndex,
                     ExpireDayIndex = dayIndex + 3
                 });
             }
+        }
+
+        string PickLine(string[] lines)
+        {
+            if (lines == null || lines.Length == 0) return string.Empty;
+            return lines[_newsRng.Next(0, lines.Length)];
+        }
+
+        string PickQuirkLine()
+        {
+            if (QuirkLines.Length == 1)
+                return QuirkLines[0];
+
+            var index = _newsRng.Next(0, QuirkLines.Length);
+            // Avoid immediate repeat of the last quirk when the pool is larger than one.
+            if (index == _lastQuirkIndex)
+                index = (index + 1 + _newsRng.Next(0, QuirkLines.Length - 1)) % QuirkLines.Length;
+            _lastQuirkIndex = index;
+            return QuirkLines[index];
         }
 
         void PushOps(int dayIndex, string text, int priority)
@@ -333,7 +406,10 @@ namespace BuildATower
             for (var i = 0; i < agents.Count; i++)
             {
                 var agent = agents[i];
-                if (agent != null && agent.Role == AgentRole.HotelGuest)
+                // Match star Population: only guests currently staying in the tower.
+                if (agent != null &&
+                    agent.Role == AgentRole.HotelGuest &&
+                    agent.Phase != AgentPhase.Outside)
                     total++;
             }
 

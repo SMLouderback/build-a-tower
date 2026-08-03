@@ -36,6 +36,9 @@ In Play Mode a player can:
 | 4★ gate | Higher pop + tighter stress **and** ≥1 **staffed Security Post** |
 | News | **Banner + scrolling ticker** (events + serious + quirks) |
 | Hall staffing | **No** staff hire on Conference/Event Hall MVP |
+| Event Hall hours | **8:00–22:00** visitor / open window |
+| Post-event ops | Event Hall queues **360 maid-minutes** (2×3h) + **1 handyman × 3h**; maids work a shared clean pool in ≤30m shifts (hotels prioritized) |
+| Post-meeting ops | Conference queues **30 maid-minutes** after a day with meeting income |
 
 ## 3. Rooms
 

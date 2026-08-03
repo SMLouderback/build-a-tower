@@ -144,5 +144,18 @@ namespace BuildATower.Tests
             Assert.AreEqual("Housekeeping", ResearchCatalog.BranchDisplayName(ResearchBranch.Housekeeping));
             Assert.AreEqual("Maintenance", ResearchCatalog.BranchDisplayName(ResearchBranch.Maintenance));
         }
+
+        [Test]
+        public void Catalog_level_effect_summaries_are_non_empty()
+        {
+            foreach (ResearchBranch branch in System.Enum.GetValues(typeof(ResearchBranch)))
+            {
+                for (var level = 1; level <= ResearchCatalog.MaxLevel; level++)
+                {
+                    var summary = ResearchCatalog.LevelEffectSummary(branch, level);
+                    Assert.IsFalse(string.IsNullOrWhiteSpace(summary), $"{branch} L{level}");
+                }
+            }
+        }
     }
 }

@@ -388,6 +388,22 @@ namespace BuildATower
                 DrawChip($"Pop {pop}", 64f);
                 DrawChip($"Stress {stress:0}", 78f);
                 DrawChip($"Crime {simulation.Crime?.DisplayCrime ?? 0f:0}", 72f);
+
+                if (agents?.Agents != null)
+                {
+                    var inTower = 0;
+                    var outside = 0;
+                    foreach (var agent in agents.Agents)
+                    {
+                        if (agent == null || agent.Role != AgentRole.CondoResident || !agent.HasMovedIn)
+                            continue;
+                        if (agent.JobKind == CondoJobKind.InTower) inTower++;
+                        else if (agent.JobKind == CondoJobKind.Outside) outside++;
+                    }
+
+                    if (inTower + outside > 0)
+                        DrawChip($"Condo jobs: {inTower} in-tower / {outside} outside", 210f);
+                }
             }
 
             if (goalsUnlocked)
@@ -887,6 +903,57 @@ namespace BuildATower
                     stars,
                     climateMult);
                 yield return $"Est. daily meetings: ${estimate:N0}";
+                yield return $"Office workers counted: {officeWorkers}";
+            }
+
+            if (room.Dirty || room.CleanWorkRemaining > 0f)
+            {
+                yield return $"Needs cleaning: ~{room.CleanWorkRemaining:0} maid-min left";
+            }
+
+            if (room.RepairJobsRemaining > 0)
+            {
+                var mins = room.RepairJobMinutes > 0f
+                    ? room.RepairJobMinutes
+                    : RoomConditionRules.RepairMinutesPerChunk;
+                yield return room.RepairJobsRemaining > 1
+                    ? $"Needs repair: {room.RepairJobsRemaining} shifts × {mins:0}m"
+                    : $"Needs repair: 1 handyman × {mins:0}m";
+            }
+
+            if (id == ConferenceSystem.EventHallId)
+            {
+                yield return $"Open hours: 8:00–22:00";
+                var capacity = room.Type.eventCapacity > 0
+                    ? room.Type.eventCapacity
+                    : room.Size.x * room.Size.y * 5;
+                var hotelGuests = 0;
+                if (simulation?.Agents?.Agents != null)
+                {
+                    foreach (var agent in simulation.Agents.Agents)
+                    {
+                        if (agent != null &&
+                            agent.Role == AgentRole.HotelGuest &&
+                            agent.Phase != AgentPhase.Outside)
+                            hotelGuests++;
+                    }
+                }
+
+                var stars = simulation?.Stars?.CurrentStars ?? 0;
+                var climateMult = simulation?.Climate?.SpendMultiplier ?? 1f;
+                var estLump = ConferenceSystem.MajorEventLumpPayout(
+                    hotelGuests,
+                    stars,
+                    capacity,
+                    climateMult);
+                yield return $"Est. event booking (if hosted): ${estLump:N0}";
+                if (conference.Active?.Phase == MajorEventPhase.Live && conference.IsHallBooked(room))
+                {
+                    yield return $"Live event credit (start): ${conference.LiveLumpPayout:N0}";
+                    var daily = Mathf.RoundToInt(
+                        conference.LiveLumpPayout * ConferenceSystem.EventDailyWhileLiveMult);
+                    yield return $"While live (+/day after start): ${daily:N0}";
+                }
             }
 
             if (conference.IsHallBooked(room))
@@ -999,6 +1066,17 @@ namespace BuildATower
             var pickComplete = research.IsComplete(pickBranch, pickLevel);
             var isPickActive = research.ActiveBranch == pickBranch && research.ActiveLevel == pickLevel;
             var canStart = research.CanStart(pickBranch, pickLevel);
+
+            var effect = ResearchCatalog.LevelEffectSummary(pickBranch, pickLevel);
+            if (!string.IsNullOrEmpty(effect))
+            {
+                var effectH = row * 2.2f;
+                GUI.Label(
+                    new Rect(cx, cy, inner, effectH),
+                    $"Effect: {effect}",
+                    label);
+                cy += effectH + 2f;
+            }
 
             const float actionGap = 4f;
             var actionW = (inner - actionGap) * 0.5f;

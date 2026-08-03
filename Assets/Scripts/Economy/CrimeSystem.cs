@@ -6,13 +6,16 @@ namespace BuildATower
     public sealed class CrimeSystem
     {
         public const float MaxCrime = 100f;
-        public const float ShopRaisePerVisitorPerMinute = 0.55f;
-        public const float HotelRaisePerGuestPerMinute = 0.25f;
-        public const float NaturalDecayPerMinute = 0.04f;
-        public const float BaselineDecayPerStaffPerMinute = 0.06f;
+        /// <summary>Per concurrent shop visitor on a floor (retuned 2026-08 soft early-game crime).</summary>
+        public const float ShopRaisePerVisitorPerMinute = 0.22f;
+        /// <summary>Per in-tower hotel guest / hotel-home event visitor on a floor.</summary>
+        public const float HotelRaisePerGuestPerMinute = 0.10f;
+        public const float NaturalDecayPerMinute = 0.08f;
+        /// <summary>Tower-wide decay shared across all floors with crime, per staffed security worker.</summary>
+        public const float BaselineDecayPerStaffPerMinute = 0.14f;
         public const float PatrolDecayPerMinute = 0.7f;
         public const float PatrolAdjacentFactor = 0.5f;
-        public const float CriminalRaisePerMinute = 1.5f;
+        public const float CriminalRaisePerMinute = 1.2f;
         public const float CaptureCrimeDrop = 8f;
         /// <summary>EMA rate toward raw average (~12–15 game minutes to mostly catch up).</summary>
         public const float SentimentAlphaPerMinute = 0.08f;

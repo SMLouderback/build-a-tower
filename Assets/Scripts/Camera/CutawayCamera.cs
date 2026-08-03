@@ -10,7 +10,18 @@ namespace BuildATower
         [SerializeField] float minOrtho = 5f;
         [SerializeField] float maxOrtho = 40f;
 
-        const float BoundsPadding = 5f;
+        /// <summary>Minimum world units of empty space past the built tower on each side.</summary>
+        public const float MinHorizontalPadding = 12f;
+        /// <summary>
+        /// Extra horizontal scroll as a fraction of viewport width so the left HUD / right chrome
+        /// do not cover the buildable edge of the tower.
+        /// </summary>
+        public const float HorizontalViewportPadFraction = 0.45f;
+        /// <summary>When scrolled fully up, at least this many floors of the tower stay on-screen.</summary>
+        public const float MinVisibleTopFloors = 2f;
+        public const float VerticalBottomPadding = 5f;
+        public const float DirtBandMinY = -10f;
+
         const float ScrollbarThickness = 18f;
         const float FallbackMinX = -80f;
         const float FallbackMaxX = 100f;
@@ -91,6 +102,38 @@ namespace BuildATower
                 : new Vector2(min + halfViewport, max - halfViewport);
         }
 
+        /// <summary>
+        /// World-space content rectangle the camera may cover. Horizontal padding clears HUD chrome;
+        /// vertical max allows the tower top to sit near the bottom of the view with
+        /// <see cref="MinVisibleTopFloors"/> still visible.
+        /// </summary>
+        public static void ComputeScrollableBounds(
+            float gridMinX,
+            float gridMaxX,
+            float towerMinY,
+            float towerMaxY,
+            float viewportWidth,
+            float viewportHeight,
+            out float minX,
+            out float maxX,
+            out float minY,
+            out float maxY)
+        {
+            var horizontalPad = Mathf.Max(
+                MinHorizontalPadding,
+                viewportWidth * HorizontalViewportPadFraction);
+
+            minX = gridMinX - horizontalPad;
+            maxX = gridMaxX + horizontalPad;
+            // Keep a wide empty playfield even for early/narrow towers.
+            minX = Mathf.Min(minX, FallbackMinX);
+            maxX = Mathf.Max(maxX, FallbackMaxX);
+
+            minY = Mathf.Min(towerMinY, DirtBandMinY) - VerticalBottomPadding;
+            // Fully scrolled up: bottom of the viewport ≈ towerMaxY - MinVisibleTopFloors.
+            maxY = towerMaxY - MinVisibleTopFloors + Mathf.Max(viewportHeight, MinVisibleTopFloors + VerticalBottomPadding);
+        }
+
         void ClampCameraToScrollableBounds()
         {
             GetScrollableBounds(out var minX, out var maxX, out var minY, out var maxY);
@@ -121,23 +164,36 @@ namespace BuildATower
                 return;
             }
 
-            minX = controller.Grid.MinX - BoundsPadding;
-            maxX = controller.Grid.MaxX + BoundsPadding;
-            minY = float.MaxValue;
-            maxY = float.MinValue;
+            var towerMinY = float.MaxValue;
+            var towerMaxY = float.MinValue;
             foreach (var room in controller.Grid.Rooms)
             {
-                minY = Mathf.Min(minY, room.Origin.y);
-                maxY = Mathf.Max(maxY, room.Origin.y + room.Size.y);
+                towerMinY = Mathf.Min(towerMinY, room.Origin.y);
+                towerMaxY = Mathf.Max(towerMaxY, room.Origin.y + room.Size.y);
             }
 
-            // Always allow scrolling through the painted underground dirt band.
-            minY = Mathf.Min(minY, -10f);
-            minX = Mathf.Min(minX, -80f);
-            maxX = Mathf.Max(maxX, 100f);
+            if (towerMinY > towerMaxY)
+            {
+                towerMinY = 0f;
+                towerMaxY = 1f;
+            }
 
-            minY -= BoundsPadding;
-            maxY += BoundsPadding;
+            var viewportHeight = targetCamera != null ? targetCamera.orthographicSize * 2f : 16f;
+            var viewportWidth = targetCamera != null
+                ? viewportHeight * targetCamera.aspect
+                : viewportHeight * (16f / 9f);
+
+            ComputeScrollableBounds(
+                controller.Grid.MinX,
+                controller.Grid.MaxX,
+                towerMinY,
+                towerMaxY,
+                viewportWidth,
+                viewportHeight,
+                out minX,
+                out maxX,
+                out minY,
+                out maxY);
         }
     }
 }

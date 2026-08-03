@@ -58,6 +58,22 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Push_same_category_and_text_refreshes_instead_of_stacking()
+        {
+            var news = new TowerNews();
+            var first = Item(TowerNewsCategory.OpsSerious, 5, "same", createdDay: 1, expireDay: 3);
+            news.Push(first);
+            news.Push(Item(TowerNewsCategory.OpsSerious, 9, "same", createdDay: 2, expireDay: 8));
+            news.Push(Item(TowerNewsCategory.Quirk, 1, "same", createdDay: 2, expireDay: 5));
+
+            Assert.AreEqual(2, news.Items.Count);
+            Assert.AreSame(first, news.Items[0]);
+            Assert.AreEqual(9, first.Priority);
+            Assert.AreEqual(8, first.ExpireDayIndex);
+            Assert.AreEqual(TowerNewsCategory.Quirk, news.Items[1].Category);
+        }
+
+        [Test]
         public void Prune_keeps_item_on_inclusive_expire_day()
         {
             var news = new TowerNews();

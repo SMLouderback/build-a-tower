@@ -53,6 +53,36 @@ namespace BuildATower.Tests
             Assert.IsTrue(room.Dirty);
             room.ClearDirty();
             Assert.IsFalse(room.Dirty);
+            Assert.AreEqual(0f, room.CleanWorkRemaining);
+        }
+
+        [Test]
+        public void QueueCleanWork_and_ApplyCleanWork_track_pool()
+        {
+            var room = Room(Type());
+            room.QueueCleaning(2, 180f);
+            Assert.IsTrue(room.Dirty);
+            Assert.AreEqual(360f, room.CleanWorkRemaining);
+
+            room.ApplyCleanWork(30f);
+            Assert.IsTrue(room.Dirty);
+            Assert.AreEqual(330f, room.CleanWorkRemaining);
+
+            room.ApplyCleanWork(330f);
+            Assert.IsFalse(room.Dirty);
+            Assert.AreEqual(0f, room.CleanWorkRemaining);
+        }
+
+        [Test]
+        public void QueueRepairs_and_CompleteRepairJob_track_shifts()
+        {
+            var room = Room(Type());
+            room.QueueRepairs(1, 180f);
+            Assert.AreEqual(1, room.RepairJobsRemaining);
+            Assert.AreEqual(180f, room.RepairJobMinutes);
+            room.CompleteRepairJob();
+            Assert.AreEqual(0, room.RepairJobsRemaining);
+            Assert.AreEqual(0f, room.RepairJobMinutes);
         }
 
         [Test]

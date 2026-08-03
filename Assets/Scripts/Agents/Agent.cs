@@ -46,6 +46,11 @@ namespace BuildATower
         public int StairsFloorsCrossedThisLeg { get; set; }
 
         /// <summary>
+        /// Stairs room <see cref="RoomInstance.InstanceId"/> currently occupied, or 0 if none.
+        /// </summary>
+        public int StairsOccupancyRoomId { get; set; }
+
+        /// <summary>
         /// Shaft the agent is committed to (room instance id), or 0 when none.
         /// Resolved by id so maintenance mode cannot orphan a waiter or rider.
         /// </summary>
@@ -95,8 +100,35 @@ namespace BuildATower
         /// <summary>Game minutes remaining for the active maid/handyman job.</summary>
         public float ServiceWorkRemaining { get; set; }
 
+        /// <summary>Maid-minutes of clean-pool progress to apply when the current shift finishes.</summary>
+        public float ServiceCleanProgress { get; set; }
+
+        /// <summary>
+        /// Game minutes spent traveling to <see cref="ServiceTarget"/> without entering Working.
+        /// Reset when a new claim starts or work begins.
+        /// </summary>
+        public float ServiceTravelMinutes { get; set; }
+
         /// <summary>Total remaining life for a Criminal before they leave via lobby.</summary>
         public float CriminalDwellRemaining { get; set; }
+
+        /// <summary>Condo resident employment assignment, or <see cref="CondoJobKind.None"/>.</summary>
+        public CondoJobKind JobKind { get; set; }
+
+        /// <summary>Office room claimed as a condo workplace (in-tower jobs only).</summary>
+        public RoomInstance WorkplaceRoom { get; set; }
+
+        /// <summary>One-way commute duration in game minutes (outside jobs).</summary>
+        public int CommuteOneWayMinutes { get; set; }
+
+        /// <summary>Minute of day when the condo leaves home for work.</summary>
+        public int LeaveHomeMinute { get; set; }
+
+        /// <summary>Remaining outside dwell for external commute/work simulation.</summary>
+        public float OutsideDwellRemaining { get; set; }
+
+        /// <summary>Current phase of an outside condo work cycle.</summary>
+        public CondoOutsidePhase OutsideWorkPhase { get; set; }
 
         public Agent(int id, AgentRole role, RoomInstance homeRoom, Vector2Int cell)
         {

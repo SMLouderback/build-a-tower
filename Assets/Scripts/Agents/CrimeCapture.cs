@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace BuildATower
@@ -10,7 +11,14 @@ namespace BuildATower
         public static int TryCapture(
             IList<Agent> agents,
             CrimeSystem crime,
-            out string message)
+            out string message) =>
+            TryCapture(agents, crime, out message, beforeRemove: null);
+
+        public static int TryCapture(
+            IList<Agent> agents,
+            CrimeSystem crime,
+            out string message,
+            Action<Agent> beforeRemove)
         {
             message = null;
             if (agents == null || crime == null) return 0;
@@ -31,6 +39,7 @@ namespace BuildATower
 
                     crime.ApplyCaptureDrop(criminal.Cell.y);
                     message = $"Security captured a criminal on floor {criminal.Cell.y}.";
+                    beforeRemove?.Invoke(criminal);
                     agents.RemoveAt(i);
                     captures++;
                     if (i < g) g--;

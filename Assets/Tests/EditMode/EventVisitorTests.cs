@@ -71,20 +71,45 @@ namespace BuildATower.Tests
             Assert.AreEqual(120, conference.SumBookedHallCapacity(grid));
             Assert.AreEqual(24, AgentSystem.ComputeEventVisitorSpawnPerDay(120));
 
+            // Daytime window — midnight must not dump the whole crowd while shops are closed.
+            Assert.AreEqual(12 * 60, clock.MinuteOfDay);
             agents.SyncEventVisitors(conference, grid, clock);
             var spawned = agents.Agents.Count(a => a.Role == AgentRole.EventVisitor);
             Assert.Greater(spawned, 0);
-            Assert.LessOrEqual(spawned, AgentSystem.MaxConcurrentEventVisitors);
+            Assert.LessOrEqual(spawned, AgentSystem.EventVisitorSpawnBatchSize);
 
-            // Same day: no additional spawn batch.
+            // Advance through the afternoon so the paced quota can fill.
+            for (var step = 0; step < 40; step++)
+            {
+                clock.AdvanceMinutes(15);
+                agents.SyncEventVisitors(conference, grid, clock);
+            }
+
+            var afterQuota = agents.Agents.Count(a => a.Role == AgentRole.EventVisitor);
+            Assert.GreaterOrEqual(afterQuota, spawned);
+            Assert.LessOrEqual(afterQuota, AgentSystem.MaxConcurrentEventVisitors);
             agents.SyncEventVisitors(conference, grid, clock);
-            Assert.AreEqual(spawned, agents.Agents.Count(a => a.Role == AgentRole.EventVisitor));
+            Assert.AreEqual(afterQuota, agents.Agents.Count(a => a.Role == AgentRole.EventVisitor));
 
             conference.Active.Phase = MajorEventPhase.None;
             conference.BookedHallInstanceIds.Clear();
             conference.Active.BookedHallInstanceIds.Clear();
             agents.SyncEventVisitors(conference, grid, clock);
 
+            Assert.AreEqual(0, agents.Agents.Count(a => a.Role == AgentRole.EventVisitor));
+        }
+
+        [Test]
+        public void SyncEventVisitors_skips_spawn_outside_day_window()
+        {
+            var (grid, hall, agents, _) = SetupHallTower();
+            var conference = new ConferenceSystem();
+            conference.Active.Phase = MajorEventPhase.Live;
+            conference.Active.BookedHallInstanceIds.Add(hall.InstanceId);
+            conference.BookedHallInstanceIds.Add(hall.InstanceId);
+
+            var midnight = new GameClock(1f, 0);
+            agents.SyncEventVisitors(conference, grid, midnight);
             Assert.AreEqual(0, agents.Agents.Count(a => a.Role == AgentRole.EventVisitor));
         }
 

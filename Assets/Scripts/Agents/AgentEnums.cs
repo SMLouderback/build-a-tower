@@ -24,4 +24,19 @@ namespace BuildATower
         Riding,
         VisitingShop
     }
+
+    public enum CondoJobKind
+    {
+        None,
+        InTower,
+        Outside
+    }
+
+    public enum CondoOutsidePhase
+    {
+        None,
+        ToWorkCommute,
+        Working,
+        ReturnCommute
+    }
 }

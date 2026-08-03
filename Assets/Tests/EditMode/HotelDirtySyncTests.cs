@@ -138,6 +138,26 @@ namespace BuildATower.Tests
 
             Assert.AreEqual(1, agents.Agents.Count);
             Assert.AreEqual(AgentRole.HotelGuest, agents.Agents[0].Role);
+            Assert.AreEqual(0, agents.Population, "Vacant Outside hotel beds must not inflate population.");
+        }
+
+        [Test]
+        public void Population_counts_hotel_guest_only_while_in_tower()
+        {
+            var grid = LivingTower(Hotel(), out _);
+            var agents = CreateAgents(grid);
+            agents.SyncHomes(grid);
+            var guest = agents.Agents[0];
+
+            Assert.AreEqual(AgentPhase.Outside, guest.Phase);
+            Assert.AreEqual(0, agents.Population);
+
+            guest.Phase = AgentPhase.AtHome;
+            guest.Visible = true;
+            Assert.AreEqual(1, agents.Population);
+
+            guest.Phase = AgentPhase.Outside;
+            Assert.AreEqual(0, agents.Population);
         }
 
         [Test]

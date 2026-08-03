@@ -110,13 +110,44 @@ namespace BuildATower
             if (conference != null)
             {
                 var officeWorkers = CountOfficeWorkers(agents);
-                var meetings = conference.ComputeDailyMeetings(
-                    grid,
-                    officeWorkers,
-                    currentStars,
-                    climateSpendMult);
-                if (meetings > 0)
-                    LastIncome += meetings;
+                foreach (var room in grid.Rooms)
+                {
+                    if (room?.Type == null) continue;
+                    if (room.Type.id != ConferenceSystem.ConferenceId) continue;
+
+                    var amount = conference.ComputeDailyMeetingsForHall(
+                        room,
+                        grid,
+                        officeWorkers,
+                        currentStars,
+                        climateSpendMult);
+                    if (amount <= 0) continue;
+
+                    LastIncome += amount;
+                    if (_lastIncomeByRoom.TryGetValue(room.InstanceId, out var existingMeetings))
+                        _lastIncomeByRoom[room.InstanceId] = existingMeetings + amount;
+                    else
+                        _lastIncomeByRoom[room.InstanceId] = amount;
+                    room.RecordLifetimeIncome(amount);
+                    room.QueueCleaning(
+                        ConferenceSystem.ConferenceDailyCleanJobs,
+                        ConferenceSystem.ConferenceDailyCleanMinutes);
+                }
+
+                var eventAmount = conference.TakePendingEventIncome(out var eventHallId);
+                if (eventAmount > 0)
+                {
+                    LastIncome += eventAmount;
+                    var eventHall = FindRoomByInstanceId(grid, eventHallId);
+                    if (eventHall != null)
+                    {
+                        if (_lastIncomeByRoom.TryGetValue(eventHall.InstanceId, out var existingEvent))
+                            _lastIncomeByRoom[eventHall.InstanceId] = existingEvent + eventAmount;
+                        else
+                            _lastIncomeByRoom[eventHall.InstanceId] = eventAmount;
+                        eventHall.RecordLifetimeIncome(eventAmount);
+                    }
+                }
             }
 
             wallet.Add(LastIncome);
@@ -264,6 +295,18 @@ namespace BuildATower
             }
 
             return count;
+        }
+
+        static RoomInstance FindRoomByInstanceId(TowerGrid grid, int instanceId)
+        {
+            if (grid == null || instanceId == 0) return null;
+            foreach (var room in grid.Rooms)
+            {
+                if (room != null && room.InstanceId == instanceId)
+                    return room;
+            }
+
+            return null;
         }
     }
 }

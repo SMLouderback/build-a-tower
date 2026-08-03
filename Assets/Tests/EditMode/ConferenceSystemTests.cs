@@ -109,7 +109,7 @@ namespace BuildATower.Tests
         {
             var grid = new TowerGrid();
             grid.TryPlaceLobby(Lobby(), 0, 16, 0, out _);
-            Assert.IsTrue(grid.TryPlace(Conference(40), new Vector2Int(0, 1), out _));
+            Assert.IsTrue(grid.TryPlace(Conference(40), new Vector2Int(0, 1), out var hall));
 
             // Workers without rent-paying homes so LastIncome is meetings-only.
             var agents = new List<Agent>();
@@ -131,7 +131,12 @@ namespace BuildATower.Tests
                 conference: conference);
 
             Assert.AreEqual(150, economy.LastIncome);
+            Assert.AreEqual(150, economy.GetLastRoomIncome(hall));
             Assert.AreEqual(100_150, wallet.Balance);
+            Assert.IsTrue(hall.Dirty);
+            Assert.AreEqual(
+                ConferenceSystem.ConferenceDailyCleanJobs * ConferenceSystem.ConferenceDailyCleanMinutes,
+                hall.CleanWorkRemaining);
         }
 
         [Test]
@@ -142,6 +147,15 @@ namespace BuildATower.Tests
             Assert.AreEqual(
                 ConferenceSystem.EventPayMult,
                 8f);
+        }
+
+        [Test]
+        public void MajorEventLumpPayout_floors_empty_hotels_and_zero_stars()
+        {
+            // capacity 120 → min guests = max(1, 120/20) = 6; stars floored to 1
+            // 6 * 1 * 120 * 8 = 5760
+            Assert.AreEqual(5760, ConferenceSystem.MajorEventLumpPayout(0, 0, 120, 1f));
+            Assert.AreEqual(0, ConferenceSystem.MajorEventLumpPayout(10, 2, 0, 1f));
         }
 
         [Test]
@@ -186,6 +200,7 @@ namespace BuildATower.Tests
             var news = new TowerNews();
             var wallet = new FundsWallet(1_000);
             var rng = new ScriptedRandom(14, 1); // Start=14, End=14
+            var economy = new EconomySystem(seed: 1);
 
             system.TickDay(0, grid, 10, 2, 1f, wallet, news, rng);
             system.TickDay(12, grid, 10, 2, 1f, wallet, news, rng);
@@ -198,7 +213,12 @@ namespace BuildATower.Tests
             Assert.IsFalse(system.IsHallBooked(low));
 
             var lump = ConferenceSystem.MajorEventLumpPayout(10, 2, 200, 1f);
+            Assert.AreEqual(lump, system.PendingEventIncome);
+            Assert.AreEqual(lump, system.LiveLumpPayout);
+
+            economy.OnNewDay(grid, Array.Empty<Agent>(), wallet, conference: system);
             Assert.AreEqual(1_000 + lump, wallet.Balance);
+            Assert.AreEqual(lump, economy.GetLastRoomIncome(high));
             Assert.IsTrue(HasMajorNews(news, "live"));
         }
 
@@ -210,24 +230,47 @@ namespace BuildATower.Tests
             var news = new TowerNews();
             var wallet = new FundsWallet(0);
             var rng = new ScriptedRandom(14, 2); // Start=14, End=15
+            var economy = new EconomySystem(seed: 1);
 
             system.TickDay(0, grid, 10, 2, 1f, wallet, news, rng);
             system.TickDay(12, grid, 10, 2, 1f, wallet, news, rng);
 
             var lump = ConferenceSystem.MajorEventLumpPayout(10, 2, 200, 1f);
             system.TickDay(14, grid, 10, 2, 1f, wallet, news, rng);
+            economy.OnNewDay(grid, Array.Empty<Agent>(), wallet, conference: system);
             Assert.AreEqual(lump, wallet.Balance);
 
             var daily = Mathf.RoundToInt(lump * ConferenceSystem.EventDailyWhileLiveMult);
             system.TickDay(15, grid, 10, 2, 1f, wallet, news, rng);
             Assert.AreEqual(MajorEventPhase.Live, system.Active.Phase);
+            economy.OnNewDay(grid, Array.Empty<Agent>(), wallet, conference: system);
             Assert.AreEqual(lump + daily, wallet.Balance);
+            Assert.AreEqual(daily, economy.GetLastRoomIncome(high));
 
             system.TickDay(16, grid, 10, 2, 1f, wallet, news, rng);
             Assert.AreEqual(MajorEventPhase.None, system.Active.Phase);
             Assert.AreEqual(0, system.BookedHallInstanceIds.Count);
             Assert.IsFalse(system.IsHallBooked(high));
             Assert.IsTrue(HasMajorNews(news, "ended"));
+            Assert.IsTrue(high.Dirty);
+            Assert.AreEqual(
+                ConferenceSystem.EventPostCleanMaidJobs * ConferenceSystem.EventPostCleanMinutes,
+                high.CleanWorkRemaining);
+            Assert.AreEqual(ConferenceSystem.EventPostRepairJobs, high.RepairJobsRemaining);
+            Assert.AreEqual(ConferenceSystem.EventPostRepairMinutes, high.RepairJobMinutes);
+        }
+
+        [Test]
+        public void Event_hall_open_window_is_8am_to_10pm()
+        {
+            Assert.AreEqual(8 * 60, ConferenceSystem.EventHallOpenStartMinute);
+            Assert.AreEqual(22 * 60, ConferenceSystem.EventHallOpenEndMinute);
+            Assert.AreEqual(
+                ConferenceSystem.EventHallOpenStartMinute,
+                AgentSystem.EventVisitorSpawnStartMinute);
+            Assert.AreEqual(
+                ConferenceSystem.EventHallOpenEndMinute,
+                AgentSystem.EventVisitorSpawnEndMinute);
         }
 
         [Test]

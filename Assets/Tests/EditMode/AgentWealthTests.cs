@@ -33,9 +33,9 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void ResolveBand_event_visitor_is_street()
+        public void ResolveBand_event_visitor_is_basic()
         {
-            Assert.AreEqual(WealthBand.Street, AgentWealth.ResolveBand(AgentRole.EventVisitor, null));
+            Assert.AreEqual(WealthBand.Basic, AgentWealth.ResolveBand(AgentRole.EventVisitor, null));
         }
 
         [Test]
@@ -70,31 +70,32 @@ namespace BuildATower.Tests
             for (var i = 0; i < 40; i++)
             {
                 var street = AgentWealth.RollDailyDisposable(WealthBand.Street, 1f, rng);
-                Assert.That(street, Is.InRange(20, 60));
+                Assert.That(street, Is.InRange(35, 90));
 
                 var basic = AgentWealth.RollDailyDisposable(WealthBand.Basic, 1f, rng);
-                Assert.That(basic, Is.InRange(40, 100));
+                Assert.That(basic, Is.InRange(70, 160));
 
                 var premium = AgentWealth.RollDailyDisposable(WealthBand.Premium, 1f, rng);
-                Assert.That(premium, Is.InRange(90, 200));
+                Assert.That(premium, Is.InRange(120, 280));
             }
 
             var boom = AgentWealth.RollDailyDisposable(WealthBand.Basic, 1.3f, new System.Random(1));
-            Assert.That(boom, Is.InRange(52, 130));
+            Assert.That(boom, Is.InRange(91, 208));
             Assert.GreaterOrEqual(boom, 0);
 
             var recession = AgentWealth.RollDailyDisposable(WealthBand.Street, 0.7f, new System.Random(2));
-            Assert.That(recession, Is.InRange(14, 42));
+            Assert.That(recession, Is.InRange(24, 63));
             Assert.GreaterOrEqual(recession, 0);
         }
 
         [Test]
-        public void CanAfford_compares_pay_to_remaining()
+        public void CanAfford_uses_soft_gate_not_full_list_price()
         {
             var restaurant = Shop(120);
+            // Gate = min(120, max(25, 60)) = 60
             Assert.IsTrue(AgentWealth.CanAfford(120, restaurant));
-            Assert.IsTrue(AgentWealth.CanAfford(200, restaurant));
-            Assert.IsFalse(AgentWealth.CanAfford(119, restaurant));
+            Assert.IsTrue(AgentWealth.CanAfford(60, restaurant));
+            Assert.IsFalse(AgentWealth.CanAfford(59, restaurant));
             Assert.IsFalse(AgentWealth.CanAfford(30, restaurant));
         }
 

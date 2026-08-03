@@ -27,6 +27,11 @@ namespace BuildATower
         public const int HotelCheckoutLatestMinute = 11 * 60;
         /// <summary>Maids/handymen drop a claimed job after waiting this long for an elevator.</summary>
         public const float ServiceAbandonWaitMinutes = 45f;
+        /// <summary>
+        /// Drop a clean/repair claim if the worker has not reached the site within this many
+        /// game minutes (covers stair queues and other non-elevator transit stalls).
+        /// </summary>
+        public const float ServiceTravelAbandonMinutes = 45f;
         public const float LowConditionStressPerDay = 8f;
         public const float CrimeStressPerDayAtMax = 12f;
         public const float CriminalProximityStressPerMinute = 0.4f;
@@ -45,21 +50,33 @@ namespace BuildATower
         public const float StreetSpawnBaseChance = 0.25f;
         public const int MaxConcurrentEventVisitors = 24;
         public const float EventHotelBookFraction = 0.25f;
-        public const float EventHallDwellMinMinutes = 18f;
-        public const float EventHallDwellMaxMinutes = 40f;
+        public const float EventHallDwellMinMinutes = 25f;
+        public const float EventHallDwellMaxMinutes = 55f;
+        /// <summary>Event Hall open / visitor window (8:00–22:00).</summary>
+        public const int EventVisitorSpawnStartMinute = ConferenceSystem.EventHallOpenStartMinute;
+        public const int EventVisitorSpawnEndMinute = ConferenceSystem.EventHallOpenEndMinute;
+        public const int EventVisitorSpawnBatchSize = 3;
         public const string HousekeepingId = "service_housekeeping";
         public const string MaintenanceId = "service_maintenance";
         public const string SecurityId = "service_security";
         public const float PatrolDwellMinutes = 8f;
+        /// <summary>Max maid-minutes applied per trip so hotels are not starved by venue cleans.</summary>
+        public const float MaidCleanShiftMinutes = 30f;
+        public const int MaxMaidsPerHotelClean = 1;
+        public const int MaxMaidsPerVenueClean = 3;
         public const int MaxConcurrentCriminals = 3;
-        public const float CriminalSpawnMinAvg = 15f;
-        public const float CriminalSpawnChancePerMinute = 0.08f;
+        public const float CriminalSpawnMinAvg = 28f;
+        public const float CriminalSpawnChancePerMinute = 0.04f;
         public const float CriminalLifeMinutes = 180f;
         public const float CriminalFloorDwellMinutes = 8f;
+        /// <summary>Stress added per game minute while waiting for a full stair flight.</summary>
+        public const float StairWaitStressPerMinute = 0.1f;
 
         readonly List<Agent> _agents = new();
         readonly TransitRouter _router;
         readonly ElevatorSystem _elevators;
+        readonly StairCapacity _stairCapacity;
+        readonly HashSet<int> _stairWaitIds = new();
         readonly System.Random _rng = new(42);
         readonly HashSet<int> _condoMoveInsNotified = new();
         readonly HashSet<int> _patrolFloorScratch = new();
@@ -73,6 +90,8 @@ namespace BuildATower
         float _nowTotalMinutes;
         int _streetSpawnMinuteAccumulator;
         int _lastEventVisitorSpawnDay = int.MinValue;
+        int _eventVisitorsSpawnedToday;
+        int _condoJobsAssignedDay = -1;
 
         public IReadOnlyList<Agent> Agents => _agents;
         public string LastCaptureMessage { get; private set; }
@@ -83,9 +102,8 @@ namespace BuildATower
                 var count = 0;
                 foreach (var agent in _agents)
                 {
-                    if (IsNonPopulationRole(agent.Role)) continue;
-                    if (agent.Role != AgentRole.CondoResident || agent.HasMovedIn)
-                        count++;
+                    if (!CountsTowardPopulation(agent)) continue;
+                    count++;
                 }
 
                 return count;
@@ -100,7 +118,7 @@ namespace BuildATower
                 var sum = 0f;
                 foreach (var a in _agents)
                 {
-                    if (IsNonPopulationRole(a.Role)) continue;
+                    if (!CountsTowardPopulation(a)) continue;
                     sum += a.Stress;
                     count++;
                 }
@@ -109,11 +127,15 @@ namespace BuildATower
             }
         }
 
-        public AgentSystem(TransitRouter router, MarketClimate climate = null)
+        public AgentSystem(
+            TransitRouter router,
+            MarketClimate climate = null,
+            StairCapacity stairCapacity = null)
         {
             _router = router;
             _elevators = router.Elevators;
             _climate = climate;
+            _stairCapacity = stairCapacity ?? new StairCapacity(StairCapacity.DefaultCap);
         }
 
         public void SetClimate(MarketClimate climate) => _climate = climate;
@@ -142,11 +164,31 @@ namespace BuildATower
                 if (!livingRooms.Contains(_agents[i].HomeRoom))
                 {
                     CancelCommercialVisit(_agents[i]);
-                    _agents.RemoveAt(i);
+                    RemoveAgentAt(i);
                 }
             }
 
             SyncServiceStaff(grid);
+
+            var officeRooms = new List<RoomInstance>();
+            var officeDesks = 0;
+            foreach (var room in livingRooms)
+            {
+                if (room?.Type == null || room.IsBroken) continue;
+                if (room.Type.category != RoomCategory.Office) continue;
+                officeRooms.Add(room);
+                officeDesks += room.Type.maxOccupants;
+            }
+
+            var condoResidents = 0;
+            foreach (var agent in _agents)
+            {
+                if (agent.Role == AgentRole.CondoResident && agent.HasMovedIn)
+                    condoResidents++;
+            }
+
+            var inTowerWanted = CondoEmployment.InTowerWanted(officeDesks, condoResidents);
+            var reservedDesks = CondoEmployment.DistributeReservedDesks(officeRooms, inTowerWanted);
 
             foreach (var room in livingRooms)
             {
@@ -171,6 +213,18 @@ namespace BuildATower
                     continue;
 
                 var want = Mathf.Max(1, room.Type.maxOccupants);
+                if (role == AgentRole.OfficeWorker)
+                {
+                    reservedDesks.TryGetValue(room.InstanceId, out var reservedSlots);
+                    want = Mathf.Max(0, room.Type.maxOccupants - reservedSlots);
+                    while (existing > want)
+                    {
+                        if (!TryRemoveSurplusOfficeWorker(room))
+                            break;
+                        existing--;
+                    }
+                }
+
                 while (existing < want)
                 {
                     var homeCell = HomeCell(room, existing);
@@ -197,6 +251,37 @@ namespace BuildATower
                     }
                 }
             }
+
+            // Desk reservation / condo stock may have changed — allow Tick to re-run AssignCondoJobs.
+            _condoJobsAssignedDay = -1;
+        }
+
+        bool TryRemoveSurplusOfficeWorker(RoomInstance home)
+        {
+            var removeIndex = -1;
+            var bestScore = int.MaxValue;
+            for (var i = _agents.Count - 1; i >= 0; i--)
+            {
+                var agent = _agents[i];
+                if (!ReferenceEquals(agent.HomeRoom, home) || agent.Role != AgentRole.OfficeWorker)
+                    continue;
+
+                // Prefer Outside, then non-Working, then Working.
+                var score = agent.Phase == AgentPhase.Outside
+                    ? 0
+                    : agent.Phase == AgentPhase.Working
+                        ? 2
+                        : 1;
+                if (score >= bestScore) continue;
+                bestScore = score;
+                removeIndex = i;
+                if (score == 0) break;
+            }
+
+            if (removeIndex < 0) return false;
+            CancelCommercialVisit(_agents[removeIndex]);
+            RemoveAgentAt(removeIndex);
+            return true;
         }
 
         bool PassesCondoDemand(RoomInstance room, int currentStars, int climateOffset = 0)
@@ -218,13 +303,16 @@ namespace BuildATower
             int currentStars = 0,
             MarketClimate climate = null,
             CrimeSystem crime = null,
-            ResearchSystem research = null)
+            ResearchSystem research = null,
+            ConferenceSystem conference = null)
         {
             if (grid == null || clock == null) return;
             if (climate != null)
                 _climate = climate;
             _crime = crime;
             _research = research;
+
+            TryDailyAssignCondoJobs(grid, clock);
 
             var total = clock.DayIndex * GameClock.MinutesPerDay + clock.MinuteOfDay;
             _nowTotalMinutes = total;
@@ -233,6 +321,7 @@ namespace BuildATower
                 advanced = Mathf.Max(0, total - _lastTotalMinutes);
             _lastTotalMinutes = total;
 
+            _stairWaitIds.Clear();
             for (var i = 0; i < _agents.Count; i++)
             {
                 var agent = _agents[i];
@@ -242,7 +331,7 @@ namespace BuildATower
                 if (agent.Phase == AgentPhase.Working && advanced > 0)
                     agent.WorkedMinutes += advanced;
 
-                UpdateSchedule(agent, clock, grid);
+                UpdateSchedule(agent, clock, grid, deltaGameMinutes);
                 if (agent.Phase == AgentPhase.WaitingAtElevator)
                 {
                     agent.ElevatorWaitMinutes += deltaGameMinutes;
@@ -253,7 +342,7 @@ namespace BuildATower
                         TryRescoreElevatorWait(agent, total);
                 }
 
-                StepMovement(agent, deltaGameMinutes);
+                StepMovement(agent, deltaGameMinutes, grid);
                 RecoverIfPathStuck(agent, deltaGameMinutes);
                 UpdateVisitingShop(agent, deltaGameMinutes, grid);
                 UpdateEventHallDwell(agent, deltaGameMinutes, grid, clock);
@@ -264,6 +353,7 @@ namespace BuildATower
             }
 
             UpdateStreetTraffic(clock, grid, currentStars, advanced);
+            SyncEventVisitors(conference, grid, clock);
             UpdateCriminalTraffic(deltaGameMinutes, grid, _crime);
             // Single capture pass after movement so one Security captures at most one Criminal per Tick.
             TryCaptureCriminals(_crime);
@@ -288,7 +378,7 @@ namespace BuildATower
             }
         }
 
-        void UpdateSchedule(Agent agent, GameClock clock, TowerGrid grid)
+        void UpdateSchedule(Agent agent, GameClock clock, TowerGrid grid, float deltaGameMinutes)
         {
             switch (agent.Role)
             {
@@ -299,11 +389,11 @@ namespace BuildATower
                     UpdateHotel(agent, clock, grid);
                     break;
                 case AgentRole.CondoResident:
-                    UpdateCondo(agent, clock, grid);
+                    UpdateCondo(agent, clock, grid, deltaGameMinutes);
                     break;
                 case AgentRole.Maid:
                 case AgentRole.Handyman:
-                    UpdateServiceAgent(agent, grid);
+                    UpdateServiceAgent(agent, grid, deltaGameMinutes);
                     break;
                 case AgentRole.Security:
                     UpdateSecurityAgent(agent, grid, _crime);
@@ -403,7 +493,7 @@ namespace BuildATower
                 if (!IsServiceRole(agent.Role)) continue;
                 if (staffHomes.Contains(agent.HomeRoom)) continue;
                 ClearServiceClaim(agent);
-                _agents.RemoveAt(i);
+                RemoveAgentAt(i);
             }
         }
 
@@ -426,59 +516,79 @@ namespace BuildATower
 
             if (removeIndex < 0) return;
             ClearServiceClaim(_agents[removeIndex]);
-            _agents.RemoveAt(removeIndex);
+            RemoveAgentAt(removeIndex);
         }
 
-        void UpdateServiceAgent(Agent agent, TowerGrid grid)
+        void UpdateServiceAgent(Agent agent, TowerGrid grid, float deltaGameMinutes = 0f)
         {
-            if (agent.ServiceTarget != null)
+            if (agent.ServiceTarget != null && agent.Phase == AgentPhase.Working)
             {
-                if (agent.Phase == AgentPhase.Working) return;
-
-                // Healthy wait/ride: do not replan every tick (duplicate queue IDs).
-                if (agent.Phase is AgentPhase.WaitingAtElevator or AgentPhase.Riding)
-                {
-                    // Extreme wait: drop claim so another worker can clean/repair.
-                    if (agent.ElevatorWaitMinutes > ServiceAbandonWaitMinutes)
-                    {
-                        ClearServiceClaim(agent);
-                        AbandonServiceTripToHome(agent, grid);
-                    }
-                    return;
-                }
-
-                if (agent.Phase == AgentPhase.Moving)
-                {
-                    var exhausted = agent.Path == null || agent.Path.Count == 0 ||
-                                    agent.PathIndex >= agent.Path.Count;
-                    if (exhausted)
-                    {
-                        ReplanTrip(agent, allowReplan: true);
-                        // Still stalled with an empty path → release Dirty/repair claim.
-                        if (agent.Phase == AgentPhase.Moving &&
-                            (agent.Path == null || agent.Path.Count == 0 ||
-                             agent.PathIndex >= agent.Path.Count))
-                        {
-                            ClearServiceClaim(agent);
-                            AbandonServiceTripToHome(agent, grid);
-                        }
-                    }
-                    return;
-                }
-
-                // Claim lost its trip — re-path or drop.
-                if (!BeginTrip(
-                        agent,
-                        agent.Cell,
-                        HomeCell(agent.ServiceTarget, 0),
-                        AgentPhase.Working,
-                        grid))
-                    ClearServiceClaim(agent);
+                agent.ServiceTravelMinutes = 0f;
                 return;
             }
 
+            if (agent.ServiceTarget != null)
+            {
+                if (deltaGameMinutes > 0f)
+                    agent.ServiceTravelMinutes += deltaGameMinutes;
+
+                var abandonTravel = agent.ServiceTravelMinutes > ServiceTravelAbandonMinutes;
+                var abandonElevator =
+                    (agent.Phase is AgentPhase.WaitingAtElevator or AgentPhase.Riding) &&
+                    agent.ElevatorWaitMinutes > ServiceAbandonWaitMinutes;
+
+                if (abandonTravel || abandonElevator)
+                {
+                    ClearServiceClaim(agent);
+                    SnapServiceAgentIdle(agent);
+                }
+                else if (agent.Phase is AgentPhase.WaitingAtElevator or AgentPhase.Riding)
+                {
+                    return;
+                }
+                else if (agent.Phase == AgentPhase.Moving)
+                {
+                    var exhausted = agent.Path == null || agent.Path.Count == 0 ||
+                                    agent.PathIndex >= agent.Path.Count;
+                    if (!exhausted)
+                        return;
+
+                    ReplanTrip(agent, allowReplan: true);
+                    if (agent.Phase == AgentPhase.Moving &&
+                        (agent.Path == null || agent.Path.Count == 0 ||
+                         agent.PathIndex >= agent.Path.Count))
+                    {
+                        ClearServiceClaim(agent);
+                        SnapServiceAgentIdle(agent);
+                    }
+                    else
+                        return;
+                }
+                else if (!BeginTrip(
+                             agent,
+                             agent.Cell,
+                             HomeCell(agent.ServiceTarget, 0),
+                             AgentPhase.Working,
+                             grid))
+                {
+                    ClearServiceClaim(agent);
+                    SnapServiceAgentIdle(agent);
+                }
+                else
+                    return;
+
+                if (agent.ServiceTarget != null)
+                    return;
+            }
+
+            // No claim: recover from stale Moving left by a failed job path (soft-lock).
             if (agent.Phase is AgentPhase.Moving or AgentPhase.WaitingAtElevator or AgentPhase.Riding)
-                return;
+            {
+                if (IsMovementStuck(agent) || agent.PhaseAfterMove == AgentPhase.Working)
+                    SnapServiceAgentIdle(agent);
+                else
+                    return;
+            }
 
             if (TryAssignJobFor(agent, grid))
                 return;
@@ -496,6 +606,31 @@ namespace BuildATower
         {
             if (agent?.HomeRoom == null || grid == null) return;
             BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, agent.HomeSlot), AgentPhase.AtHome, grid);
+        }
+
+        /// <summary>
+        /// Clears trip state and parks the worker at their ops room so they can take a new job.
+        /// Used after failed pathing / abandoned claims — StallInPlace must not soft-lock staff.
+        /// </summary>
+        void SnapServiceAgentIdle(Agent agent)
+        {
+            if (agent?.HomeRoom == null) return;
+            ClearElevatorTripState(agent);
+            _elevators.RemoveFromQueues(agent.Id);
+            ReleaseStairsOccupancy(agent);
+            var home = HomeCell(agent.HomeRoom, agent.HomeSlot);
+            agent.Cell = home;
+            agent.WorldPosition = new Vector2(home.x + 0.5f, home.y + 0.5f);
+            agent.Phase = AgentPhase.AtHome;
+            agent.PhaseAfterMove = AgentPhase.AtHome;
+            agent.GoalCell = null;
+            agent.Path?.Clear();
+            agent.PathIndex = 0;
+            agent.TripLegs?.Clear();
+            agent.TripLegIndex = 0;
+            agent.PathStuckMinutes = 0f;
+            agent.ServiceTravelMinutes = 0f;
+            agent.Visible = true;
         }
 
         void UpdateCriminalAgent(Agent agent, TowerGrid grid, CrimeSystem crime)
@@ -832,66 +967,165 @@ namespace BuildATower
         {
             if (agent == null || grid == null || agent.ServiceTarget != null) return false;
 
-            RoomInstance target = null;
-            float workMinutes = 0f;
             if (agent.Role == AgentRole.Maid)
+                return TryAssignMaidCleanJob(agent, grid);
+
+            if (agent.Role == AgentRole.Handyman)
             {
-                target = FindOldestDirtyHotel(grid);
-                if (target != null)
-                    workMinutes = RoomConditionRules.CleanMinutes(
-                        target.Type,
-                        ResearchEffects.CleanMinutesMultiplier(_research));
-            }
-            else if (agent.Role == AgentRole.Handyman)
-            {
-                target = FindLowestConditionRepairTarget(grid);
-                if (target != null)
-                    workMinutes = RoomConditionRules.RepairMinutes(
+                var target = FindRepairTarget(grid);
+                if (target == null) return false;
+
+                var workMinutes = target.RepairJobsRemaining > 0 && target.RepairJobMinutes > 0f
+                    ? target.RepairJobMinutes * ResearchEffects.RepairMinutesMultiplier(_research)
+                    : RoomConditionRules.RepairMinutes(
                         ResearchEffects.RepairMinutesMultiplier(_research));
+                agent.ServiceCleanProgress = 0f;
+                return TryBeginServiceTrip(agent, grid, target, workMinutes);
             }
 
-            if (target == null) return false;
+            return false;
+        }
 
+        bool TryAssignMaidCleanJob(Agent agent, TowerGrid grid)
+        {
+            // Try targets in priority order; a failed path must not soft-lock on the first room.
+            foreach (var target in EnumerateCleanTargets(grid))
+            {
+                EnsureCleanWorkMaterialized(target);
+                var progress = Mathf.Min(MaidCleanShiftMinutes, target.CleanWorkRemaining);
+                if (progress <= 0f) continue;
+
+                var mult = ResearchEffects.CleanMinutesMultiplier(_research);
+                var workMinutes = Mathf.Max(0.1f, progress * mult);
+                agent.ServiceCleanProgress = progress;
+                if (TryBeginServiceTrip(agent, grid, target, workMinutes))
+                    return true;
+            }
+
+            agent.ServiceCleanProgress = 0f;
+            return false;
+        }
+
+        bool TryBeginServiceTrip(Agent agent, TowerGrid grid, RoomInstance target, float workMinutes)
+        {
             agent.ServiceTarget = target;
             agent.ServiceWorkRemaining = workMinutes;
+            agent.ServiceTravelMinutes = 0f;
             agent.Visible = true;
             if (BeginTrip(agent, agent.Cell, HomeCell(target, 0), AgentPhase.Working, grid))
                 return true;
 
+            // BeginTrip StallInPlace leaves Moving+GoalCell — snap idle so staff can retry.
             ClearServiceClaim(agent);
+            SnapServiceAgentIdle(agent);
             return false;
         }
 
-        RoomInstance FindOldestDirtyHotel(TowerGrid grid)
+        IEnumerable<RoomInstance> EnumerateCleanTargets(TowerGrid grid)
         {
-            RoomInstance best = null;
+            var list = new List<RoomInstance>();
             foreach (var room in grid.Rooms)
             {
-                if (room?.Type == null || room.Type.category != RoomCategory.Hotel) continue;
-                if (!room.Dirty || room.IsBroken) continue;
-                if (IsServiceTargetClaimed(room)) continue;
-                if (best == null || room.InstanceId < best.InstanceId)
-                    best = room;
+                if (!NeedsMaidClean(room)) continue;
+                if (CountServiceClaims(room, AgentRole.Maid) >= MaxCleanersFor(room))
+                    continue;
+                list.Add(room);
             }
 
-            return best;
+            list.Sort((a, b) =>
+            {
+                var rank = CleanPriorityRank(a).CompareTo(CleanPriorityRank(b));
+                if (rank != 0) return rank;
+                var work = b.CleanWorkRemaining.CompareTo(a.CleanWorkRemaining);
+                if (work != 0) return work;
+                return a.InstanceId.CompareTo(b.InstanceId);
+            });
+            return list;
         }
 
-        RoomInstance FindLowestConditionRepairTarget(TowerGrid grid)
+        RoomInstance FindBestCleanTarget(TowerGrid grid)
         {
-            RoomInstance best = null;
+            foreach (var room in EnumerateCleanTargets(grid))
+                return room;
+            return null;
+        }
+
+        static int CleanPriorityRank(RoomInstance room)
+        {
+            if (room?.Type == null) return 99;
+            if (room.Type.category == RoomCategory.Hotel) return 0;
+            if (room.Type.id == ConferenceSystem.ConferenceId) return 1;
+            if (room.Type.id == ConferenceSystem.EventHallId) return 2;
+            return 9;
+        }
+
+        static int MaxCleanersFor(RoomInstance room)
+        {
+            if (room?.Type != null && room.Type.category == RoomCategory.Hotel)
+                return MaxMaidsPerHotelClean;
+            return MaxMaidsPerVenueClean;
+        }
+
+        static void EnsureCleanWorkMaterialized(RoomInstance room)
+        {
+            if (room == null || room.CleanWorkRemaining > 0f) return;
+            if (!room.Dirty) return;
+            // Legacy MarkDirty-only hotels: fill default clean minutes once.
+            room.QueueCleanWork(RoomConditionRules.CleanMinutes(room.Type));
+        }
+
+        RoomInstance FindRepairTarget(TowerGrid grid)
+        {
+            RoomInstance bestJob = null;
+            RoomInstance bestCondition = null;
             foreach (var room in grid.Rooms)
             {
                 if (room?.Type == null || !RoomConditionRules.CanDegrade(room.Type)) continue;
-                if (room.IsBroken || room.Condition < 1 || room.Condition > 99) continue;
-                if (IsServiceTargetClaimed(room)) continue;
-                if (best == null ||
-                    room.Condition < best.Condition ||
-                    (room.Condition == best.Condition && room.InstanceId < best.InstanceId))
-                    best = room;
+                if (room.IsBroken) continue;
+
+                if (room.RepairJobsRemaining > 0)
+                {
+                    if (CountServiceClaims(room, AgentRole.Handyman) >= room.RepairJobsRemaining)
+                        continue;
+                    if (bestJob == null || room.InstanceId < bestJob.InstanceId)
+                        bestJob = room;
+                    continue;
+                }
+
+                if (room.Condition < 1 || room.Condition > 99) continue;
+                if (CountServiceClaims(room, AgentRole.Handyman) > 0) continue;
+                if (bestCondition == null ||
+                    room.Condition < bestCondition.Condition ||
+                    (room.Condition == bestCondition.Condition &&
+                     room.InstanceId < bestCondition.InstanceId))
+                    bestCondition = room;
             }
 
-            return best;
+            return bestJob ?? bestCondition;
+        }
+
+        static bool NeedsMaidClean(RoomInstance room)
+        {
+            if (room?.Type == null || room.IsBroken) return false;
+            if (!room.Dirty && room.CleanWorkRemaining <= 0f) return false;
+            if (room.Type.category == RoomCategory.Hotel) return true;
+            var id = room.Type.id;
+            if (id == ConferenceSystem.ConferenceId || id == ConferenceSystem.EventHallId)
+                return true;
+            return false;
+        }
+
+        int CountServiceClaims(RoomInstance room, AgentRole role)
+        {
+            var count = 0;
+            foreach (var agent in _agents)
+            {
+                if (agent.Role != role) continue;
+                if (ReferenceEquals(agent.ServiceTarget, room))
+                    count++;
+            }
+
+            return count;
         }
 
         bool IsServiceTargetClaimed(RoomInstance room)
@@ -909,14 +1143,20 @@ namespace BuildATower
         {
             var target = agent.ServiceTarget;
             if (agent.Role == AgentRole.Maid)
-                target?.ClearDirty();
+            {
+                if (target != null)
+                    target.ApplyCleanWork(agent.ServiceCleanProgress);
+            }
             else if (agent.Role == AgentRole.Handyman)
             {
-                // Do not revive Broken rooms if Condition hit 0 mid-job (e.g. midnight decay).
-                if (target != null && !target.IsBroken)
+                if (target != null && target.RepairJobsRemaining > 0)
+                    target.CompleteRepairJob();
+                else if (target != null && !target.IsBroken)
+                {
                     RoomConditionRules.ApplyRepairTick(
                         target,
                         ResearchEffects.RepairChunkMultiplier(_research));
+                }
             }
 
             ClearServiceClaim(agent);
@@ -927,6 +1167,14 @@ namespace BuildATower
             if (agent == null) return;
             agent.ServiceTarget = null;
             agent.ServiceWorkRemaining = 0f;
+            agent.ServiceCleanProgress = 0f;
+            agent.ServiceTravelMinutes = 0f;
+        }
+
+        static void MarkRoomDirtyForCleaning(RoomInstance room)
+        {
+            if (room == null) return;
+            room.QueueCleanWork(RoomConditionRules.CleanMinutes(room.Type));
         }
 
         static bool IsServiceRole(AgentRole role) =>
@@ -936,34 +1184,144 @@ namespace BuildATower
             role is AgentRole.StreetVisitor or AgentRole.EventVisitor or AgentRole.Maid
                 or AgentRole.Handyman or AgentRole.Security or AgentRole.Criminal;
 
+        /// <summary>
+        /// Star / HUD population: condo residents after move-in, office workers (even when Outside),
+        /// and hotel guests only while currently in the tower (not Outside between stays).
+        /// </summary>
+        public static bool CountsTowardPopulation(Agent agent)
+        {
+            if (agent == null || IsNonPopulationRole(agent.Role)) return false;
+            if (agent.Role == AgentRole.CondoResident && !agent.HasMovedIn) return false;
+            if (agent.Role == AgentRole.HotelGuest && agent.Phase == AgentPhase.Outside) return false;
+            return true;
+        }
+
         static bool IsEphemeralOrStaffRole(AgentRole role) =>
             role is AgentRole.StreetVisitor or AgentRole.EventVisitor or AgentRole.Maid
                 or AgentRole.Handyman or AgentRole.Security or AgentRole.Criminal;
 
-        void UpdateCondo(Agent agent, GameClock clock, TowerGrid grid)
+        void UpdateCondo(Agent agent, GameClock clock, TowerGrid grid, float deltaGameMinutes)
         {
             var minute = clock.MinuteOfDay;
-            if (agent.HasMovedIn &&
-                agent.Phase == AgentPhase.AtHome &&
+            if (minute < 5 * 60)
+                agent.CheckedOutToday = false;
+
+            if (!agent.HasMovedIn)
+            {
+                if (agent.Phase == AgentPhase.AtHome)
+                    return;
+
+                var home = HomeCell(agent.HomeRoom, agent.HomeSlot);
+                if (agent.Phase == AgentPhase.Outside)
+                {
+                    BeginTrip(agent, LobbyExitCell(grid, home.x), home, AgentPhase.AtHome, grid);
+                    return;
+                }
+
+                if (agent.Phase == AgentPhase.Moving &&
+                    (agent.Path == null || agent.Path.Count == 0) &&
+                    agent.GoalCell.HasValue)
+                    ReplanTrip(agent, allowReplan: true);
+                return;
+            }
+
+            // Evening commercial only when home and not mid Outside/InTower work shift.
+            if (agent.Phase == AgentPhase.AtHome &&
+                agent.OutsideWorkPhase == CondoOutsidePhase.None &&
                 minute >= 12 * 60 &&
                 minute <= 17 * 60 &&
                 agent.CommercialTripDay != clock.DayIndex)
                 TryBeginCommercialTrip(agent, grid, clock, AgentPhase.AtHome);
 
-            if (agent.HasMovedIn || agent.Phase == AgentPhase.AtHome)
+            if (agent.JobKind == CondoJobKind.Outside)
+                UpdateCondoOutsideJob(agent, clock, grid, deltaGameMinutes);
+            else if (agent.JobKind == CondoJobKind.InTower)
+                UpdateCondoInTowerJob(agent, clock, grid);
+        }
+
+        void UpdateCondoOutsideJob(Agent agent, GameClock clock, TowerGrid grid, float deltaGameMinutes)
+        {
+            var minute = clock.MinuteOfDay;
+            var home = HomeCell(agent.HomeRoom, agent.HomeSlot);
+            var exitCell = LobbyExitCell(grid, home.x);
+
+            if (agent.Phase == AgentPhase.AtHome &&
+                agent.OutsideWorkPhase == CondoOutsidePhase.None &&
+                !agent.CheckedOutToday &&
+                minute >= agent.LeaveHomeMinute)
+            {
+                BeginTrip(agent, home, exitCell, AgentPhase.Outside, grid);
+                agent.OutsideWorkPhase = CondoOutsidePhase.ToWorkCommute;
+                agent.OutsideDwellRemaining = agent.CommuteOneWayMinutes;
+                agent.CheckedOutToday = true;
+            }
+
+            if (agent.Phase != AgentPhase.Outside)
                 return;
 
-            var home = HomeCell(agent.HomeRoom, agent.HomeSlot);
-            if (agent.Phase == AgentPhase.Outside)
+            // Finished return commute but still Outside (home trip stalled) — keep trying.
+            if (agent.OutsideWorkPhase == CondoOutsidePhase.None)
             {
-                BeginTrip(agent, LobbyExitCell(grid, home.x), home, AgentPhase.AtHome, grid);
+                BeginTrip(agent, exitCell, home, AgentPhase.AtHome, grid);
                 return;
             }
 
-            if (agent.Phase == AgentPhase.Moving &&
-                (agent.Path == null || agent.Path.Count == 0) &&
-                agent.GoalCell.HasValue)
-                ReplanTrip(agent, allowReplan: true);
+            if (deltaGameMinutes > 0f)
+                agent.OutsideDwellRemaining -= deltaGameMinutes;
+
+            if (agent.OutsideDwellRemaining > 0f)
+                return;
+
+            switch (agent.OutsideWorkPhase)
+            {
+                case CondoOutsidePhase.ToWorkCommute:
+                    agent.OutsideWorkPhase = CondoOutsidePhase.Working;
+                    agent.OutsideDwellRemaining = agent.WorkMinutes;
+                    break;
+                case CondoOutsidePhase.Working:
+                    agent.OutsideWorkPhase = CondoOutsidePhase.ReturnCommute;
+                    agent.OutsideDwellRemaining = agent.CommuteOneWayMinutes;
+                    break;
+                case CondoOutsidePhase.ReturnCommute:
+                    agent.OutsideWorkPhase = CondoOutsidePhase.None;
+                    agent.OutsideDwellRemaining = 0f;
+                    BeginTrip(agent, exitCell, home, AgentPhase.AtHome, grid);
+                    break;
+            }
+        }
+
+        void UpdateCondoInTowerJob(Agent agent, GameClock clock, TowerGrid grid)
+        {
+            if (agent.WorkplaceRoom == null)
+                return;
+
+            var minute = clock.MinuteOfDay;
+            var home = HomeCell(agent.HomeRoom, agent.HomeSlot);
+            var workplace = HomeCell(agent.WorkplaceRoom, 0);
+
+            if (agent.Phase == AgentPhase.AtHome &&
+                !agent.CheckedOutToday &&
+                minute >= agent.LeaveHomeMinute)
+            {
+                agent.WorkedMinutes = 0;
+                BeginTrip(agent, home, workplace, AgentPhase.Working, grid);
+                agent.CheckedOutToday = true;
+            }
+
+            if (agent.Phase == AgentPhase.Working && agent.WorkedMinutes >= agent.WorkMinutes)
+                BeginTrip(agent, agent.Cell, home, AgentPhase.AtHome, grid);
+
+            if (agent.Phase == AgentPhase.Working &&
+                minute >= 11 * 60 + 30 &&
+                minute <= 13 * 60 + 30 &&
+                agent.CommercialTripDay != clock.DayIndex)
+            {
+                // One decision per day: ~60% attempt shop lunch; else desk lunch (mark day done).
+                if (_rng.NextDouble() >= 0.6)
+                    agent.CommercialTripDay = clock.DayIndex;
+                else
+                    TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Working);
+            }
         }
 
         void UpdateOffice(Agent agent, GameClock clock, TowerGrid grid)
@@ -1159,7 +1517,7 @@ namespace BuildATower
                 return true;
 
             CancelCommercialVisit(agent);
-            _agents.RemoveAt(_agents.Count - 1);
+            RemoveAgentAt(_agents.Count - 1);
             return false;
         }
 
@@ -1183,7 +1541,7 @@ namespace BuildATower
                 if (agent.Role != AgentRole.StreetVisitor) continue;
                 if (agent.Phase != AgentPhase.Outside) continue;
                 if (agent.VisitTarget != null) continue;
-                _agents.RemoveAt(i);
+                RemoveAgentAt(i);
             }
         }
 
@@ -1198,8 +1556,9 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// While <see cref="MajorEventPhase.Live"/>, spawn up to today's quota under the concurrent cap.
-        /// When the event is not live, force-despawn remaining EventVisitors (hotel guests check out Dirty).
+        /// While <see cref="MajorEventPhase.Live"/>, spawn visitors during daytime shop hours
+        /// up to today's quota. When the event is not live, force-despawn remaining EventVisitors.
+        /// Safe to call every Tick and once at midnight.
         /// </summary>
         public void SyncEventVisitors(ConferenceSystem conference, TowerGrid grid, GameClock clock)
         {
@@ -1211,27 +1570,59 @@ namespace BuildATower
             {
                 DespawnAllEventVisitors(forceHotelCheckout: true);
                 _lastEventVisitorSpawnDay = int.MinValue;
+                _eventVisitorsSpawnedToday = 0;
                 return;
             }
 
-            if (_lastEventVisitorSpawnDay == clock.DayIndex)
+            if (_lastEventVisitorSpawnDay != clock.DayIndex)
+            {
+                _lastEventVisitorSpawnDay = clock.DayIndex;
+                _eventVisitorsSpawnedToday = 0;
+            }
+
+            // Midnight / overnight: hotel guests can still book, but day crowd waits for open shops.
+            var minute = clock.MinuteOfDay;
+            var inDayWindow = minute >= EventVisitorSpawnStartMinute &&
+                              minute < EventVisitorSpawnEndMinute;
+            if (!inDayWindow)
                 return;
 
-            _lastEventVisitorSpawnDay = clock.DayIndex;
             var spawnTarget = ComputeEventVisitorSpawnPerDay(conference.SumBookedHallCapacity(grid));
             if (spawnTarget <= 0) return;
+            if (_eventVisitorsSpawnedToday >= spawnTarget) return;
 
             var hall = conference.FindBookedHall(grid);
             if (hall == null) return;
 
-            var toSpawn = Mathf.Min(spawnTarget, MaxConcurrentEventVisitors - CountEventVisitors());
+            // Pace arrivals across the day window so foot traffic is visible for hours, not one burst.
+            var window = EventVisitorSpawnEndMinute - EventVisitorSpawnStartMinute;
+            var elapsed = minute - EventVisitorSpawnStartMinute;
+            var expectedByNow = window <= 0
+                ? spawnTarget
+                : Mathf.CeilToInt(spawnTarget * (elapsed + 1) / (float)window);
+            expectedByNow = Mathf.Clamp(expectedByNow, 0, spawnTarget);
+
+            var remainingQuota = expectedByNow - _eventVisitorsSpawnedToday;
+            if (remainingQuota <= 0) return;
+
+            var freeSlots = MaxConcurrentEventVisitors - CountEventVisitors();
+            var toSpawn = Mathf.Min(EventVisitorSpawnBatchSize, remainingQuota, freeSlots);
             for (var i = 0; i < toSpawn; i++)
             {
                 var preferHotel = _rng.NextDouble() < EventHotelBookFraction;
                 if (preferHotel && TrySpawnEventHotelVisitor(grid, clock))
+                {
+                    _eventVisitorsSpawnedToday++;
                     continue;
-                if (!TrySpawnEventDayVisitor(grid, clock, hall))
-                    break;
+                }
+
+                if (TrySpawnEventDayVisitor(grid, clock, hall))
+                {
+                    _eventVisitorsSpawnedToday++;
+                    continue;
+                }
+
+                // Path failure / full halls: try remaining slots rather than aborting the batch.
             }
         }
 
@@ -1258,7 +1649,7 @@ namespace BuildATower
             if (BeginTrip(agent, exitCell, hallCell, AgentPhase.Working, grid))
                 return true;
 
-            _agents.RemoveAt(_agents.Count - 1);
+            RemoveAgentAt(_agents.Count - 1);
             return false;
         }
 
@@ -1355,7 +1746,7 @@ namespace BuildATower
                 if (agent.VisitTarget != null) continue;
 
                 CancelCommercialVisit(agent);
-                _agents.RemoveAt(i);
+                RemoveAgentAt(i);
             }
         }
 
@@ -1371,7 +1762,7 @@ namespace BuildATower
                 {
                     // Dirty when the hotel path was used (checked in or still staying).
                     if (agent.CheckInDay >= 0 || agent.Phase == AgentPhase.Staying)
-                        agent.HomeRoom?.MarkDirty();
+                        MarkRoomDirtyForCleaning(agent.HomeRoom);
                 }
 
                 agent.Phase = AgentPhase.Outside;
@@ -1379,7 +1770,7 @@ namespace BuildATower
                 agent.Path?.Clear();
                 agent.TripLegs?.Clear();
                 agent.GoalCell = null;
-                _agents.RemoveAt(i);
+                RemoveAgentAt(i);
             }
         }
 
@@ -1412,7 +1803,7 @@ namespace BuildATower
                 hotel = guest.HomeRoom;
                 slot = guest.HomeSlot;
                 CancelCommercialVisit(guest);
-                _agents.RemoveAt(i);
+                RemoveAgentAt(i);
                 return true;
             }
 
@@ -1494,7 +1885,7 @@ namespace BuildATower
             agent.CriminalDwellRemaining = 0f;
             agent.Phase = AgentPhase.Outside;
             agent.Visible = false;
-            _agents.Remove(agent);
+            RemoveAgent(agent);
             return false;
         }
 
@@ -1513,7 +1904,11 @@ namespace BuildATower
         void TryCaptureCriminals(CrimeSystem crime)
         {
             if (crime == null) return;
-            var captures = CrimeCapture.TryCapture(_agents, crime, out var message);
+            var captures = CrimeCapture.TryCapture(
+                _agents,
+                crime,
+                out var message,
+                ReleaseStairsOccupancy);
             if (captures > 0 && !string.IsNullOrEmpty(message))
                 LastCaptureMessage = message;
         }
@@ -1528,7 +1923,7 @@ namespace BuildATower
                 // Outside criminals never linger: life should already be 0 after leave/spawn-fail.
                 // Clear any leftover life so a stuck Outside agent cannot hold a concurrent slot.
                 agent.CriminalDwellRemaining = 0f;
-                _agents.RemoveAt(i);
+                RemoveAgentAt(i);
             }
         }
 
@@ -1560,7 +1955,8 @@ namespace BuildATower
                 BeginTrip(agent, agent.Cell, LobbyExitCell(grid, agent.Cell.x), AgentPhase.Outside, grid);
                 agent.CheckedOutToday = true;
                 agent.CheckInMinute = RollHotelCheckInMinute(_rng);
-                agent.HomeRoom?.MarkDirty();
+                if (!HotelHasOtherOccupantStillIn(agent))
+                    MarkRoomDirtyForCleaning(agent.HomeRoom);
             }
 
             if (agent.Phase == AgentPhase.Staying &&
@@ -1568,6 +1964,25 @@ namespace BuildATower
                 minute <= 21 * 60 &&
                 agent.CommercialTripDay != clock.DayIndex)
                 TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Staying);
+        }
+
+        /// <summary>
+        /// True when another home-occupant of this hotel is still staying or mid-checkout trip
+        /// (not yet Outside). Used so Dirty only applies after the last guest leaves.
+        /// </summary>
+        bool HotelHasOtherOccupantStillIn(Agent checkingOut)
+        {
+            if (checkingOut?.HomeRoom == null) return false;
+            foreach (var other in _agents)
+            {
+                if (other == null || ReferenceEquals(other, checkingOut)) continue;
+                if (!ReferenceEquals(other.HomeRoom, checkingOut.HomeRoom)) continue;
+                if (other.Role is not (AgentRole.HotelGuest or AgentRole.EventVisitor)) continue;
+                if (other.Phase == AgentPhase.Outside) continue;
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -1693,7 +2108,7 @@ namespace BuildATower
             return true;
         }
 
-        void StepMovement(Agent agent, float deltaGameMinutes)
+        void StepMovement(Agent agent, float deltaGameMinutes, TowerGrid grid)
         {
             if (agent.Phase == AgentPhase.WaitingAtElevator)
             {
@@ -1733,7 +2148,7 @@ namespace BuildATower
                 agent.WorldPosition = new Vector2(agent.Cell.x + 0.5f, agent.Cell.y + 0.5f);
                 AdvanceLeg(agent);
                 if (agent.Phase == AgentPhase.Moving)
-                    StepMovement(agent, deltaGameMinutes);
+                    StepMovement(agent, deltaGameMinutes, grid);
                 return;
             }
 
@@ -1753,6 +2168,15 @@ namespace BuildATower
 
                 if (distance <= maxStep)
                 {
+                    if (!TryOccupyStairsForStep(agent, grid, target))
+                    {
+                        agent.Stress = Mathf.Min(
+                            100f,
+                            agent.Stress + StairWaitStressPerMinute * remaining);
+                        _stairWaitIds.Add(agent.Id);
+                        break;
+                    }
+
                     var previousCell = agent.Cell;
                     if (IsCurrentStairsLeg(agent) && target.y != previousCell.y)
                     {
@@ -1787,6 +2211,51 @@ namespace BuildATower
                     maxStep);
                 break;
             }
+        }
+
+        bool TryOccupyStairsForStep(Agent agent, TowerGrid grid, Vector2Int target)
+        {
+            if (agent == null) return false;
+
+            if (grid == null ||
+                !grid.TryGetRoomAt(target, out var targetRoom) ||
+                targetRoom?.Type == null ||
+                !targetRoom.Type.isStairs)
+            {
+                ReleaseStairsOccupancy(agent);
+                return true;
+            }
+
+            if (agent.StairsOccupancyRoomId == targetRoom.InstanceId)
+                return true;
+
+            ReleaseStairsOccupancy(agent);
+            if (!_stairCapacity.TryEnter(targetRoom.InstanceId, agent.Id))
+                return false;
+
+            agent.StairsOccupancyRoomId = targetRoom.InstanceId;
+            return true;
+        }
+
+        void ReleaseStairsOccupancy(Agent agent)
+        {
+            if (agent == null || agent.StairsOccupancyRoomId == 0) return;
+            _stairCapacity.Leave(agent.StairsOccupancyRoomId, agent.Id);
+            agent.StairsOccupancyRoomId = 0;
+        }
+
+        void RemoveAgentAt(int index)
+        {
+            if (index < 0 || index >= _agents.Count) return;
+            ReleaseStairsOccupancy(_agents[index]);
+            _agents.RemoveAt(index);
+        }
+
+        void RemoveAgent(Agent agent)
+        {
+            if (agent == null) return;
+            ReleaseStairsOccupancy(agent);
+            _agents.Remove(agent);
         }
 
         void ApplyLowConditionStress(Agent agent, int dayIndex)
@@ -1844,6 +2313,10 @@ namespace BuildATower
 
         void UpdateStress(Agent agent, float deltaGameMinutes)
         {
+            // Stair wait stress is applied in StepMovement; skip decay so it is not wiped.
+            if (_stairWaitIds.Contains(agent.Id))
+                return;
+
             if (IsMovementStuck(agent))
             {
                 agent.Stress = Mathf.Min(100f, agent.Stress + StressGainPerSecond * deltaGameMinutes);
@@ -2272,6 +2745,109 @@ namespace BuildATower
             agent.ArrivalMinute = 6 * 60 + _rng.Next(0, 3 * 60);
             var overtime = _rng.NextDouble() < 0.08;
             agent.WorkMinutes = 8 * 60 + (overtime ? _rng.Next(30, 121) : 0);
+        }
+
+        void TryDailyAssignCondoJobs(TowerGrid grid, GameClock clock)
+        {
+            // Morning planning window: clear prior mark until today's assign runs.
+            // Only clear when not already marked for today so we do not re-roll every Tick.
+            if (clock.MinuteOfDay < 5 * 60 && _condoJobsAssignedDay != clock.DayIndex)
+                _condoJobsAssignedDay = -1;
+
+            if (_condoJobsAssignedDay == clock.DayIndex)
+                return;
+
+            if (!HasMovedInCondoResident())
+                return;
+
+            AssignCondoJobs(grid, clock);
+            _condoJobsAssignedDay = clock.DayIndex;
+        }
+
+        bool HasMovedInCondoResident()
+        {
+            foreach (var agent in _agents)
+            {
+                if (agent.Role == AgentRole.CondoResident && agent.HasMovedIn)
+                    return true;
+            }
+
+            return false;
+        }
+
+        void AssignCondoJobs(TowerGrid grid, GameClock clock)
+        {
+            if (grid == null) return;
+
+            var movedIn = new List<Agent>();
+            foreach (var agent in _agents)
+            {
+                if (agent.Role != AgentRole.CondoResident) continue;
+                if (!agent.HasMovedIn)
+                {
+                    agent.JobKind = CondoJobKind.None;
+                    agent.WorkplaceRoom = null;
+                    agent.CommuteOneWayMinutes = 0;
+                    agent.OutsideDwellRemaining = 0f;
+                    agent.OutsideWorkPhase = CondoOutsidePhase.None;
+                    continue;
+                }
+
+                movedIn.Add(agent);
+            }
+
+            movedIn.Sort((a, b) => a.Id.CompareTo(b.Id));
+
+            var officeRooms = new List<RoomInstance>();
+            var officeDesks = 0;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null || room.IsBroken) continue;
+                if (room.Type.category != RoomCategory.Office) continue;
+                officeRooms.Add(room);
+                officeDesks += room.Type.maxOccupants;
+            }
+
+            officeRooms.Sort((a, b) => a.InstanceId.CompareTo(b.InstanceId));
+
+            var inTowerWanted = CondoEmployment.InTowerWanted(officeDesks, movedIn.Count);
+            var freeSlots = new List<RoomInstance>();
+            foreach (var office in officeRooms)
+            {
+                var homeCount = 0;
+                foreach (var agent in _agents)
+                {
+                    if (agent.Role == AgentRole.OfficeWorker && ReferenceEquals(agent.HomeRoom, office))
+                        homeCount++;
+                }
+
+                var free = office.Type.maxOccupants - homeCount;
+                for (var i = 0; i < free; i++)
+                    freeSlots.Add(office);
+            }
+
+            var inTowerCount = Mathf.Min(inTowerWanted, freeSlots.Count);
+            for (var i = 0; i < movedIn.Count; i++)
+            {
+                var agent = movedIn[i];
+                agent.LeaveHomeMinute = 6 * 60 + _rng.Next(0, 3 * 60);
+                agent.WorkMinutes = 8 * 60;
+                agent.OutsideWorkPhase = CondoOutsidePhase.None;
+                agent.OutsideDwellRemaining = 0f;
+
+                if (i < inTowerCount)
+                {
+                    agent.JobKind = CondoJobKind.InTower;
+                    agent.WorkplaceRoom = freeSlots[i];
+                    agent.CommuteOneWayMinutes = 0;
+                }
+                else
+                {
+                    agent.JobKind = CondoJobKind.Outside;
+                    agent.WorkplaceRoom = null;
+                    agent.CommuteOneWayMinutes = CondoEmployment.RollCommuteOneWayMinutes(_rng);
+                }
+            }
         }
 
         static AgentRole RoleFor(RoomCategory category) =>

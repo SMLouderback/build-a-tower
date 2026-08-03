@@ -35,6 +35,47 @@ namespace BuildATower
             _ => branch.ToString()
         };
 
+        /// <summary>Player-facing summary of what completing this level unlocks (cumulative effect at that level).</summary>
+        public static string LevelEffectSummary(ResearchBranch branch, int level)
+        {
+            if (level < 1 || level > MaxLevel) return string.Empty;
+
+            return branch switch
+            {
+                ResearchBranch.Marketing => level switch
+                {
+                    1 => "Shop spend payouts +10%.",
+                    2 => "Shop spend payouts +20%.",
+                    _ => "Shop spend payouts +35%."
+                },
+                ResearchBranch.Elevator => level switch
+                {
+                    1 => "Elevator car speed +10%.",
+                    2 => "Elevator speed +20%; smarter queue / multi-stop scoring.",
+                    _ => "Elevator speed +35%; strongest wait/busy routing bias."
+                },
+                ResearchBranch.Security => level switch
+                {
+                    1 => "Security baseline + patrol crime decay +15%.",
+                    2 => "Security crime suppression +30%.",
+                    _ => "Security crime suppression +50%."
+                },
+                ResearchBranch.Housekeeping => level switch
+                {
+                    1 => "Maid clean jobs finish ~10% faster.",
+                    2 => "Maid clean jobs finish ~20% faster.",
+                    _ => "Maid clean jobs finish ~35% faster."
+                },
+                ResearchBranch.Maintenance => level switch
+                {
+                    1 => "Repairs ~10% faster; each repair chunk +10%.",
+                    2 => "Repairs ~20% faster; each repair chunk +25%.",
+                    _ => "Repairs ~35% faster; each repair chunk +45%."
+                },
+                _ => string.Empty
+            };
+        }
+
         // Spec §4.1 — cumulative from highest completed level (0 = identity).
 
         public static float ShopSpendMultiplier(int level) => level switch
