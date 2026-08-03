@@ -19,6 +19,11 @@ namespace BuildATower
         public int WorkedMinutes { get; set; }
         public int CheckInDay { get; set; } = -1;
         public bool CheckedOutToday { get; set; }
+        /// <summary>
+        /// Minute of day to start checkout the morning after check-in
+        /// (clamped to the hotel 6:00–11:00 window).
+        /// </summary>
+        public int CheckoutMinute { get; set; } = 11 * 60;
         public bool HasMovedIn { get; set; }
 
         /// <summary>Occupant slot within <see cref="HomeRoom"/> for distinct home cells.</summary>

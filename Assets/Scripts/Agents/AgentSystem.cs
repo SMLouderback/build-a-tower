@@ -17,6 +17,12 @@ namespace BuildATower
         /// While path-stuck (Moving, has goal, no walkable path progress), replan this often.
         /// </summary>
         public const float PathStuckReplanIntervalMinutes = 5f;
+        /// <summary>Hotel guests may begin check-in from this minute of day (4:00 PM).</summary>
+        public const int HotelCheckInMinute = 16 * 60;
+        /// <summary>Earliest hotel checkout on the morning after check-in (6:00 AM).</summary>
+        public const int HotelCheckoutEarliestMinute = 6 * 60;
+        /// <summary>Latest / typical hotel checkout deadline (11:00 AM).</summary>
+        public const int HotelCheckoutLatestMinute = 11 * 60;
         /// <summary>Maids/handymen drop a claimed job after waiting this long for an elevator.</summary>
         public const float ServiceAbandonWaitMinutes = 45f;
         public const float LowConditionStressPerDay = 8f;
@@ -1259,7 +1265,7 @@ namespace BuildATower
             var exitCell = LobbyExitCell(grid, home.x);
 
             if (agent.Phase == AgentPhase.Outside &&
-                minute >= 16 * 60 &&
+                minute >= HotelCheckInMinute &&
                 agent.CheckInDay != clock.DayIndex &&
                 agent.HomeRoom != null &&
                 !agent.HomeRoom.Dirty &&
@@ -1268,13 +1274,14 @@ namespace BuildATower
                 BeginTrip(agent, exitCell, home, AgentPhase.Staying, grid);
                 agent.CheckInDay = clock.DayIndex;
                 agent.CheckedOutToday = false;
+                agent.CheckoutMinute = RollHotelCheckoutMinute(_rng);
             }
 
             if (agent.Phase == AgentPhase.Staying &&
-                minute < 11 * 60 &&
                 agent.CheckInDay >= 0 &&
                 agent.CheckInDay < clock.DayIndex &&
-                !agent.CheckedOutToday)
+                !agent.CheckedOutToday &&
+                IsHotelCheckoutDue(minute, agent.CheckoutMinute))
             {
                 BeginTrip(agent, agent.Cell, LobbyExitCell(grid, agent.Cell.x), AgentPhase.Outside, grid);
                 agent.CheckedOutToday = true;
@@ -1286,6 +1293,32 @@ namespace BuildATower
                 minute <= 21 * 60 &&
                 agent.CommercialTripDay != clock.DayIndex)
                 TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Staying);
+        }
+
+        /// <summary>
+        /// Checkout times fall in 6:00–11:00, biased toward 11:00 (real-world late morning).
+        /// </summary>
+        public static int RollHotelCheckoutMinute(System.Random rng)
+        {
+            if (rng == null) rng = new System.Random();
+            var u = (float)rng.NextDouble();
+            // Quadratic ease-in toward 1 → most samples near HotelCheckoutLatestMinute.
+            var t = 1f - (1f - u) * (1f - u);
+            var span = HotelCheckoutLatestMinute - HotelCheckoutEarliestMinute;
+            return HotelCheckoutEarliestMinute + Mathf.RoundToInt(t * span);
+        }
+
+        public static bool IsHotelCheckoutDue(int minuteOfDay, int checkoutMinute)
+        {
+            if (minuteOfDay < HotelCheckoutEarliestMinute)
+                return false;
+            var due = checkoutMinute;
+            if (due < HotelCheckoutEarliestMinute)
+                due = HotelCheckoutEarliestMinute;
+            if (due > HotelCheckoutLatestMinute)
+                due = HotelCheckoutLatestMinute;
+            // At/after personal time, or hard deadline at 11:00.
+            return minuteOfDay >= due || minuteOfDay >= HotelCheckoutLatestMinute;
         }
 
         bool BeginTrip(

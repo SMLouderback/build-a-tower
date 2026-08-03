@@ -184,13 +184,21 @@ namespace BuildATower.Tests
             RoomInstance hotel,
             AgentSystem agents,
             Agent agent,
-            GameClock clock) SetupHotel()
+            GameClock clock) SetupHotel() =>
+            SetupHotelAtMinute(10 * 60);
+
+        static (
+            TowerGrid grid,
+            RoomInstance hotel,
+            AgentSystem agents,
+            Agent agent,
+            GameClock clock) SetupHotelAtMinute(int minuteOfDay)
         {
             var grid = LivingTower(Hotel(), out var hotel);
             var agents = CreateAgents(grid);
             agents.SyncHomes(grid);
             var agent = agents.Agents.Single();
-            var clock = new GameClock(1f, 10 * 60);
+            var clock = new GameClock(1f, minuteOfDay);
             clock.AdvanceMinutes(GameClock.MinutesPerDay);
             return (grid, hotel, agents, agent, clock);
         }
@@ -216,6 +224,8 @@ namespace BuildATower.Tests
             PlaceAgentStayingAtHotel(agent, clock);
             agent.CheckInDay = clock.DayIndex - 1;
             agent.CheckedOutToday = false;
+            // Due at earliest so existing morning tests (≈10:00) still trigger checkout.
+            agent.CheckoutMinute = AgentSystem.HotelCheckoutEarliestMinute;
         }
 
         static void PlaceAgentStayingAtHotel(Agent agent, GameClock clock)
@@ -227,6 +237,61 @@ namespace BuildATower.Tests
             agent.Visible = true;
             agent.CheckInDay = clock.DayIndex;
             agent.CheckedOutToday = false;
+            agent.CheckoutMinute = AgentSystem.HotelCheckoutLatestMinute;
+        }
+
+        [Test]
+        public void Hotel_guest_does_not_checkout_before_6am()
+        {
+            var (grid, hotel, agents, agent, clock) = SetupHotelAtMinute(5 * 60);
+            PlaceAgentStayingOvernight(agent, clock);
+            agent.CheckoutMinute = AgentSystem.HotelCheckoutEarliestMinute;
+
+            clock.AdvanceMinutes(1);
+            agents.Tick(1f, clock, grid);
+
+            Assert.IsFalse(agent.CheckedOutToday);
+            Assert.IsFalse(hotel.Dirty);
+            Assert.AreEqual(AgentPhase.Staying, agent.Phase);
+        }
+
+        [Test]
+        public void Hotel_guest_checkouts_at_personal_checkout_minute()
+        {
+            var (grid, hotel, agents, agent, clock) = SetupHotelAtMinute(9 * 60);
+            PlaceAgentStayingOvernight(agent, clock);
+            agent.CheckoutMinute = 10 * 60;
+
+            clock.AdvanceMinutes(1); // 9:01 — not yet
+            agents.Tick(1f, clock, grid);
+            Assert.IsFalse(agent.CheckedOutToday);
+
+            clock.AdvanceMinutes(10 * 60 - clock.MinuteOfDay);
+            agents.Tick(1f, clock, grid);
+            Assert.IsTrue(agent.CheckedOutToday);
+            Assert.IsTrue(hotel.Dirty);
+        }
+
+        [Test]
+        public void RollHotelCheckoutMinute_stays_in_6am_to_11am_window()
+        {
+            var rng = new System.Random(0);
+            for (var i = 0; i < 200; i++)
+            {
+                var m = AgentSystem.RollHotelCheckoutMinute(rng);
+                Assert.GreaterOrEqual(m, AgentSystem.HotelCheckoutEarliestMinute);
+                Assert.LessOrEqual(m, AgentSystem.HotelCheckoutLatestMinute);
+            }
+        }
+
+        [Test]
+        public void IsHotelCheckoutDue_respects_earliest_and_personal_time()
+        {
+            Assert.IsFalse(AgentSystem.IsHotelCheckoutDue(5 * 60 + 59, 6 * 60));
+            Assert.IsTrue(AgentSystem.IsHotelCheckoutDue(6 * 60, 6 * 60));
+            Assert.IsFalse(AgentSystem.IsHotelCheckoutDue(9 * 60, 10 * 60));
+            Assert.IsTrue(AgentSystem.IsHotelCheckoutDue(10 * 60, 10 * 60));
+            Assert.IsTrue(AgentSystem.IsHotelCheckoutDue(11 * 60, 10 * 60));
         }
 
         static RoomTypeSO Lobby()
