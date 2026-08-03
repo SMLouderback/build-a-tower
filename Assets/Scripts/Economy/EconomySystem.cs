@@ -43,7 +43,8 @@ namespace BuildATower
             int currentStars = 0,
             int climateOffset = 0,
             ResearchSystem research = null,
-            float climateSpendMult = 1f)
+            float climateSpendMult = 1f,
+            ConferenceSystem conference = null)
         {
             LastIncome = 0;
             LastExpense = 0;
@@ -104,6 +105,18 @@ namespace BuildATower
                         _lastExpenseByRoom[room.InstanceId] = wage;
                     room.RecordLifetimeExpense(wage);
                 }
+            }
+
+            if (conference != null)
+            {
+                var officeWorkers = CountOfficeWorkers(agents);
+                var meetings = conference.ComputeDailyMeetings(
+                    grid,
+                    officeWorkers,
+                    currentStars,
+                    climateSpendMult);
+                if (meetings > 0)
+                    LastIncome += meetings;
             }
 
             wallet.Add(LastIncome);
@@ -237,6 +250,20 @@ namespace BuildATower
             }
 
             return false;
+        }
+
+        static int CountOfficeWorkers(IReadOnlyList<Agent> agents)
+        {
+            if (agents == null)
+                return 0;
+            var count = 0;
+            foreach (var agent in agents)
+            {
+                if (agent != null && agent.Role == AgentRole.OfficeWorker)
+                    count++;
+            }
+
+            return count;
         }
     }
 }

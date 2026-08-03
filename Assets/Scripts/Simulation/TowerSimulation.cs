@@ -23,6 +23,7 @@ namespace BuildATower
         CrimeSystem _crime;
         EconomySystem _economy;
         ResearchSystem _research;
+        ConferenceSystem _conference;
         StarSystem _stars;
         MarketClimate _climate;
         readonly System.Random _climateRng = new();
@@ -36,6 +37,7 @@ namespace BuildATower
         public CrimeSystem Crime => _crime;
         public EconomySystem Economy => _economy;
         public ResearchSystem Research => _research;
+        public ConferenceSystem Conference => _conference;
         public StarSystem Stars => _stars;
         public MarketClimate Climate => _climate;
         public StairsPathfinder Pathfinder => _pathfinder;
@@ -62,6 +64,7 @@ namespace BuildATower
             _crime = new CrimeSystem();
             _economy = new EconomySystem();
             _research = new ResearchSystem();
+            _conference = new ConferenceSystem();
             _stars = new StarSystem();
             _climate = new MarketClimate();
             _lastDayIndex = _clock.DayIndex;
@@ -184,7 +187,8 @@ namespace BuildATower
                     _stars.CurrentStars,
                     climateOffset,
                     _research,
-                    climateSpendMult);
+                    climateSpendMult,
+                    _conference);
 
                 // §7.3: decay all incomplete stored progress except active running unpaused.
                 _research?.TickDayDecay();
