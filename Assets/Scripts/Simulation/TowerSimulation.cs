@@ -24,9 +24,11 @@ namespace BuildATower
         EconomySystem _economy;
         ResearchSystem _research;
         ConferenceSystem _conference;
+        TowerNews _news;
         StarSystem _stars;
         MarketClimate _climate;
         readonly System.Random _climateRng = new();
+        readonly System.Random _conferenceRng = new();
         readonly List<int> _patrolFloors = new();
         readonly List<int> _criminalFloors = new();
         int _lastDayIndex;
@@ -38,6 +40,7 @@ namespace BuildATower
         public EconomySystem Economy => _economy;
         public ResearchSystem Research => _research;
         public ConferenceSystem Conference => _conference;
+        public TowerNews News => _news;
         public StarSystem Stars => _stars;
         public MarketClimate Climate => _climate;
         public StairsPathfinder Pathfinder => _pathfinder;
@@ -65,6 +68,7 @@ namespace BuildATower
             _economy = new EconomySystem();
             _research = new ResearchSystem();
             _conference = new ConferenceSystem();
+            _news = new TowerNews();
             _stars = new StarSystem();
             _climate = new MarketClimate();
             _lastDayIndex = _clock.DayIndex;
@@ -190,6 +194,16 @@ namespace BuildATower
                     climateSpendMult,
                     _conference);
 
+                _conference?.TickDay(
+                    day,
+                    build.Grid,
+                    CountHotelGuests(_agents.Agents),
+                    _stars.CurrentStars,
+                    climateSpendMult,
+                    build.Wallet,
+                    _news,
+                    _conferenceRng);
+
                 // §7.3: decay all incomplete stored progress except active running unpaused.
                 _research?.TickDayDecay();
 
@@ -212,6 +226,21 @@ namespace BuildATower
                 if (room?.Type?.id != "service_security") continue;
                 if (room.IsBroken) continue;
                 total += room.StaffedWorkers;
+            }
+
+            return total;
+        }
+
+        static int CountHotelGuests(IReadOnlyList<Agent> agents)
+        {
+            if (agents == null) return 0;
+
+            var total = 0;
+            for (var i = 0; i < agents.Count; i++)
+            {
+                var agent = agents[i];
+                if (agent != null && agent.Role == AgentRole.HotelGuest)
+                    total++;
             }
 
             return total;
