@@ -204,6 +204,8 @@ namespace BuildATower
                     _news,
                     _conferenceRng);
 
+                _agents.SyncEventVisitors(_conference, build.Grid, _clock);
+
                 // §7.3: decay all incomplete stored progress except active running unpaused.
                 _research?.TickDayDecay();
 

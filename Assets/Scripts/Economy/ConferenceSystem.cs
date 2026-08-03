@@ -49,6 +49,38 @@ namespace BuildATower
         public bool IsHallBooked(RoomInstance room) =>
             room != null && BookedHallInstanceIds.Contains(room.InstanceId);
 
+        /// <summary>Sum of eventCapacity (or size fallback) for currently booked Event Halls.</summary>
+        public int SumBookedHallCapacity(TowerGrid grid)
+        {
+            if (grid == null || BookedHallInstanceIds.Count == 0)
+                return 0;
+
+            var total = 0;
+            foreach (var room in grid.Rooms)
+            {
+                if (room == null || !BookedHallInstanceIds.Contains(room.InstanceId))
+                    continue;
+                total += ResolveCapacity(room);
+            }
+
+            return total;
+        }
+
+        /// <summary>First booked Event Hall instance on the grid, if any.</summary>
+        public RoomInstance FindBookedHall(TowerGrid grid)
+        {
+            if (grid == null || BookedHallInstanceIds.Count == 0)
+                return null;
+
+            foreach (var room in grid.Rooms)
+            {
+                if (room != null && BookedHallInstanceIds.Contains(room.InstanceId))
+                    return room;
+            }
+
+            return null;
+        }
+
         public static int MajorEventLumpPayout(
             int hotelGuests,
             int stars,

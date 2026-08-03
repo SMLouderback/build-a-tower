@@ -33,6 +33,12 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void ResolveBand_event_visitor_is_street()
+        {
+            Assert.AreEqual(WealthBand.Street, AgentWealth.ResolveBand(AgentRole.EventVisitor, null));
+        }
+
+        [Test]
         public void ResolveBand_basic_living_homes()
         {
             Assert.AreEqual(WealthBand.Basic,

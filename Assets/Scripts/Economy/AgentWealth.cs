@@ -13,7 +13,7 @@ namespace BuildATower
     {
         public static WealthBand ResolveBand(AgentRole role, RoomTypeSO homeType)
         {
-            if (role == AgentRole.StreetVisitor)
+            if (role is AgentRole.StreetVisitor or AgentRole.EventVisitor)
                 return WealthBand.Street;
 
             if (IsPremiumLiving(homeType))

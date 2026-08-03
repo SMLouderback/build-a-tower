@@ -43,6 +43,10 @@ namespace BuildATower
         public const int MaxConcurrentStreetVisitors = 8;
         public const int StreetSpawnIntervalMinutes = 8;
         public const float StreetSpawnBaseChance = 0.25f;
+        public const int MaxConcurrentEventVisitors = 24;
+        public const float EventHotelBookFraction = 0.25f;
+        public const float EventHallDwellMinMinutes = 18f;
+        public const float EventHallDwellMaxMinutes = 40f;
         public const string HousekeepingId = "service_housekeeping";
         public const string MaintenanceId = "service_maintenance";
         public const string SecurityId = "service_security";
@@ -68,6 +72,7 @@ namespace BuildATower
         int _lastTotalMinutes = int.MinValue;
         float _nowTotalMinutes;
         int _streetSpawnMinuteAccumulator;
+        int _lastEventVisitorSpawnDay = int.MinValue;
 
         public IReadOnlyList<Agent> Agents => _agents;
         public string LastCaptureMessage { get; private set; }
@@ -251,6 +256,7 @@ namespace BuildATower
                 StepMovement(agent, deltaGameMinutes);
                 RecoverIfPathStuck(agent, deltaGameMinutes);
                 UpdateVisitingShop(agent, deltaGameMinutes, grid);
+                UpdateEventHallDwell(agent, deltaGameMinutes, grid, clock);
                 UpdateServiceWork(agent, deltaGameMinutes, grid);
                 UpdateCriminalWork(agent, deltaGameMinutes, grid);
                 UpdateStress(agent, deltaGameMinutes);
@@ -262,6 +268,7 @@ namespace BuildATower
             // Single capture pass after movement so one Security captures at most one Criminal per Tick.
             TryCaptureCriminals(_crime);
             DespawnFinishedStreetVisitors();
+            DespawnFinishedEventVisitors();
             DespawnFinishedCriminals();
         }
 
@@ -303,6 +310,9 @@ namespace BuildATower
                     break;
                 case AgentRole.Criminal:
                     UpdateCriminalAgent(agent, grid, _crime);
+                    break;
+                case AgentRole.EventVisitor:
+                    UpdateEventVisitor(agent, clock, grid);
                     break;
             }
         }
@@ -923,12 +933,12 @@ namespace BuildATower
             role is AgentRole.Maid or AgentRole.Handyman or AgentRole.Security;
 
         static bool IsNonPopulationRole(AgentRole role) =>
-            role is AgentRole.StreetVisitor or AgentRole.Maid or AgentRole.Handyman or AgentRole.Security
-                or AgentRole.Criminal;
+            role is AgentRole.StreetVisitor or AgentRole.EventVisitor or AgentRole.Maid
+                or AgentRole.Handyman or AgentRole.Security or AgentRole.Criminal;
 
         static bool IsEphemeralOrStaffRole(AgentRole role) =>
-            role is AgentRole.StreetVisitor or AgentRole.Maid or AgentRole.Handyman or AgentRole.Security
-                or AgentRole.Criminal;
+            role is AgentRole.StreetVisitor or AgentRole.EventVisitor or AgentRole.Maid
+                or AgentRole.Handyman or AgentRole.Security or AgentRole.Criminal;
 
         void UpdateCondo(Agent agent, GameClock clock, TowerGrid grid)
         {
@@ -1033,7 +1043,9 @@ namespace BuildATower
         {
             if (agent == null || agent.DisposableDayIndex == dayIndex) return;
 
-            var homeType = agent.Role == AgentRole.StreetVisitor ? null : agent.HomeRoom?.Type;
+            var homeType = agent.Role is AgentRole.StreetVisitor or AgentRole.EventVisitor
+                ? null
+                : agent.HomeRoom?.Type;
             var band = AgentWealth.ResolveBand(agent.Role, homeType);
             var mult = _climate?.SpendMultiplier ?? 1f;
             agent.DisposableRemaining = AgentWealth.RollDailyDisposable(band, mult, _rng);
@@ -1174,6 +1186,266 @@ namespace BuildATower
                 _agents.RemoveAt(i);
             }
         }
+
+        /// <summary>
+        /// Spawn-per-day while a major event is Live:
+        /// <c>min(MaxConcurrent, bookedCapacity / 5)</c>.
+        /// </summary>
+        public static int ComputeEventVisitorSpawnPerDay(int bookedCapacity)
+        {
+            if (bookedCapacity <= 0) return 0;
+            return Mathf.Min(MaxConcurrentEventVisitors, bookedCapacity / 5);
+        }
+
+        /// <summary>
+        /// While <see cref="MajorEventPhase.Live"/>, spawn up to today's quota under the concurrent cap.
+        /// When the event is not live, force-despawn remaining EventVisitors (hotel guests check out Dirty).
+        /// </summary>
+        public void SyncEventVisitors(ConferenceSystem conference, TowerGrid grid, GameClock clock)
+        {
+            if (grid == null || clock == null)
+                return;
+
+            if (conference == null || conference.Active == null ||
+                conference.Active.Phase != MajorEventPhase.Live)
+            {
+                DespawnAllEventVisitors(forceHotelCheckout: true);
+                _lastEventVisitorSpawnDay = int.MinValue;
+                return;
+            }
+
+            if (_lastEventVisitorSpawnDay == clock.DayIndex)
+                return;
+
+            _lastEventVisitorSpawnDay = clock.DayIndex;
+            var spawnTarget = ComputeEventVisitorSpawnPerDay(conference.SumBookedHallCapacity(grid));
+            if (spawnTarget <= 0) return;
+
+            var hall = conference.FindBookedHall(grid);
+            if (hall == null) return;
+
+            var toSpawn = Mathf.Min(spawnTarget, MaxConcurrentEventVisitors - CountEventVisitors());
+            for (var i = 0; i < toSpawn; i++)
+            {
+                var preferHotel = _rng.NextDouble() < EventHotelBookFraction;
+                if (preferHotel && TrySpawnEventHotelVisitor(grid, clock))
+                    continue;
+                if (!TrySpawnEventDayVisitor(grid, clock, hall))
+                    break;
+            }
+        }
+
+        public bool TrySpawnEventDayVisitor(TowerGrid grid, GameClock clock, RoomInstance hall)
+        {
+            if (grid == null || clock == null || hall == null) return false;
+            if (CountEventVisitors() >= MaxConcurrentEventVisitors) return false;
+            if (!grid.HasLobby) return false;
+
+            var hallCell = HallEntryCell(hall);
+            var exitCell = LobbyExitCell(grid, hallCell.x);
+            var dwell = EventHallDwellMinMinutes +
+                        (float)_rng.NextDouble() *
+                        (EventHallDwellMaxMinutes - EventHallDwellMinMinutes);
+            var agent = new Agent(_nextId++, AgentRole.EventVisitor, hall, exitCell)
+            {
+                VisitDwellRemaining = dwell,
+                PhaseAfterVisit = AgentPhase.Outside,
+                ReturnCell = exitCell,
+                DisposableDayIndex = -1
+            };
+            EnsureDisposable(agent, clock.DayIndex);
+            _agents.Add(agent);
+            if (BeginTrip(agent, exitCell, hallCell, AgentPhase.Working, grid))
+                return true;
+
+            _agents.RemoveAt(_agents.Count - 1);
+            return false;
+        }
+
+        public bool TrySpawnEventHotelVisitor(TowerGrid grid, GameClock clock)
+        {
+            if (grid == null || clock == null) return false;
+            if (CountEventVisitors() >= MaxConcurrentEventVisitors) return false;
+            if (!TryClaimHotelBedForEvent(grid, out var hotel, out var slot))
+                return false;
+
+            var home = HomeCell(hotel, slot);
+            var exitCell = LobbyExitCell(grid, home.x);
+            var agent = new Agent(_nextId++, AgentRole.EventVisitor, hotel, exitCell)
+            {
+                HomeSlot = slot,
+                CheckInMinute = RollHotelCheckInMinute(_rng),
+                CheckoutMinute = RollHotelCheckoutMinute(_rng),
+                CheckInDay = -1,
+                CheckedOutToday = false,
+                DisposableDayIndex = -1
+            };
+            EnsureDisposable(agent, clock.DayIndex);
+            _agents.Add(agent);
+            return true;
+        }
+
+        int CountEventVisitors()
+        {
+            var count = 0;
+            foreach (var agent in _agents)
+            {
+                if (agent.Role == AgentRole.EventVisitor)
+                    count++;
+            }
+
+            return count;
+        }
+
+        void UpdateEventVisitor(Agent agent, GameClock clock, TowerGrid grid)
+        {
+            if (IsEventHotelVisitor(agent))
+            {
+                UpdateHotel(agent, clock, grid);
+                return;
+            }
+
+            // Day crowd: retry hall trip if still Outside with remaining hall dwell.
+            if (agent.Phase == AgentPhase.Outside &&
+                agent.VisitDwellRemaining > 0f &&
+                agent.HomeRoom != null)
+            {
+                var hallCell = HallEntryCell(agent.HomeRoom);
+                var exitCell = LobbyExitCell(grid, hallCell.x);
+                BeginTrip(agent, exitCell, hallCell, AgentPhase.Working, grid);
+            }
+        }
+
+        /// <summary>
+        /// Hall dwell uses <see cref="Agent.VisitDwellRemaining"/> while <see cref="AgentPhase.Working"/>.
+        /// Called from Tick after schedule so dwell scales with <paramref name="deltaGameMinutes"/>.
+        /// </summary>
+        void UpdateEventHallDwell(Agent agent, float deltaGameMinutes, TowerGrid grid, GameClock clock)
+        {
+            if (agent == null || agent.Role != AgentRole.EventVisitor) return;
+            if (IsEventHotelVisitor(agent)) return;
+            if (agent.Phase != AgentPhase.Working) return;
+            if (agent.VisitTarget != null) return;
+
+            agent.VisitDwellRemaining -= deltaGameMinutes;
+            if (agent.VisitDwellRemaining > 0f) return;
+
+            agent.VisitDwellRemaining = 0f;
+            var exitCell = LobbyExitCell(grid, agent.Cell.x);
+            // One optional shop stop, then leave via lobby.
+            if (agent.CommercialTripDay != clock.DayIndex &&
+                TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Outside))
+            {
+                agent.ReturnCell = exitCell;
+                return;
+            }
+
+            BeginTrip(agent, agent.Cell, exitCell, AgentPhase.Outside, grid);
+        }
+
+        void DespawnFinishedEventVisitors()
+        {
+            for (var i = _agents.Count - 1; i >= 0; i--)
+            {
+                var agent = _agents[i];
+                if (agent.Role != AgentRole.EventVisitor) continue;
+                // Hotel-backed visitors persist for event nights; removed only on event end.
+                if (IsEventHotelVisitor(agent)) continue;
+                if (agent.Phase != AgentPhase.Outside) continue;
+                if (agent.VisitTarget != null) continue;
+
+                CancelCommercialVisit(agent);
+                _agents.RemoveAt(i);
+            }
+        }
+
+        void DespawnAllEventVisitors(bool forceHotelCheckout)
+        {
+            for (var i = _agents.Count - 1; i >= 0; i--)
+            {
+                var agent = _agents[i];
+                if (agent.Role != AgentRole.EventVisitor) continue;
+
+                CancelCommercialVisit(agent);
+                if (forceHotelCheckout && IsEventHotelVisitor(agent))
+                {
+                    // Dirty when the hotel path was used (checked in or still staying).
+                    if (agent.CheckInDay >= 0 || agent.Phase == AgentPhase.Staying)
+                        agent.HomeRoom?.MarkDirty();
+                }
+
+                agent.Phase = AgentPhase.Outside;
+                agent.Visible = false;
+                agent.Path?.Clear();
+                agent.TripLegs?.Clear();
+                agent.GoalCell = null;
+                _agents.RemoveAt(i);
+            }
+        }
+
+        bool TryClaimHotelBedForEvent(TowerGrid grid, out RoomInstance hotel, out int slot)
+        {
+            hotel = null;
+            slot = 0;
+            if (grid == null) return false;
+
+            // Prefer a truly vacant clean hotel slot.
+            foreach (var room in grid.Rooms)
+            {
+                if (!IsClaimableHotel(room)) continue;
+                var max = Mathf.Max(1, room.Type.maxOccupants);
+                var occupied = CountHomeOccupants(room);
+                if (occupied >= max) continue;
+                hotel = room;
+                slot = occupied;
+                return true;
+            }
+
+            // Otherwise displace an Outside HotelGuest (bed reserved but not currently staying).
+            for (var i = _agents.Count - 1; i >= 0; i--)
+            {
+                var guest = _agents[i];
+                if (guest.Role != AgentRole.HotelGuest) continue;
+                if (guest.Phase != AgentPhase.Outside) continue;
+                if (guest.HomeRoom == null || !IsClaimableHotel(guest.HomeRoom)) continue;
+
+                hotel = guest.HomeRoom;
+                slot = guest.HomeSlot;
+                CancelCommercialVisit(guest);
+                _agents.RemoveAt(i);
+                return true;
+            }
+
+            return false;
+        }
+
+        int CountHomeOccupants(RoomInstance room)
+        {
+            var count = 0;
+            foreach (var agent in _agents)
+            {
+                if (ReferenceEquals(agent.HomeRoom, room))
+                    count++;
+            }
+
+            return count;
+        }
+
+        static bool IsClaimableHotel(RoomInstance room) =>
+            room?.Type != null &&
+            room.Type.category == RoomCategory.Hotel &&
+            !room.Dirty &&
+            !room.IsBroken &&
+            room.Type.maxOccupants > 0;
+
+        static bool IsEventHotelVisitor(Agent agent) =>
+            agent != null &&
+            agent.Role == AgentRole.EventVisitor &&
+            agent.HomeRoom?.Type != null &&
+            agent.HomeRoom.Type.category == RoomCategory.Hotel;
+
+        static Vector2Int HallEntryCell(RoomInstance hall) =>
+            hall == null ? Vector2Int.zero : hall.Origin;
 
         void UpdateCriminalTraffic(float deltaGameMinutes, TowerGrid grid, CrimeSystem crime)
         {

@@ -52,6 +52,7 @@ namespace BuildATower
                 AgentRole.HotelGuest => new Color(0.70f, 0.40f, 0.88f, 1f),
                 AgentRole.CondoResident => new Color(0.3f, 0.75f, 0.4f, 1f),
                 AgentRole.StreetVisitor => new Color(0.95f, 0.55f, 0.15f, 1f),
+                AgentRole.EventVisitor => new Color(0.92f, 0.22f, 0.62f, 1f),
                 AgentRole.Maid => new Color(0.15f, 0.82f, 0.78f, 1f),
                 AgentRole.Handyman => new Color(0.72f, 0.38f, 0.18f, 1f),
                 AgentRole.Security => new Color(0.15f, 0.85f, 0.95f, 1f),

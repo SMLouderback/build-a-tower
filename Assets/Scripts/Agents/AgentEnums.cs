@@ -6,6 +6,7 @@ namespace BuildATower
         HotelGuest,
         CondoResident,
         StreetVisitor,
+        EventVisitor,
         Maid,
         Handyman,
         Security,

@@ -34,7 +34,10 @@ namespace BuildATower
 
             foreach (var agent in agents)
             {
-                if (agent == null || agent.Role != AgentRole.HotelGuest) continue;
+                if (agent == null) continue;
+                if (agent.Role != AgentRole.HotelGuest &&
+                    !(agent.Role == AgentRole.EventVisitor && IsHotelHome(agent)))
+                    continue;
                 if (agent.Phase == AgentPhase.Outside) continue;
 
                 var floor = agent.Cell.y;
@@ -44,5 +47,9 @@ namespace BuildATower
 
             return loads;
         }
+
+        static bool IsHotelHome(Agent agent) =>
+            agent?.HomeRoom?.Type != null &&
+            agent.HomeRoom.Type.category == RoomCategory.Hotel;
     }
 }
