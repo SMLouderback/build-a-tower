@@ -11,6 +11,7 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 - Commercial visit traffic (E1): `docs/superpowers/specs/2026-07-31-commercial-visit-traffic-design.md`
 - Smart elevator routing: `docs/superpowers/specs/2026-07-31-smart-elevator-routing-design.md`
 - Hybrid stairs + elevator pathing: `docs/superpowers/specs/2026-08-02-hybrid-stairs-elevator-design.md`
+- Conference / Event Halls + tower news: `docs/superpowers/specs/2026-08-02-conference-event-halls-design.md`
 - Disposable income & market climate: `docs/superpowers/specs/2026-07-31-agent-disposable-income-climate-design.md`
 - 3★ ops rooms & service workers: `docs/superpowers/specs/2026-07-31-stars3-ops-services-design.md`
 - SimTower behavior reference (tower-together): `docs/reference/tower-together/`
@@ -52,6 +53,10 @@ SimTower-inspired 2D side-cutaway skyscraper simulation (Unity).
 32. **Market climate** starts at **Normal** (Recession · Slow · Normal · Strong · Boom) and may shift on the **1st of each Gregorian month**. Climate scales daily disposable spend and how many rent/sale price tiers the market tolerates (see price-tier market hints).
 33. Agents roll a **daily disposable budget** by home band — **Basic** (standard Office / Hotel / Condo): ~$40–$100; **Premium** (`*Premium` living rooms): ~$90–$200; **Street** visitors: ~$20–$60 — then multiply by the current climate. Price tier on the unit does **not** change the band.
 34. Shop visits spend **random dollars** (`1 … min(shop list price, remaining budget)`); agents skip shops they cannot afford (e.g. Basic budget vs Restaurant). Shop income is **batched at midnight** from **dollars spent that day**, not flat `visits × list price`. Selection shows today’s visit count and earnings.
+35. Under **Utility**, place **Conference Room** at **3★** (~8×1). Each midnight, eligible Conference halls earn **daily meeting income** scaled by **office worker population**, hall capacity, stars, and climate. Select a Conference to see **Est. daily meetings: $…** in Selection.
+36. Earn **4★** to unlock **Event Hall** (~12×2). Event Halls do not earn daily meetings; they host **major events** when at least one is placeable.
+37. **Major events** schedule every ~2–3 weeks: foreshadow **2 days** ahead, run **1–3 days**, book Event Hall(s), pay a **lump sum at start** (hotel guest pop × stars × booked capacity), and **pause daily meetings only on booked halls**. A **banner** pops for upcoming / live / ending majors; a **scrolling ticker** under the top bar cycles events, serious ops alerts, and quirky lines.
+38. **Event visitors** spawn during majors: day crowd paths lobby → Event Hall → shops → Outside; some book vacant hotel rooms for the event. They add elevator load, shop traffic, and crime pressure like street visitors.
 
 ### Important: Game view Scale
 

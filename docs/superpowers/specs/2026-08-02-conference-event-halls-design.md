@@ -1,7 +1,7 @@
 # Build-A-Tower — Conference / Event Halls, 4★ & Tower News
 
 **Date:** 2026-08-02  
-**Status:** Draft (awaiting implementation)  
+**Status:** Implemented (Play Mode pending) — plan (`docs/superpowers/plans/2026-08-02-conference-event-halls.md`)  
 **Depends on:** Stars3 ops (Conference placeholder); Security + crime; hotel dirty/check-in; offices + agents; elevators; shops / street visitors; HUD top bar  
 **Engine target:** Unity (2D Tilemap), desktop/Editor-first  
 **Parent roadmap:** Deeper economy → higher stars → more transit → **venue economy + news** → evaluation/heatmaps → polish  
