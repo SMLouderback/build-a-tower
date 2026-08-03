@@ -92,6 +92,7 @@ namespace BuildATower
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/SecurityPost"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ResearchLab"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/Conference"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/EventHall"));
             _catalog = BuildCatalog.Group(_roomButtons);
         }
 

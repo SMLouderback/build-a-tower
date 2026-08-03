@@ -15,8 +15,8 @@ MonoBehaviour:
   id: service_conference
   displayName: Conference Room
   category: 7
-  size: {x: 4, y: 1}
-  buildCost: 60000
+  size: {x: 8, y: 1}
+  buildCost: 90000
   placeholderColor: {r: 0.4, g: 0.5, b: 0.55, a: 1}
   incomeModel: 0
   baseIncome: 0
@@ -34,5 +34,6 @@ MonoBehaviour:
   isElevatorShaft: 0
   requiredStars: 3
   maxOccupants: 0
+  eventCapacity: 40
   buildFamily: 5
   buildSubgroup: 0

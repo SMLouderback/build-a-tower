@@ -10,17 +10,17 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 00fe1abdabb23524093ed643f4aca030, type: 3}
-  m_Name: Conference
+  m_Name: EventHall
   m_EditorClassIdentifier: BuildATower.Runtime::BuildATower.RoomTypeSO
-  id: service_conference
-  displayName: Conference Room
+  id: service_event_hall
+  displayName: Event Hall
   category: 7
-  size: {x: 8, y: 1}
-  buildCost: 90000
-  placeholderColor: {r: 0.4, g: 0.5, b: 0.55, a: 1}
+  size: {x: 12, y: 2}
+  buildCost: 150000
+  placeholderColor: {r: 0.55, g: 0.32, b: 0.38, a: 1}
   incomeModel: 0
   baseIncome: 0
-  noiseOutput: 0.25
+  noiseOutput: 0.35
   noiseSensitivity: 0
   requiresHousekeeping: 0
   hasActiveHours: 0
@@ -32,8 +32,8 @@ MonoBehaviour:
   isScaffolding: 0
   isStairs: 0
   isElevatorShaft: 0
-  requiredStars: 3
+  requiredStars: 4
   maxOccupants: 0
-  eventCapacity: 40
+  eventCapacity: 120
   buildFamily: 5
   buildSubgroup: 0

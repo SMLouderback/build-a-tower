@@ -27,6 +27,7 @@ namespace BuildATower
         public bool isElevatorShaft;
         [Min(0)] public int requiredStars;
         [Min(0)] public int maxOccupants;
+        [Min(0)] public int eventCapacity;
         public BuildFamily buildFamily = BuildFamily.None;
         public BuildSubgroup buildSubgroup = BuildSubgroup.None;
 
