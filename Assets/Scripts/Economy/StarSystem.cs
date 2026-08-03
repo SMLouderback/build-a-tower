@@ -9,10 +9,13 @@ namespace BuildATower
         public const float TwoStarMaxStress = 25f;
         public const int ThreeStarPopulation = 60;
         public const float ThreeStarMaxStress = 20f;
-        public const int MaxStars = 3;
-        /// <summary>HUD star track length (4–5★ content comes later; unearned slots stay grey).</summary>
+        public const int FourStarPopulation = 100;
+        public const float FourStarMaxStress = 15f;
+        public const int MaxStars = 4;
+        /// <summary>HUD star track length (5★ content comes later; unearned slots stay grey).</summary>
         public const int StarSlots = 5;
 
+        const string SecurityId = "service_security";
         const string HousekeepingId = "service_housekeeping";
         const string MaintenanceId = "service_maintenance";
 
@@ -93,15 +96,20 @@ namespace BuildATower
                 lines += $"\n  Maintenance {Mark(HasOperationalFacility(grid, MaintenanceId))}";
             }
 
+            if (target >= 4)
+                lines += $"\n  Security {Mark(HasStaffedSecurity(grid))}";
+
             return lines;
         }
 
         public static int RequiredPopulation(int stars) =>
+            stars >= 4 ? FourStarPopulation :
             stars >= 3 ? ThreeStarPopulation :
             stars >= 2 ? TwoStarPopulation :
             OneStarPopulation;
 
         public static float AllowedStress(int stars) =>
+            stars >= 4 ? FourStarMaxStress :
             stars >= 3 ? ThreeStarMaxStress :
             stars >= 2 ? TwoStarMaxStress :
             OneStarMaxStress;
@@ -116,6 +124,7 @@ namespace BuildATower
 
             if (stars >= 2 && !HasElevator(grid)) return false;
             if (stars >= 3 && !HasOperationalServiceFacilities(grid)) return false;
+            if (stars >= 4 && !HasStaffedSecurity(grid)) return false;
             return true;
         }
 
@@ -135,6 +144,22 @@ namespace BuildATower
         static bool HasOperationalServiceFacilities(TowerGrid grid) =>
             HasOperationalFacility(grid, HousekeepingId) &&
             HasOperationalFacility(grid, MaintenanceId);
+
+        static bool HasStaffedSecurity(TowerGrid grid)
+        {
+            if (grid == null) return false;
+
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                if (room.Type.id != SecurityId) continue;
+                if (IsBroken(room)) continue;
+                if (room.StaffedWorkers < 1) continue;
+                return true;
+            }
+
+            return false;
+        }
 
         static bool HasOperationalFacility(TowerGrid grid, string typeId)
         {

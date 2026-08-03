@@ -61,6 +61,13 @@ namespace BuildATower.Tests
             return true;
         }
 
+        static TowerGrid GridReadyForThreeStars()
+        {
+            var grid = GridReadyForTwoStars();
+            Assert.IsTrue(PlaceServices(grid, out _));
+            return grid;
+        }
+
         [Test]
         public void TryPromote_grants_one_star_when_thresholds_met()
         {
@@ -190,7 +197,7 @@ namespace BuildATower.Tests
 
         [TestCase(-1, 0)]
         [TestCase(1, 1)]
-        [TestCase(4, StarSystem.MaxStars)]
+        [TestCase(5, StarSystem.MaxStars)]
         public void ForceStars_clamps_requested_test_tier(int requestedStars, int expectedStars)
         {
             var stars = new StarSystem();
@@ -201,11 +208,13 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void MaxStars_is_three()
+        public void MaxStars_is_four()
         {
-            Assert.AreEqual(3, StarSystem.MaxStars);
+            Assert.AreEqual(4, StarSystem.MaxStars);
             Assert.AreEqual(60, StarSystem.ThreeStarPopulation);
             Assert.AreEqual(20f, StarSystem.ThreeStarMaxStress);
+            Assert.AreEqual(100, StarSystem.FourStarPopulation);
+            Assert.AreEqual(15f, StarSystem.FourStarMaxStress);
         }
 
         [Test]
@@ -301,6 +310,67 @@ namespace BuildATower.Tests
             StringAssert.DoesNotContain("Security", goal);
             StringAssert.Contains("Housekeeping", goal);
             StringAssert.Contains("Maintenance", goal);
+        }
+
+        [Test]
+        public void TryPromote_to_four_requires_staffed_security_and_thresholds()
+        {
+            var stars = new StarSystem();
+            stars.ForceStars(3);
+            var grid = GridReadyForThreeStars();
+
+            Assert.IsFalse(stars.TryPromote(grid, averageStress: 10f, population: 100));
+            Assert.AreEqual(3, stars.CurrentStars);
+
+            Assert.IsTrue(grid.TryPlace(Service("service_security"), new Vector2Int(1, 1), out var security));
+            Assert.IsFalse(stars.TryPromote(grid, averageStress: 10f, population: 100));
+            Assert.AreEqual(3, stars.CurrentStars);
+
+            security.SetStaffedWorkers(1);
+            Assert.IsTrue(stars.TryPromote(grid, averageStress: 10f, population: 100));
+            Assert.AreEqual(4, stars.CurrentStars);
+        }
+
+        [Test]
+        public void TryPromote_blocks_four_stars_when_security_is_broken()
+        {
+            var stars = new StarSystem();
+            stars.ForceStars(3);
+            var grid = GridReadyForThreeStars();
+            Assert.IsTrue(grid.TryPlace(Service("service_security"), new Vector2Int(1, 1), out var security));
+            security.SetStaffedWorkers(1);
+            security.Condition = 0;
+
+            Assert.IsFalse(stars.TryPromote(grid, averageStress: 10f, population: 100));
+            Assert.AreEqual(3, stars.CurrentStars);
+        }
+
+        [Test]
+        public void TryPromote_blocks_four_stars_when_population_or_stress_miss()
+        {
+            var stars = new StarSystem();
+            stars.ForceStars(3);
+            var grid = GridReadyForThreeStars();
+            Assert.IsTrue(grid.TryPlace(Service("service_security"), new Vector2Int(1, 1), out var security));
+            security.SetStaffedWorkers(1);
+
+            Assert.IsFalse(stars.TryPromote(grid, averageStress: 10f, population: 99));
+            Assert.IsFalse(stars.TryPromote(grid, averageStress: 15.1f, population: 100));
+            Assert.AreEqual(3, stars.CurrentStars);
+        }
+
+        [Test]
+        public void FormatNextStarGoal_lists_staffed_security_for_four_star_tier()
+        {
+            var stars = new StarSystem();
+            stars.ForceStars(3);
+
+            var goal = stars.FormatNextStarGoal(GridReadyForThreeStars(), averageStress: 10f, population: 80);
+
+            StringAssert.Contains("4★", goal);
+            StringAssert.Contains($"Pop 80/{StarSystem.FourStarPopulation}", goal);
+            StringAssert.Contains("Stress 10/15", goal);
+            StringAssert.Contains("Security", goal);
         }
     }
 }
