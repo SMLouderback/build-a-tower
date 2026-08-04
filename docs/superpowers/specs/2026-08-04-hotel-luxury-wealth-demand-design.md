@@ -4,7 +4,7 @@
 **Status:** Implemented  
 **Depends on:** Price tiers + climate; hotel dirty/maid clean; AgentWealth; stars unlocks  
 **Parent:** Deeper living-room ladders → demand ledger → amenity heatmaps  
-**Follow-ups (tabled):** Proximity/noise/crime heatmaps; SimCity-style Demand graph UI; spa/gym amenities; full office & condo luxury catalogs; cyclical office→jobs→condo/hotel demand stocks
+**Follow-ups (tabled):** Proximity/noise/crime heatmaps; SimCity-style Demand graph UI; spa/gym amenities; condo luxury catalog; cyclical office→jobs→condo/hotel demand stocks. **Office catalog:** `2026-08-04-office-luxury-catalog-design.md`
 
 ## 1. Goals
 
@@ -194,7 +194,7 @@ This slice only supplies **wealth bands + hotel luxury + climate fill** as prere
 1. **Proximity / noise / amenity heatmaps** — Upper rooms prefer quiet + near spa/gym/fine dining; Base tolerates utilities.  
 2. **Crime as demand-graph input** — beyond mix weights.  
 3. **Demand graph UI** and full demand stocks.  
-4. **Office & condo luxury catalogs** (mirror hotel ladder).  
+4. **Condo luxury catalog** (mirror hotel/office ladders). Office catalog: see `2026-08-04-office-luxury-catalog-design.md`.  
 5. **Spa, gym, and other amenities** that shift Upper/Premium mix.  
 6. **Cyclical** luxury office ↔ high-pay jobs ↔ condo/hotel demand.
 
