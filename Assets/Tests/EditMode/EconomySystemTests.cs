@@ -201,6 +201,107 @@ namespace BuildATower.Tests
             Assert.AreEqual(100_000, wallet.Balance);
         }
 
+        RoomTypeSO HotelBase()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "hotel_base";
+            so.category = RoomCategory.Hotel;
+            so.luxuryBand = LuxuryBand.Base;
+            so.size = Vector2Int.one;
+            so.allowAboveGround = true;
+            so.incomeModel = IncomeModel.NightlyRate;
+            so.baseIncome = 1000;
+            return so;
+        }
+
+        [Test]
+        public void PassesDemand_base_hotel_recession_mild_overprice_uses_floor()
+        {
+            // stars=1, Recession offset -2 → comfort Low; Normal tier → 1 overprice step.
+            // Raw DemandChance=0.4; Base Recession floor raises to 0.85.
+            var room = new RoomInstance(1, HotelBase(), Vector2Int.zero, Vector2Int.one);
+            room.PriceTier = PricePricing.TierNormal;
+
+            int? seed = null;
+            for (var s = 0; s < 500; s++)
+            {
+                var roll = new System.Random(s).NextDouble();
+                if (roll > 0.4 && roll < 0.85)
+                {
+                    seed = s;
+                    break;
+                }
+            }
+
+            Assert.IsNotNull(seed);
+            var economy = new EconomySystem(seed: seed.Value);
+            Assert.IsTrue(economy.PassesDemand(room, currentStars: 1, climateOffset: -2));
+        }
+
+        [Test]
+        public void EffectiveDemandClimateOffset_mid_recession_applies_luxury_bias()
+        {
+            var so = HotelBase();
+            so.luxuryBand = LuxuryBand.Mid;
+            // Mid Recession bias -1; DemandChance often saturates at Low so offset is the Mid assert.
+            Assert.AreEqual(-3, EconomySystem.EffectiveDemandClimateOffset(so, climateOffset: -2));
+            Assert.AreEqual(-2, EconomySystem.EffectiveDemandClimateOffset(HotelBase(), climateOffset: -2));
+        }
+
+        [Test]
+        public void EffectiveDemandClimateOffset_upper_slow_applies_luxury_bias()
+        {
+            var so = HotelBase();
+            so.luxuryBand = LuxuryBand.Upper;
+            Assert.AreEqual(-2, EconomySystem.EffectiveDemandClimateOffset(so, climateOffset: -1));
+        }
+
+        [Test]
+        public void PassesDemand_upper_hotel_slow_high_tier_applies_luxury_climate_bias()
+        {
+            // 3★ High tier, Slow (offset -1):
+            // without Upper bias → comfort Normal, 1 overprice → chance 0.4
+            // with Upper Slow bias -1 → comfort Low, 2 overprice → chance 0.1
+            var so = HotelBase();
+            so.id = "hotel_upper";
+            so.luxuryBand = LuxuryBand.Upper;
+            var room = new RoomInstance(1, so, Vector2Int.zero, Vector2Int.one);
+            room.PriceTier = PricePricing.TierHigh;
+
+            int? seed = null;
+            for (var s = 0; s < 500; s++)
+            {
+                var roll = new System.Random(s).NextDouble();
+                if (roll > 0.1 && roll < 0.4)
+                {
+                    seed = s;
+                    break;
+                }
+            }
+
+            Assert.IsNotNull(seed);
+            var economy = new EconomySystem(seed: seed.Value);
+            Assert.IsFalse(economy.PassesDemand(room, currentStars: 3, climateOffset: -1));
+
+            // Same seed/tier/stars without Upper bias (Base) still clears the 0.4 chance.
+            var baseRoom = new RoomInstance(2, HotelBase(), Vector2Int.zero, Vector2Int.one);
+            baseRoom.PriceTier = PricePricing.TierHigh;
+            var baseEconomy = new EconomySystem(seed: seed.Value);
+            Assert.IsTrue(baseEconomy.PassesDemand(baseRoom, currentStars: 3, climateOffset: -1));
+        }
+
+        [Test]
+        public void EffectiveDemandClimateOffset_upper_recession_vs_boom_bias()
+        {
+            // Same tier/stars climate span: Upper adds Recession -2 / Boom +1 on top of offset.
+            var so = HotelBase();
+            so.luxuryBand = LuxuryBand.Upper;
+            Assert.AreEqual(-4, EconomySystem.EffectiveDemandClimateOffset(so, climateOffset: -2));
+            Assert.AreEqual(3, EconomySystem.EffectiveDemandClimateOffset(so, climateOffset: 2));
+            Assert.AreEqual(-2, EconomySystem.EffectiveDemandClimateOffset(HotelBase(), climateOffset: -2));
+            Assert.AreEqual(2, EconomySystem.EffectiveDemandClimateOffset(HotelBase(), climateOffset: 2));
+        }
+
         RoomTypeSO Housekeeping()
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();

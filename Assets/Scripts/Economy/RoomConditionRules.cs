@@ -19,9 +19,13 @@ namespace BuildATower
 
         public static float CleanMinutes(RoomTypeSO hotelType, float minutesMultiplier = 1f)
         {
-            var baseMinutes = hotelType != null && hotelType.requiredStars >= 2
-                ? CleanPremiumMinutes
-                : CleanBasicMinutes;
+            float baseMinutes;
+            if (hotelType != null && hotelType.category == RoomCategory.Hotel)
+                baseMinutes = HotelLuxury.ResolveCleanMinutes(hotelType);
+            else
+                baseMinutes = hotelType != null && hotelType.requiredStars >= 2
+                    ? CleanPremiumMinutes
+                    : CleanBasicMinutes;
             return baseMinutes * minutesMultiplier;
         }
 

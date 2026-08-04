@@ -7,7 +7,7 @@
 
 ## Goals
 
-Keep the top status strip scannable: **money and stars always visible**, with shop / elevator / tower statistics behind **category dropdowns** or temporary **selection context chips**.
+Keep the top status strip scannable: **money and stars always visible**, with shop / elevator / tower statistics behind **category dropdowns** only (no duplicate chips on the core row).
 
 ## Locked decisions
 
@@ -17,7 +17,7 @@ Keep the top status strip scannable: **money and stars always visible**, with sh
 | Approach | Category Info buttons (Shops · Elev · Tower) + existing Goals |
 | Info mutual exclusion | Shops / Elev / Tower: only one open; Goals independent |
 | Unlock gates | Shops & Elev with economy unlock; Tower with goals unlock |
-| Selection context | Selecting a shop or elevator adds temporary **tower-wide** chips on the core row; deselect clears; does **not** auto-open dropdowns |
+| Selection context | Selecting a shop or elevator does **not** add tower-wide chips to the core row; use Shops / Elev dropdowns (shaft/shop detail stays in Selection) |
 | Shaft detail | Remains in Selection panel only |
 
 ## UI behavior
@@ -36,13 +36,9 @@ Fixed height (same as today). Does **not** grow when dropdowns open (overlay bel
 - **Tower:** Pop, Stress, Crime, condo jobs line when any assigned
 - **Goals:** unchanged next-★ checklist
 
-### Selection context chips
-- Shop selected (`RoomCategory.Commercial` / `BuildFamily.Shops`): tower shop chips after money group, before stars
-- Elevator selected (`isElevatorShaft`): tower elevator chips in the same slot
-- Cleared when selection is null or another room type
-
 ## Non-goals
 
+- Selection-driven temporary chips on the core row (removed — duplicated dropdown data)
 - Sticky pin toggles / second permanent chip row
 - Population & staff breakdown (backlog)
 - Auto-opening Info dropdowns on selection

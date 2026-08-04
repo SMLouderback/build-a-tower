@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Collapse optional top-bar stats into Shops / Elev / Tower dropdowns, keep money + stars + play controls always visible, show temporary context chips when a shop or elevator is selected.
+**Goal:** Collapse optional top-bar stats into Shops / Elev / Tower dropdowns; keep money + stars + play controls always visible. Selection no longer adds duplicate tower-wide chips on the core row.
 
 **Architecture:** Extend `TowerHudController.DrawTopInfoBar` using the existing Goals dropdown overlay pattern. Add `_infoPanel` state and `_infoDropdownRect` hit-testing.
 
@@ -31,12 +31,12 @@
 - [x] Draw right-cluster buttons Shops · Elev · Tower · Goals with unlock gates
 - [x] Render dropdown bodies per spec; Info panels mutually exclusive; Goals independent
 
-### Task 3: Selection context chips
+### Task 3: Selection context chips (removed)
 
-- [x] After money group, before stars: if selected shop → shop chips; if selected elevator → elev chips
+- [x] ~~After money group, before stars: if selected shop → shop chips; if selected elevator → elev chips~~ — removed; duplicated Shops/Elev dropdown data
 - [x] Do not auto-open dropdowns
 
 ### Task 4: Docs
 
-- [x] README bullet on collapsible Info buttons + selection chips
+- [x] README bullet on collapsible Info buttons (dropdowns only; no selection chips on core row)
 - [x] Mark design spec **Implemented**

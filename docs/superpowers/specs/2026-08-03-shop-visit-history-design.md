@@ -7,12 +7,12 @@
 
 ## 1. Goals
 
-Show shop foot traffic for **yesterday** and a **rolling 7-day average**, both **per shop** (Selection) and **tower-wide** (Shops dropdown / selection context). Keep storage tiny (7 ints per shop + 7 ints tower).
+Show shop foot traffic for **yesterday** and a **rolling 7-day average**, both **per shop** (Selection) and **tower-wide** (Shops dropdown). Keep storage tiny (7 ints per shop + 7 ints tower).
 
 ### Success criteria
 
 1. Selecting a shop shows visits today, yesterday, and 7-day average.  
-2. **Shops** top-bar dropdown (and selecting a shop) shows tower yesterday shop visits and 7-day average when economy is unlocked.  
+2. **Shops** top-bar dropdown shows tower yesterday shop visits and 7-day average when economy is unlocked.  
 3. Average uses only days that have been recorded (no zero-padding before history fills).  
 4. At most 7 days of visit counts retained per shop and for the tower.
 
@@ -47,7 +47,7 @@ Show shop foot traffic for **yesterday** and a **rolling 7-day average**, both *
   - Visits today (existing)  
   - Visits yesterday: N  
   - Avg visits (7d): X.X  
-- **Top bar**: **Shops** dropdown (and temporary chips while a shop is selected) show `Shops yday N` and `Shops ~X/d` when economy is unlocked.
+- **Top bar**: **Shops** dropdown shows `Shops yday N` and `Shops ~X/d` when economy is unlocked.
 
 ## 5. Out of scope
 

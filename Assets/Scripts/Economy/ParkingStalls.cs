@@ -46,7 +46,8 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// B1 (−1) is always accessible. Deeper floors need a ramp chain to B1 or Lobby.
+        /// True when a ramp chain from this floor reaches B1 (−1) or Lobby (0).
+        /// B1 is always a valid egress floor.
         /// </summary>
         public static bool IsParkingFloorAccessible(TowerGrid grid, int floor)
         {
@@ -55,35 +56,61 @@ namespace BuildATower
             if (grid == null) return false;
 
             var reachable = new HashSet<int> { floor };
-            var changed = true;
-            while (changed)
-            {
-                changed = false;
-                foreach (var room in grid.Rooms)
-                {
-                    if (!IsRamp(room) || room.IsBroken) continue;
-                    var lo = room.Origin.y;
-                    var hi = room.Origin.y + room.Size.y - 1;
-                    var touches = false;
-                    for (var y = lo; y <= hi; y++)
-                    {
-                        if (reachable.Contains(y))
-                        {
-                            touches = true;
-                            break;
-                        }
-                    }
+            ExpandRampFloors(grid, reachable);
+            return reachable.Contains(-1) || reachable.Contains(TowerGrid.LobbyFloor);
+        }
 
-                    if (!touches) continue;
-                    for (var y = lo; y <= hi; y++)
-                    {
-                        if (reachable.Add(y))
-                            changed = true;
-                    }
+        /// <summary>
+        /// A parking lot counts when it is on B1, edge-touches a lobby-reaching ramp,
+        /// or is linked through edge-adjacent parking lots to either of those.
+        /// </summary>
+        public static bool IsParkingAccessible(TowerGrid grid, RoomInstance parking)
+        {
+            if (!IsParking(parking) || parking.IsBroken) return false;
+            if (grid == null) return false;
+            if (parking.Origin.y >= TowerGrid.LobbyFloor) return false;
+
+            var lots = new List<RoomInstance>();
+            foreach (var room in grid.Rooms)
+            {
+                if (!IsParking(room) || room.IsBroken) continue;
+                if (room.Origin.y >= TowerGrid.LobbyFloor) continue;
+                lots.Add(room);
+            }
+
+            if (lots.Count == 0) return false;
+
+            var seeds = new HashSet<int>();
+            for (var i = 0; i < lots.Count; i++)
+            {
+                var lot = lots[i];
+                if (lot.Origin.y == -1 || TouchesLobbyReachingRamp(grid, lot))
+                    seeds.Add(i);
+            }
+
+            if (seeds.Count == 0) return false;
+
+            var adj = BuildParkingAdjacency(lots);
+            var reachable = new HashSet<int>(seeds);
+            var queue = new Queue<int>(seeds);
+            while (queue.Count > 0)
+            {
+                var i = queue.Dequeue();
+                if (!adj.TryGetValue(i, out var neighbors)) continue;
+                foreach (var j in neighbors)
+                {
+                    if (!reachable.Add(j)) continue;
+                    queue.Enqueue(j);
                 }
             }
 
-            return reachable.Contains(-1) || reachable.Contains(TowerGrid.LobbyFloor);
+            for (var i = 0; i < lots.Count; i++)
+            {
+                if (ReferenceEquals(lots[i], parking))
+                    return reachable.Contains(i);
+            }
+
+            return false;
         }
 
         public static int TotalStalls(TowerGrid grid)
@@ -92,9 +119,7 @@ namespace BuildATower
             var n = 0;
             foreach (var room in grid.Rooms)
             {
-                if (!IsParking(room)) continue;
-                if (room.IsBroken) continue;
-                if (!IsParkingFloorAccessible(grid, room.Origin.y)) continue;
+                if (!IsParkingAccessible(grid, room)) continue;
                 n += Mathf.Max(0, room.Type.maxOccupants);
             }
 
@@ -125,8 +150,7 @@ namespace BuildATower
 
             foreach (var room in grid.Rooms)
             {
-                if (!IsParking(room) || room.IsBroken) continue;
-                if (!IsParkingFloorAccessible(grid, room.Origin.y)) continue;
+                if (!IsParkingAccessible(grid, room)) continue;
                 var cap = Mathf.Max(0, room.Type.maxOccupants);
                 var used = 0;
                 if (agents != null)
@@ -171,10 +195,113 @@ namespace BuildATower
             if (grid == null) return false;
             foreach (var room in grid.Rooms)
             {
-                if (!IsParking(room) || room.IsBroken) continue;
-                if (!IsParkingFloorAccessible(grid, room.Origin.y)) continue;
+                if (!IsParkingAccessible(grid, room)) continue;
                 cell = StallCell(room, 0);
                 return true;
+            }
+
+            return false;
+        }
+
+        static void ExpandRampFloors(TowerGrid grid, HashSet<int> reachable)
+        {
+            var changed = true;
+            while (changed)
+            {
+                changed = false;
+                foreach (var room in grid.Rooms)
+                {
+                    if (!IsRamp(room) || room.IsBroken) continue;
+                    var lo = room.Origin.y;
+                    var hi = room.Origin.y + room.Size.y - 1;
+                    var touches = false;
+                    for (var y = lo; y <= hi; y++)
+                    {
+                        if (reachable.Contains(y))
+                        {
+                            touches = true;
+                            break;
+                        }
+                    }
+
+                    if (!touches) continue;
+                    for (var y = lo; y <= hi; y++)
+                    {
+                        if (reachable.Add(y))
+                            changed = true;
+                    }
+                }
+            }
+        }
+
+        static bool TouchesLobbyReachingRamp(TowerGrid grid, RoomInstance parking)
+        {
+            foreach (var room in grid.Rooms)
+            {
+                if (!IsRamp(room) || room.IsBroken) continue;
+                if (!RoomsEdgeAdjacent(parking, room)) continue;
+
+                var floors = new HashSet<int>();
+                var lo = room.Origin.y;
+                var hi = room.Origin.y + room.Size.y - 1;
+                for (var y = lo; y <= hi; y++)
+                    floors.Add(y);
+                ExpandRampFloors(grid, floors);
+                if (floors.Contains(-1) || floors.Contains(TowerGrid.LobbyFloor))
+                    return true;
+            }
+
+            return false;
+        }
+
+        static Dictionary<int, List<int>> BuildParkingAdjacency(List<RoomInstance> lots)
+        {
+            var adj = new Dictionary<int, List<int>>();
+            for (var i = 0; i < lots.Count; i++)
+                adj[i] = new List<int>();
+
+            for (var i = 0; i < lots.Count; i++)
+            {
+                for (var j = i + 1; j < lots.Count; j++)
+                {
+                    // Same-floor bridges only — deeper floors still need their own ramp link.
+                    if (!RoomsHorizontallyAdjacent(lots[i], lots[j])) continue;
+                    adj[i].Add(j);
+                    adj[j].Add(i);
+                }
+            }
+
+            return adj;
+        }
+
+        /// <summary>True when any occupied cell of a is 4-adjacent to any occupied cell of b.</summary>
+        static bool RoomsEdgeAdjacent(RoomInstance a, RoomInstance b)
+        {
+            if (a == null || b == null) return false;
+            foreach (var ca in a.OccupiedCells())
+            {
+                foreach (var cb in b.OccupiedCells())
+                {
+                    var dx = Mathf.Abs(ca.x - cb.x);
+                    var dy = Mathf.Abs(ca.y - cb.y);
+                    if (dx + dy == 1) return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>True when lots share an edge on the same floor (gap-free garage run).</summary>
+        static bool RoomsHorizontallyAdjacent(RoomInstance a, RoomInstance b)
+        {
+            if (a == null || b == null) return false;
+            foreach (var ca in a.OccupiedCells())
+            {
+                foreach (var cb in b.OccupiedCells())
+                {
+                    if (ca.y != cb.y) continue;
+                    if (Mathf.Abs(ca.x - cb.x) == 1) return true;
+                }
             }
 
             return false;

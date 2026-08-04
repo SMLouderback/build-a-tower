@@ -82,6 +82,12 @@ namespace BuildATower
         public AgentPhase PhaseAfterVisit { get; set; }
         public Vector2Int? ReturnCell { get; set; }
 
+        /// <summary>
+        /// Rolled wealth band for hotel guests (and event hotel visitors).
+        /// Street default means “unset” for other roles — disposable uses <see cref="AgentWealth.ResolveBand"/>.
+        /// </summary>
+        public WealthBand Wealth { get; set; }
+
         /// <summary>Remaining disposable cash for commercial spend today.</summary>
         public int DisposableRemaining { get; set; }
 

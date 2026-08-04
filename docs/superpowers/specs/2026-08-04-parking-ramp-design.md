@@ -8,8 +8,9 @@
 ## Goals
 
 1. Add a **Parking Ramp** room that visually connects Lobby/B1 to deeper basement parking (car stairs).  
-2. **B2+ parking** only counts for stalls / arrivals when a continuous ramp chain reaches **B1 or Lobby**.  
-3. **B1 parking** stays accessible without a ramp (street/lobby access level).
+2. **B2+ parking** only counts for stalls / arrivals when a continuous ramp chain reaches **B1 or Lobby** and the lot is in a **contiguous garage run** touching that ramp.  
+3. **B1 parking** stays accessible without a ramp (street/lobby access level).  
+4. Same-floor lots can extend access by abutting other accessible lots (no gaps).
 
 ## Locked decisions
 
@@ -21,7 +22,7 @@
 | Unlock | **4★** |
 | Cost / upkeep | **$25,000** / **$200/day** |
 | B1 parking | Always eligible (with Valet) |
-| B2+ parking | Needs ramp chain to B1 or Lobby |
+| B2+ parking | Needs ramp chain to B1 or Lobby **and** a contiguous parking link (lot touches that ramp, or touches parking that does) |
 | Agent pathing | People do **not** use ramps; spawn-at-stall arrivals unchanged when eligible |
 
 ## Room
@@ -36,16 +37,23 @@
 ## Access helpers
 
 ```
-IsParkingFloorAccessible(grid, floor):
-  if floor >= 0: false (no above-ground parking)
-  if floor == -1: true
-  else: exists ramp chain from floor up to -1 or 0
+IsParkingAccessible(grid, parking):
+  Seed lots:
+    - any B1 (−1) parking, or
+    - any parking that edge-touches a ramp whose floor chain reaches B1 or Lobby
+  Expand: same-floor edge-adjacent parking lots (gap-free garage run)
+  Lot counts iff it is in the reachable seed component
 ```
 
 Ramp connects floors `origin.y` and `origin.y + 1` (size.y = 2).  
-Chain: walk upward via overlapping/stacked ramps until B1 (−1) or Lobby (0).
+Ramp chains still walk via overlapping/stacked ramps until B1 (−1) or Lobby (0).  
+Deeper floors still need their own ramp link — stacked parking alone does not bridge floors.
 
-`ParkingStalls.TotalStalls` / claim: only count stalls on accessible floors (and not broken).
+Same-floor lots with a **gap** (empty cells between) do **not** share access — bridge them with contiguous parking.
+
+`ParkingStalls.TotalStalls` / claim: only count stalls on accessible lots (and not broken).
+
+`IsParkingFloorAccessible` remains as a floor-level ramp-chain helper (used by tests / tooling); stall eligibility uses per-lot `IsParkingAccessible`.
 
 ## Non-goals
 

@@ -26,6 +26,8 @@ namespace BuildATower
         public bool isStairs;
         public bool isElevatorShaft;
         public bool isParkingRamp;
+        public LuxuryBand luxuryBand = LuxuryBand.None;
+        [Min(0f)] public float cleanMinutes;
         [Min(0)] public int requiredStars;
         [Min(0)] public int maxOccupants;
         [Min(0)] public int eventCapacity;

@@ -953,7 +953,7 @@ namespace BuildATower
                     : SelectedRoomType.isStairs
                         ? "Stairs (2×2): BL→UR run. Stack next flight one floor up (share connecting floor). Roles 1+4 cannot overlap; 2+3 can."
                         : SelectedRoomType.isParkingRamp
-                            ? "Parking Ramp (3×2): connects Lobby/B1 to deeper parking. Stack flights to unlock B2+ stalls."
+                            ? "Parking Ramp (3×2): connects Lobby/B1 to deeper parking. Stack flights; place B2+ lots touching the ramp or contiguous parking."
                             : SelectedRoomType.isElevatorShaft
                                 ? "Elevator (1×2): click to place. Or use Selector and drag shaft edges to resize (30 floors max)."
                                 : $"Selected: {SelectedRoomType.displayName}. Build only on top of the floor below (no overhangs).";

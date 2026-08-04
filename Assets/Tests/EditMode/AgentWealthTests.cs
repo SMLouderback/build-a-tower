@@ -8,13 +8,14 @@ namespace BuildATower.Tests
     public class AgentWealthTests
     {
         static RoomTypeSO Living(RoomCategory category, string id = "room", string display = "Room",
-            int requiredStars = 0)
+            int requiredStars = 0, LuxuryBand luxuryBand = LuxuryBand.None)
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
             so.id = id;
             so.displayName = display;
             so.category = category;
             so.requiredStars = requiredStars;
+            so.luxuryBand = luxuryBand;
             return so;
         }
 
@@ -29,38 +30,127 @@ namespace BuildATower.Tests
         [Test]
         public void ResolveBand_street_visitor_is_street()
         {
-            Assert.AreEqual(WealthBand.Street, AgentWealth.ResolveBand(AgentRole.StreetVisitor, null));
+            Assert.AreEqual(WealthBand.Street,
+                AgentWealth.ResolveBand(AgentRole.StreetVisitor, null, new System.Random(0)));
         }
 
         [Test]
-        public void ResolveBand_event_visitor_is_basic()
+        public void ResolveBand_event_visitor_is_mid()
         {
-            Assert.AreEqual(WealthBand.Basic, AgentWealth.ResolveBand(AgentRole.EventVisitor, null));
+            Assert.AreEqual(WealthBand.Mid,
+                AgentWealth.ResolveBand(AgentRole.EventVisitor, null, new System.Random(0)));
         }
 
         [Test]
-        public void ResolveBand_basic_living_homes()
+        public void ResolveBand_hotel_base_is_basic()
         {
             Assert.AreEqual(WealthBand.Basic,
-                AgentWealth.ResolveBand(AgentRole.OfficeWorker, Living(RoomCategory.Office)));
-            Assert.AreEqual(WealthBand.Basic,
-                AgentWealth.ResolveBand(AgentRole.HotelGuest, Living(RoomCategory.Hotel, "hotel_single")));
-            Assert.AreEqual(WealthBand.Basic,
-                AgentWealth.ResolveBand(AgentRole.CondoResident, Living(RoomCategory.Condo)));
-        }
-
-        [Test]
-        public void ResolveBand_premium_by_stars_or_name()
-        {
-            Assert.AreEqual(WealthBand.Premium,
-                AgentWealth.ResolveBand(AgentRole.OfficeWorker,
-                    Living(RoomCategory.Office, requiredStars: 2)));
-            Assert.AreEqual(WealthBand.Premium,
                 AgentWealth.ResolveBand(AgentRole.HotelGuest,
-                    Living(RoomCategory.Hotel, id: "hotel_premium")));
-            Assert.AreEqual(WealthBand.Premium,
-                AgentWealth.ResolveBand(AgentRole.CondoResident,
-                    Living(RoomCategory.Condo, display: "Premium Suite")));
+                    Living(RoomCategory.Hotel, "hotel_base", luxuryBand: LuxuryBand.Base),
+                    new System.Random(0)));
+        }
+
+        [Test]
+        public void ResolveBand_hotel_mid_is_mid()
+        {
+            Assert.AreEqual(WealthBand.Mid,
+                AgentWealth.ResolveBand(AgentRole.HotelGuest,
+                    Living(RoomCategory.Hotel, "hotel_mid", luxuryBand: LuxuryBand.Mid),
+                    new System.Random(0)));
+        }
+
+        [Test]
+        public void ResolveBand_hotel_upper_non_suite_is_upper()
+        {
+            Assert.AreEqual(WealthBand.Upper,
+                AgentWealth.ResolveBand(AgentRole.HotelGuest,
+                    Living(RoomCategory.Hotel, "hotel_upper_king", luxuryBand: LuxuryBand.Upper),
+                    new System.Random(0)));
+        }
+
+        [Test]
+        public void ResolveBand_hotel_upper_suite_is_upper_or_premium()
+        {
+            var suite = Living(RoomCategory.Hotel, "hotel_upper_suite", luxuryBand: LuxuryBand.Upper);
+            var upper = 0;
+            var premium = 0;
+            var rng = new System.Random(42);
+            for (var i = 0; i < 400; i++)
+            {
+                var band = AgentWealth.ResolveBand(AgentRole.HotelGuest, suite, rng);
+                if (band == WealthBand.Upper) upper++;
+                else if (band == WealthBand.Premium) premium++;
+                else Assert.Fail("unexpected band " + band);
+            }
+
+            Assert.That(upper, Is.InRange(140, 260));
+            Assert.That(premium, Is.InRange(140, 260));
+        }
+
+        [Test]
+        public void ResolveBand_legacy_hotel_premium_without_band_is_mid()
+        {
+            Assert.AreEqual(WealthBand.Mid,
+                AgentWealth.ResolveBand(AgentRole.HotelGuest,
+                    Living(RoomCategory.Hotel, "hotel_premium"),
+                    new System.Random(0)));
+            Assert.AreEqual(WealthBand.Mid,
+                AgentWealth.ResolveBand(AgentRole.HotelGuest,
+                    Living(RoomCategory.Hotel, "hotel_single", display: "Premium Room"),
+                    new System.Random(0)));
+        }
+
+        [Test]
+        public void ResolveBand_unbanded_hotel_defaults_basic()
+        {
+            Assert.AreEqual(WealthBand.Basic,
+                AgentWealth.ResolveBand(AgentRole.HotelGuest,
+                    Living(RoomCategory.Hotel, "hotel_single"),
+                    new System.Random(0)));
+        }
+
+        [Test]
+        public void ResolveBand_office_condo_low_stars_mix()
+        {
+            var office = Living(RoomCategory.Office);
+            var condo = Living(RoomCategory.Condo);
+            var basic = 0;
+            var mid = 0;
+            var rng = new System.Random(7);
+            for (var i = 0; i < 1000; i++)
+            {
+                var home = i % 2 == 0 ? office : condo;
+                var role = i % 2 == 0 ? AgentRole.OfficeWorker : AgentRole.CondoResident;
+                var band = AgentWealth.ResolveBand(role, home, rng);
+                if (band == WealthBand.Basic) basic++;
+                else if (band == WealthBand.Mid) mid++;
+                else Assert.Fail("unexpected band " + band);
+            }
+
+            Assert.That(basic, Is.InRange(220, 380));
+            Assert.That(mid, Is.InRange(620, 780));
+        }
+
+        [Test]
+        public void ResolveBand_office_condo_high_stars_mix()
+        {
+            var office = Living(RoomCategory.Office, requiredStars: 2);
+            var condo = Living(RoomCategory.Condo, requiredStars: 3);
+            var upper = 0;
+            var premium = 0;
+            var rng = new System.Random(11);
+            for (var i = 0; i < 1000; i++)
+            {
+                var home = i % 2 == 0 ? office : condo;
+                var role = i % 2 == 0 ? AgentRole.OfficeWorker : AgentRole.CondoResident;
+                var band = AgentWealth.ResolveBand(role, home, rng);
+                if (band == WealthBand.Upper) upper++;
+                else if (band == WealthBand.Premium) premium++;
+                else Assert.Fail("unexpected band " + band);
+            }
+
+            Assert.That(upper, Is.InRange(620, 780));
+            Assert.That(premium, Is.InRange(220, 380));
         }
 
         [Test]
@@ -69,22 +159,19 @@ namespace BuildATower.Tests
             var rng = new System.Random(7);
             for (var i = 0; i < 40; i++)
             {
-                var street = AgentWealth.RollDailyDisposable(WealthBand.Street, 1f, rng);
-                Assert.That(street, Is.InRange(35, 90));
-
-                var basic = AgentWealth.RollDailyDisposable(WealthBand.Basic, 1f, rng);
-                Assert.That(basic, Is.InRange(70, 160));
-
-                var premium = AgentWealth.RollDailyDisposable(WealthBand.Premium, 1f, rng);
-                Assert.That(premium, Is.InRange(120, 280));
+                Assert.That(AgentWealth.RollDailyDisposable(WealthBand.Street, 1f, rng), Is.InRange(35, 90));
+                Assert.That(AgentWealth.RollDailyDisposable(WealthBand.Basic, 1f, rng), Is.InRange(55, 110));
+                Assert.That(AgentWealth.RollDailyDisposable(WealthBand.Mid, 1f, rng), Is.InRange(90, 160));
+                Assert.That(AgentWealth.RollDailyDisposable(WealthBand.Upper, 1f, rng), Is.InRange(140, 220));
+                Assert.That(AgentWealth.RollDailyDisposable(WealthBand.Premium, 1f, rng), Is.InRange(200, 320));
             }
 
             var boom = AgentWealth.RollDailyDisposable(WealthBand.Basic, 1.3f, new System.Random(1));
-            Assert.That(boom, Is.InRange(91, 208));
+            Assert.That(boom, Is.InRange(72, 143));
             Assert.GreaterOrEqual(boom, 0);
 
             var recession = AgentWealth.RollDailyDisposable(WealthBand.Street, 0.7f, new System.Random(2));
-            Assert.That(recession, Is.InRange(24, 63));
+            Assert.That(recession, Is.InRange(25, 63));
             Assert.GreaterOrEqual(recession, 0);
         }
 

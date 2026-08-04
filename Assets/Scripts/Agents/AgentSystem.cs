@@ -144,7 +144,8 @@ namespace BuildATower
             TowerGrid grid,
             System.Action<RoomInstance> onNewCondoResident = null,
             int currentStars = 0,
-            int climateOffset = 0)
+            int climateOffset = 0,
+            float averageCrime = 0f)
         {
             _onCondoResidentMovedIn = onNewCondoResident;
             var livingRooms = new HashSet<RoomInstance>();
@@ -194,7 +195,8 @@ namespace BuildATower
             {
                 var role = RoleFor(room.Type.category);
                 if (room.IsBroken) continue;
-                if (role == AgentRole.HotelGuest && room.Dirty) continue;
+                // Hotels fill via wealth roll + acceptance (FillHotelVacancies).
+                if (role == AgentRole.HotelGuest) continue;
 
                 var existing = 0;
                 foreach (var a in _agents)
@@ -252,8 +254,125 @@ namespace BuildATower
                 }
             }
 
+            var climateStep = _climate?.Step ?? MarketClimate.Normal;
+            FillHotelVacancies(grid, currentStars, averageCrime, climateStep);
+
             // Desk reservation / condo stock may have changed — allow Tick to re-run AssignCondoJobs.
             _condoJobsAssignedDay = -1;
+        }
+
+        /// <summary>
+        /// Rolls guest wealth and claims matching vacant hotel beds until capacity is filled
+        /// or attempt budget is exhausted.
+        /// </summary>
+        void FillHotelVacancies(TowerGrid grid, int stars, float averageCrime, int climateStep)
+        {
+            if (grid == null) return;
+
+            var vacancies = CountHotelVacancies(grid);
+            if (vacancies <= 0) return;
+
+            // Extra attempts cover mismatched wealth rolls (e.g. Mid guest vs Base-only tower).
+            var maxAttempts = System.Math.Max(vacancies * 8, 8);
+            for (var attempt = 0; attempt < maxAttempts && vacancies > 0; attempt++)
+            {
+                var wealth = HotelLuxury.RollGuestBand(stars, averageCrime, climateStep, _rng);
+                if (!TryFindHotelRoomForGuest(grid, wealth, climateStep, _rng, out var room, out var slot))
+                    continue;
+
+                var homeCell = HomeCell(room, slot);
+                var agent = new Agent(_nextId++, AgentRole.HotelGuest, room, homeCell)
+                {
+                    HomeSlot = slot,
+                    Wealth = wealth
+                };
+                ConfigureSchedule(agent);
+                _agents.Add(agent);
+                vacancies--;
+            }
+        }
+
+        int CountHotelVacancies(TowerGrid grid)
+        {
+            var vacancies = 0;
+            foreach (var room in grid.Rooms)
+            {
+                if (!IsClaimableHotel(room)) continue;
+                var max = System.Math.Max(1, room.Type.maxOccupants);
+                var occupied = CountHomeOccupants(room);
+                if (occupied < max)
+                    vacancies += max - occupied;
+            }
+
+            return vacancies;
+        }
+
+        /// <summary>
+        /// Picks a vacant non-dirty hotel bed that <see cref="HotelLuxury.AcceptsGuest"/> for
+        /// <paramref name="wealth"/>, then applies <see cref="HotelLuxury.CheckInFillMultiplier"/>
+        /// as an rng gate. Premium prefers suite beds when free.
+        /// </summary>
+        public bool TryFindHotelRoomForGuest(
+            TowerGrid grid,
+            WealthBand wealth,
+            int climateStep,
+            System.Random rng,
+            out RoomInstance room,
+            out int slot)
+        {
+            room = null;
+            slot = 0;
+            if (grid == null || rng == null) return false;
+
+            RoomInstance best = null;
+            var bestSlot = 0;
+            var bestRank = int.MaxValue;
+
+            foreach (var candidate in grid.Rooms)
+            {
+                if (!IsClaimableHotel(candidate)) continue;
+                var band = EffectiveHotelLuxuryBand(candidate.Type);
+                if (!HotelLuxury.AcceptsGuest(band, wealth, candidate.Type.id))
+                    continue;
+
+                var max = System.Math.Max(1, candidate.Type.maxOccupants);
+                var occupied = CountHomeOccupants(candidate);
+                if (occupied >= max) continue;
+
+                var rank = PremiumRoomPreferenceRank(wealth, candidate.Type.id);
+                if (rank >= bestRank) continue;
+                bestRank = rank;
+                best = candidate;
+                bestSlot = occupied;
+            }
+
+            if (best == null) return false;
+
+            var fill = HotelLuxury.CheckInFillMultiplier(EffectiveHotelLuxuryBand(best.Type), climateStep);
+            if (fill < 1f && rng.NextDouble() >= fill)
+                return false;
+
+            room = best;
+            slot = bestSlot;
+            return true;
+        }
+
+        static LuxuryBand EffectiveHotelLuxuryBand(RoomTypeSO type)
+        {
+            if (ReferenceEquals(type, null)) return LuxuryBand.None;
+            // Legacy unbanded hotel assets behave as Base until the catalog lands.
+            return type.luxuryBand == LuxuryBand.None ? LuxuryBand.Base : type.luxuryBand;
+        }
+
+        /// <summary>Lower is better. Premium prefers suite, then king.</summary>
+        static int PremiumRoomPreferenceRank(WealthBand wealth, string roomId)
+        {
+            if (wealth != WealthBand.Premium) return 0;
+            if (string.Equals(roomId, HotelLuxury.UpperSuiteId, System.StringComparison.Ordinal))
+                return 0;
+            if (string.Equals(roomId, HotelLuxury.UpperKingId, System.StringComparison.Ordinal))
+                return 1;
+            return 2;
         }
 
         bool TryRemoveSurplusOfficeWorker(RoomInstance home)
@@ -1411,10 +1530,19 @@ namespace BuildATower
         {
             if (agent == null || agent.DisposableDayIndex == dayIndex) return;
 
-            var homeType = agent.Role is AgentRole.StreetVisitor or AgentRole.EventVisitor
-                ? null
-                : agent.HomeRoom?.Type;
-            var band = AgentWealth.ResolveBand(agent.Role, homeType);
+            WealthBand band;
+            if (agent.Wealth != WealthBand.Street)
+            {
+                band = agent.Wealth;
+            }
+            else
+            {
+                var homeType = agent.Role is AgentRole.StreetVisitor or AgentRole.EventVisitor
+                    ? null
+                    : agent.HomeRoom?.Type;
+                band = AgentWealth.ResolveBand(agent.Role, homeType, _rng);
+            }
+
             var mult = _climate?.SpendMultiplier ?? 1f;
             agent.DisposableRemaining = AgentWealth.RollDailyDisposable(band, mult, _rng);
             agent.DisposableDayIndex = dayIndex;
@@ -1669,14 +1797,27 @@ namespace BuildATower
         {
             if (grid == null || clock == null) return false;
             if (CountEventVisitors() >= MaxConcurrentEventVisitors) return false;
-            if (!TryClaimHotelBedForEvent(grid, out var hotel, out var slot))
-                return false;
+            // Event visitors spend Mid; claim a Mid-accepting bed when possible.
+            var climateStep = _climate?.Step ?? MarketClimate.Normal;
+            if (!TryFindHotelRoomForGuest(
+                    grid,
+                    WealthBand.Mid,
+                    climateStep,
+                    _rng,
+                    out var hotel,
+                    out var slot))
+            {
+                // Fall back to any claimable bed (displace Outside guest) so events still book.
+                if (!TryClaimHotelBedForEvent(grid, out hotel, out slot))
+                    return false;
+            }
 
             var home = HomeCell(hotel, slot);
             var exitCell = LobbyExitCell(grid, home.x);
             var agent = new Agent(_nextId++, AgentRole.EventVisitor, hotel, exitCell)
             {
                 HomeSlot = slot,
+                Wealth = WealthBand.Mid,
                 CheckInMinute = RollHotelCheckInMinute(_rng),
                 CheckoutMinute = RollHotelCheckoutMinute(_rng),
                 CheckInDay = -1,
@@ -1834,12 +1975,18 @@ namespace BuildATower
             return count;
         }
 
-        static bool IsClaimableHotel(RoomInstance room) =>
-            room?.Type != null &&
-            room.Type.category == RoomCategory.Hotel &&
-            !room.Dirty &&
-            !room.IsBroken &&
-            room.Type.maxOccupants > 0;
+        static bool IsClaimableHotel(RoomInstance room)
+        {
+            // Use ReferenceEquals: UnityEngine.Object.== is true for native-uninitialized SOs
+            // (FormatterServices / net8 hosts), which would false-negative claimable checks.
+            if (room == null || ReferenceEquals(room.Type, null)) return false;
+            if (room.Type.category != RoomCategory.Hotel) return false;
+            if (room.Dirty) return false;
+            if (room.IsBroken) return false;
+            if (room.Type.maxOccupants <= 0) return false;
+            return true;
+        }
+
 
         static bool IsEventHotelVisitor(Agent agent) =>
             agent != null &&

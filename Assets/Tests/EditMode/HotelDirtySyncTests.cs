@@ -382,6 +382,7 @@ namespace BuildATower.Tests
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
             so.id = "hotel";
             so.category = RoomCategory.Hotel;
+            so.luxuryBand = LuxuryBand.Base;
             so.size = new Vector2Int(9, 1);
             so.maxOccupants = maxOccupants;
             so.allowAboveGround = true;

@@ -7,7 +7,7 @@
 
 ## Goals
 
-Show elevator **passengers/day** and **average wait** (at board time) for **yesterday** and a **rolling 7-day** window — **per shaft** (Selection) and **tower-wide** (Elev dropdown / selection context). Selection also shows **today’s** running totals.
+Show elevator **passengers/day** and **average wait** (at board time) for **yesterday** and a **rolling 7-day** window — **per shaft** (Selection) and **tower-wide** (Elev dropdown). Selection also shows **today’s** running totals.
 
 ## Locked decisions
 
@@ -29,4 +29,4 @@ Show elevator **passengers/day** and **average wait** (at board time) for **yest
 ## UI
 
 - Selection elevator: today passengers / avg wait; yesterday passengers / avg wait; 7d avg passengers / avg wait  
-- Elev dropdown / selection context chips: `El yday N`, `El ~N/d`, `Wait yday Xm`, `Wait ~Xm`
+- Elev dropdown: `El yday N`, `El ~N/d`, `Wait yday Xm`, `Wait ~Xm`

@@ -6,24 +6,38 @@ namespace BuildATower
     {
         Street,
         Basic,
+        Mid,
+        Upper,
         Premium
     }
 
     public static class AgentWealth
     {
-        public static WealthBand ResolveBand(AgentRole role, RoomTypeSO homeType)
+        /// <summary>
+        /// Resolves disposable-income wealth band from role and home room.
+        /// Call sites should pass the simulation <paramref name="rng"/> so office/condo
+        /// and suite mixes stay deterministic with the rest of the sim.
+        /// No 2-arg overload: always supply rng (avoids a hidden <c>new Random(0)</c> fallback).
+        /// </summary>
+        public static WealthBand ResolveBand(AgentRole role, RoomTypeSO homeType, Random rng)
         {
+            if (rng == null) throw new ArgumentNullException(nameof(rng));
+
             if (role == AgentRole.StreetVisitor)
                 return WealthBand.Street;
 
-            // Convention / event attendees spend more like office workers than street walk-ins.
+            // Convention / event attendees spend like Mid living guests.
             if (role == AgentRole.EventVisitor)
-                return WealthBand.Basic;
+                return WealthBand.Mid;
 
-            if (IsPremiumLiving(homeType))
-                return WealthBand.Premium;
+            if (homeType != null && homeType.category == RoomCategory.Hotel)
+                return ResolveHotelBand(homeType, rng);
 
-            return WealthBand.Basic;
+            if (homeType != null &&
+                (homeType.category == RoomCategory.Office || homeType.category == RoomCategory.Condo))
+                return ResolveOfficeCondoBand(homeType, rng);
+
+            return WealthBand.Mid;
         }
 
         public static int RollDailyDisposable(WealthBand band, float climateMult, Random rng)
@@ -57,27 +71,46 @@ namespace BuildATower
         static (int lo, int hi) BandRange(WealthBand band) => band switch
         {
             WealthBand.Street => (35, 90),
-            WealthBand.Premium => (120, 280),
-            _ => (70, 160)
+            WealthBand.Basic => (55, 110),
+            WealthBand.Mid => (90, 160),
+            WealthBand.Upper => (140, 220),
+            WealthBand.Premium => (200, 320),
+            _ => (55, 110)
         };
 
-        static bool IsPremiumLiving(RoomTypeSO homeType)
+        static WealthBand ResolveHotelBand(RoomTypeSO homeType, Random rng)
         {
-            if (homeType == null) return false;
-            if (!IsLivingCategory(homeType.category)) return false;
-            if (homeType.requiredStars >= 2) return true;
-            if (ContainsPremium(homeType.id) || ContainsPremium(homeType.displayName))
-                return true;
-            return false;
+            switch (homeType.luxuryBand)
+            {
+                case LuxuryBand.Base:
+                    return WealthBand.Basic;
+                case LuxuryBand.Mid:
+                    return WealthBand.Mid;
+                case LuxuryBand.Upper:
+                    if (ContainsIgnoreCase(homeType.id, "suite"))
+                        return rng.Next(2) == 0 ? WealthBand.Upper : WealthBand.Premium;
+                    return WealthBand.Upper;
+                default:
+                    // Legacy hotel_premium / name premium without band → Mid.
+                    if (ContainsIgnoreCase(homeType.id, "premium") ||
+                        ContainsIgnoreCase(homeType.displayName, "premium"))
+                        return WealthBand.Mid;
+                    return WealthBand.Basic;
+            }
         }
 
-        static bool IsLivingCategory(RoomCategory category) =>
-            category == RoomCategory.Office ||
-            category == RoomCategory.Hotel ||
-            category == RoomCategory.Condo;
+        static WealthBand ResolveOfficeCondoBand(RoomTypeSO homeType, Random rng)
+        {
+            if (homeType.requiredStars < 2)
+                // 30% Basic / 70% Mid
+                return rng.NextDouble() < 0.30 ? WealthBand.Basic : WealthBand.Mid;
 
-        static bool ContainsPremium(string value) =>
+            // 70% Upper / 30% Premium
+            return rng.NextDouble() < 0.70 ? WealthBand.Upper : WealthBand.Premium;
+        }
+
+        static bool ContainsIgnoreCase(string value, string needle) =>
             !string.IsNullOrEmpty(value) &&
-            value.IndexOf("premium", StringComparison.OrdinalIgnoreCase) >= 0;
+            value.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0;
     }
 }

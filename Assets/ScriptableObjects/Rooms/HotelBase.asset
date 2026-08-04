@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 00fe1abdabb23524093ed643f4aca030, type: 3}
+  m_Name: HotelBase
+  m_EditorClassIdentifier: BuildATower.Runtime::BuildATower.RoomTypeSO
+  id: hotel_base
+  displayName: Base Hotel
+  category: 3
+  size: {x: 3, y: 1}
+  buildCost: 18000
+  placeholderColor: {r: 0.78, g: 0.62, b: 0.92, a: 1}
+  incomeModel: 2
+  baseIncome: 1800
+  noiseOutput: 0
+  noiseSensitivity: 0
+  requiresHousekeeping: 1
+  hasActiveHours: 0
+  activeHoursStart: 0
+  activeHoursEnd: 0
+  allowAboveGround: 1
+  allowBasement: 0
+  isLobby: 0
+  isScaffolding: 0
+  isStairs: 0
+  isElevatorShaft: 0
+  isParkingRamp: 0
+  luxuryBand: 1
+  cleanMinutes: 12
+  requiredStars: 0
+  maxOccupants: 2
+  eventCapacity: 0
+  buildFamily: 2
+  buildSubgroup: 0

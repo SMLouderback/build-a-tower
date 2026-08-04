@@ -51,6 +51,8 @@ namespace BuildATower
             if (upkeep != null)
                 lines.Add(upkeep);
 
+            AppendHotelSelectionLines(lines, type);
+
             switch (type.incomeModel)
             {
                 case IncomeModel.QuarterlyRent:
@@ -110,6 +112,17 @@ namespace BuildATower
             }
 
             return count;
+        }
+
+        /// <summary>Band + clean minutes for hotel tool/selection details.</summary>
+        public static void AppendHotelSelectionLines(List<string> lines, RoomTypeSO type)
+        {
+            if (lines == null || type == null || type.category != RoomCategory.Hotel)
+                return;
+
+            var band = type.luxuryBand == LuxuryBand.None ? LuxuryBand.Base : type.luxuryBand;
+            lines.Add($"Band: {band}");
+            lines.Add($"Clean: {HotelLuxury.ResolveCleanMinutes(type):0.#} min");
         }
 
         /// <summary>Returns null for room types that carry no recurring upkeep.</summary>

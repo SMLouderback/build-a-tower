@@ -94,7 +94,15 @@ namespace BuildATower
             }
 
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoPremium"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelPremium"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelBase"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelAccessible"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelMidStandard"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelMidExtended"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelStudio"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelJuniorSuite"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelUpperStandard"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelUpperKing"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelUpperSuite"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficePremium"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopFastFood"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopRestaurant"));
@@ -389,27 +397,6 @@ namespace BuildATower
             else
             {
                 DrawChip($"Save ${build.Wallet.Balance:N0}", 118f);
-            }
-
-            // Temporary tower-wide chips while a shop or elevator is selected.
-            var selected = build?.SelectedRoom;
-            var selectedType = selected?.Type;
-            if (economyUnlocked && economy != null && selectedType != null &&
-                selectedType.ResolvedBuildFamily() == BuildFamily.Shops)
-            {
-                DrawChip($"Shops yday {economy.LastShopVisitsYesterday}", 108f);
-                DrawChip($"Shops ~{economy.AverageShopVisitsLast7Days:0.#}/d", 100f);
-            }
-            else if (economyUnlocked && selectedType != null && selectedType.isElevatorShaft)
-            {
-                var elev = simulation?.Elevators;
-                if (elev != null)
-                {
-                    DrawChip($"El yday {elev.PassengersYesterday}", 90f);
-                    DrawChip($"El ~{elev.AveragePassengersLast7Days:0.#}/d", 90f);
-                    DrawChip($"Wait yday {elev.AvgWaitYesterday:0.#}m", 110f);
-                    DrawChip($"Wait ~{elev.AverageWaitLast7Days:0.#}m", 100f);
-                }
             }
 
             x = DrawStarTrack(x, y, lineH, stars != null ? stars.CurrentStars : 0);
@@ -976,6 +963,10 @@ namespace BuildATower
             var upkeep = RoomEconomyFormat.UpkeepLine(room);
             if (upkeep != null)
                 lines += $"\n{upkeep}";
+            var hotelLines = new List<string>();
+            RoomEconomyFormat.AppendHotelSelectionLines(hotelLines, room);
+            foreach (var line in hotelLines)
+                lines += $"\n{line}";
             lines += $"\nSize {room.size.x}×{room.size.y}";
             return lines;
         }
@@ -1018,6 +1009,15 @@ namespace BuildATower
             if (!string.IsNullOrEmpty(room.id))
             {
                 if (room.id.Contains("premium")) return "P" + FamilyGlyph(room.ResolvedBuildFamily())[0];
+                if (room.id == "hotel_base") return "Ba";
+                if (room.id == "hotel_accessible") return "Ac";
+                if (room.id == "hotel_mid_standard") return "MS";
+                if (room.id == "hotel_mid_extended") return "ME";
+                if (room.id == "hotel_studio") return "Su";
+                if (room.id == "hotel_junior_suite") return "Jr";
+                if (room.id == "hotel_upper_standard") return "US";
+                if (room.id == "hotel_upper_king") return "UK";
+                if (room.id == "hotel_upper_suite") return "Up";
                 if (room.id.Contains("housekeeping")) return "Hk";
                 if (room.id.Contains("maintenance")) return "Mn";
                 if (room.id.Contains("security")) return "Sc";
@@ -1456,13 +1456,15 @@ namespace BuildATower
             if (upkeep != null)
                 lines.Add(upkeep);
 
+            RoomEconomyFormat.AppendHotelSelectionLines(lines, type);
+
             return lines;
         }
 
         static string ShortLabel(string displayName)
         {
             if (string.IsNullOrWhiteSpace(displayName)) return "Room";
-            if (displayName.StartsWith("Hotel")) return "Hotel";
+            if (displayName == "Hotel" || displayName == "Premium Hotel") return "Hotel";
             if (displayName.StartsWith("Retail")) return "Retail";
             if (displayName.StartsWith("Stairs")) return "Stairs";
             if (displayName.StartsWith("Elevator")) return "Elevator";

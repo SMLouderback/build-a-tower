@@ -67,17 +67,42 @@ namespace BuildATower.Tests
             Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
             Assert.IsTrue(grid.TryPlace(Valet(), new Vector2Int(0, -1), out _));
             Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(4, -1), out _));
-            // B2 needs B1 support in the same columns.
+            // B2 needs B1 support in the same columns; place beside the ramp columns.
             Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(10, -1), out _));
-            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(10, -2), out _));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(10, -2), out var deep));
 
             Assert.IsTrue(ParkingStalls.IsParkingFloorAccessible(grid, -1));
             Assert.IsFalse(ParkingStalls.IsParkingFloorAccessible(grid, -2));
+            Assert.IsFalse(ParkingStalls.IsParkingAccessible(grid, deep));
             Assert.AreEqual(12, ParkingStalls.TotalStalls(grid)); // only two B1 lots
 
             Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -2), out _));
+            // Ramp at x0–2 does not touch parking at x10–15 — still inaccessible.
             Assert.IsTrue(ParkingStalls.IsParkingFloorAccessible(grid, -2));
-            Assert.AreEqual(18, ParkingStalls.TotalStalls(grid));
+            Assert.IsFalse(ParkingStalls.IsParkingAccessible(grid, deep));
+            Assert.AreEqual(12, ParkingStalls.TotalStalls(grid));
+        }
+
+        [Test]
+        public void ParkingRamp_adjacent_parking_chain_counts_toward_lobby()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 30, 0, out _));
+            // Support row on B1 for deep lots.
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(3, -1), out _));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(9, -1), out _));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(16, -1), out _));
+
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -2), out _)); // x0–2, floors -2/-1
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(3, -2), out var nearRamp)); // touches ramp
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(9, -2), out var mid)); // touches nearRamp
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(16, -2), out var gap)); // gap at x15
+
+            Assert.IsTrue(ParkingStalls.IsParkingAccessible(grid, nearRamp));
+            Assert.IsTrue(ParkingStalls.IsParkingAccessible(grid, mid));
+            Assert.IsFalse(ParkingStalls.IsParkingAccessible(grid, gap));
+            // B1: 3×6=18, B2 connected: 2×6=12 → 30
+            Assert.AreEqual(30, ParkingStalls.TotalStalls(grid));
         }
 
         [Test]
@@ -85,17 +110,17 @@ namespace BuildATower.Tests
         {
             var grid = new TowerGrid();
             Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 24, 0, out _));
-            // Support columns for deep parking.
-            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(8, -1), out _));
-            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(8, -2), out _));
-            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(8, -3), out _));
+            // Support columns for deep parking beside ramp stack (x0–2).
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(3, -1), out _));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(3, -2), out _));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(3, -3), out _));
 
             Assert.AreEqual(6, ParkingStalls.TotalStalls(grid)); // B1 only
 
-            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -2), out _)); // -2..-1
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -2), out _)); // -2..-1, touches x3 parking
             Assert.AreEqual(12, ParkingStalls.TotalStalls(grid)); // B1+B2
 
-            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -3), out _)); // -3..-2
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -3), out _)); // -3..-2, touches B3 parking
             Assert.AreEqual(18, ParkingStalls.TotalStalls(grid)); // B1+B2+B3
         }
 

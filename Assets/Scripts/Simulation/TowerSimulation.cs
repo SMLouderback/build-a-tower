@@ -226,7 +226,8 @@ namespace BuildATower
                 build.Grid,
                 room => _economy?.TrySellCondo(room, build.Wallet),
                 _stars?.CurrentStars ?? 0,
-                _climate?.ComfortTierOffset ?? 0);
+                _climate?.ComfortTierOffset ?? 0,
+                _crime?.AverageCrime ?? 0f);
             _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
         }
 

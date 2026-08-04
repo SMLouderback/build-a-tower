@@ -138,8 +138,30 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void CleanMinutes_basic_vs_premium_hotel()
+        public void CleanMinutes_uses_explicit_field()
         {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.category = RoomCategory.Hotel;
+            so.cleanMinutes = 55f;
+            so.requiredStars = 0;
+            Assert.AreEqual(55f, RoomConditionRules.CleanMinutes(so));
+        }
+
+        [Test]
+        public void CleanMinutes_hotel_band_fallback_when_cleanMinutes_zero()
+        {
+            var mid = ScriptableObject.CreateInstance<RoomTypeSO>();
+            mid.category = RoomCategory.Hotel;
+            mid.cleanMinutes = 0f;
+            mid.luxuryBand = LuxuryBand.Mid;
+            mid.requiredStars = 0;
+            Assert.AreEqual(HotelLuxury.CleanFallbackMidMinutes, RoomConditionRules.CleanMinutes(mid));
+        }
+
+        [Test]
+        public void CleanMinutes_non_hotel_keeps_legacy_star_fallback()
+        {
+            // Non-hotel (or uncategorized) rooms keep star≥2 premium minutes for one release.
             Assert.AreEqual(RoomConditionRules.CleanBasicMinutes, RoomConditionRules.CleanMinutes(Type(requiredStars: 0)));
             Assert.AreEqual(RoomConditionRules.CleanBasicMinutes, RoomConditionRules.CleanMinutes(Type(requiredStars: 1)));
             Assert.AreEqual(RoomConditionRules.CleanPremiumMinutes, RoomConditionRules.CleanMinutes(Type(requiredStars: 2)));
