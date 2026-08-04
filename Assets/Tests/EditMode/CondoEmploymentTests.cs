@@ -95,6 +95,7 @@ namespace BuildATower.Tests
 
             Assert.AreEqual(CondoJobKind.None, agent.JobKind);
             Assert.IsNull(agent.WorkplaceRoom);
+            Assert.AreEqual(0, agent.WorkplaceSlot);
             Assert.AreEqual(0, agent.CommuteOneWayMinutes);
             Assert.AreEqual(0, agent.LeaveHomeMinute);
             Assert.AreEqual(0f, agent.OutsideDwellRemaining);

@@ -40,6 +40,16 @@ namespace BuildATower
         public int ShopEarningsToday { get; private set; }
         public int ConcurrentVisitors { get; private set; }
 
+        readonly VisitHistoryRing _visitHistory = new();
+
+        /// <summary>Shop visits recorded at the last midnight push (0 if none yet).</summary>
+        public int VisitsYesterday => _visitHistory.Yesterday;
+
+        /// <summary>Mean daily visits over up to the last 7 recorded midnights.</summary>
+        public float AverageVisitsLast7Days => _visitHistory.Average();
+
+        public int VisitHistoryRecordedDays => _visitHistory.RecordedDays;
+
         public RoomInstance(int instanceId, RoomTypeSO type, Vector2Int origin, Vector2Int size)
         {
             InstanceId = instanceId;
@@ -80,6 +90,9 @@ namespace BuildATower
         {
             if (amount > 0) ShopEarningsToday += amount;
         }
+
+        /// <summary>Archives today's visit count into the 7-day ring (call before reset at midnight).</summary>
+        public void PushVisitHistoryDay() => _visitHistory.Push(VisitsToday);
 
         public void ResetVisitsToday()
         {

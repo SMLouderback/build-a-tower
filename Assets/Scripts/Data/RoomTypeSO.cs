@@ -42,6 +42,7 @@ namespace BuildATower
                 RoomCategory.Condo => BuildFamily.Condo,
                 RoomCategory.Commercial => BuildFamily.Shops,
                 RoomCategory.Service => BuildFamily.Utility,
+                RoomCategory.Parking => BuildFamily.Utility,
                 _ => BuildFamily.None
             };
         }

@@ -24,9 +24,19 @@ namespace BuildATower
         Rect _panelRect;
         Rect _topBarRect;
         Rect _goalsDropdownRect;
+        Rect _infoDropdownRect;
         readonly List<RoomTypeSO> _roomButtons = new();
         List<BuildCatalogFamily> _catalog = new();
 
+        enum TopInfoPanel
+        {
+            None,
+            Shops,
+            Elev,
+            Tower
+        }
+
+        TopInfoPanel _infoPanel;
         bool _goalsOpen;
         bool _buildOpen = true;
         bool _selectionOpen = true;
@@ -45,11 +55,12 @@ namespace BuildATower
         public Rect PanelScreenRect => _panelRect;
         public Rect TopBarScreenRect => _topBarRect;
 
-        /// <summary>True when the GUI point (IMGUI / flipped Y) is over the top bar, goals dropdown, or side panel.</summary>
+        /// <summary>True when the GUI point (IMGUI / flipped Y) is over the top bar, info/goals dropdown, or side panel.</summary>
         public bool ContainsGuiPoint(Vector2 guiPoint) =>
             _topBarRect.Contains(guiPoint) ||
             _panelRect.Contains(guiPoint) ||
             (_goalsOpen && _goalsDropdownRect.Contains(guiPoint)) ||
+            (_infoPanel != TopInfoPanel.None && _infoDropdownRect.Contains(guiPoint)) ||
             _newsHud.ContainsGuiPoint(guiPoint);
 
         void Awake()
@@ -95,6 +106,8 @@ namespace BuildATower
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ResearchLab"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/Conference"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/EventHall"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ParkingUnderground"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/Valet"));
             _catalog = BuildCatalog.Group(_roomButtons);
         }
 
@@ -166,8 +179,18 @@ namespace BuildATower
             var economyUnlocked = simulation?.Economy != null && simulation.Economy.HasRecordedEconomyEvent;
             var hasSelection = build.SelectedRoom != null;
 
+            var dayIndex = simulation?.Clock != null ? simulation.Clock.DayIndex : 0;
+            var newsStripHeight = _newsHud.Draw(
+                simulation?.News,
+                dayIndex,
+                gap,
+                gap,
+                barLabel,
+                barButton);
+
             var topBarHeight = DrawTopInfoBar(
                 gap,
+                gap + newsStripHeight,
                 barLabel,
                 barButton,
                 title,
@@ -179,17 +202,8 @@ namespace BuildATower
                 goalsUnlocked,
                 economyUnlocked);
 
-            var dayIndex = simulation?.Clock != null ? simulation.Clock.DayIndex : 0;
-            var newsStripHeight = _newsHud.Draw(
-                simulation?.News,
-                dayIndex,
-                gap,
-                gap + topBarHeight,
-                barLabel,
-                barButton);
-
             var x = gap;
-            var y = gap + topBarHeight + newsStripHeight + 6f;
+            var y = gap + newsStripHeight + topBarHeight + 6f;
             var width = Mathf.Min(panelWidth, Screen.width - gap * 2f);
             var inner = Mathf.Max(80f, width - 16f);
             var maxPanelHeight = Mathf.Max(160f, Screen.height - y - gap);
@@ -297,6 +311,15 @@ namespace BuildATower
                         GUI.Label(new Rect(cx, cy, contentInner, row), $"Elevator: {elevStatus}", label);
                         cy += row;
                         var simElev = simulation?.Elevators?.FindByRoomId(build.SelectedRoom.InstanceId);
+                        if (simElev != null)
+                        {
+                            foreach (var line in ElevatorTrafficLines(simElev))
+                            {
+                                GUI.Label(new Rect(cx, cy, contentInner, row), line, label);
+                                cy += row;
+                            }
+                        }
+
                         var inMaint = simElev != null && simElev.InMaintenance;
                         var maintLabel = inMaint ? "Exit Maintenance" : "Enter Maintenance";
                         if (GUI.Button(new Rect(cx, cy, contentInner, btnH), maintLabel))
@@ -315,11 +338,12 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Full-width status strip. Returns fixed bar height only — Goals dropdown overlays
-        /// and must not push the left build panel down.
+        /// Full-width status strip. Returns fixed bar height only — Info/Goals dropdowns overlay
+        /// below the bar and must not push the left build panel down.
         /// </summary>
         float DrawTopInfoBar(
             float gap,
+            float barTopY,
             GUIStyle barLabel,
             GUIStyle barButton,
             GUIStyle title,
@@ -334,12 +358,13 @@ namespace BuildATower
             const float barH = 36f;
             const float pad = 8f;
             var barWidth = Screen.width - gap * 2f;
-            _topBarRect = new Rect(gap, gap, barWidth, barH);
+            _topBarRect = new Rect(gap, barTopY, barWidth, barH);
             _goalsDropdownRect = Rect.zero;
+            _infoDropdownRect = Rect.zero;
             GUI.Box(_topBarRect, GUIContent.none);
 
             var x = gap + pad;
-            var y = gap + 6f;
+            var y = barTopY + 6f;
             var lineH = 24f;
             var right = gap + barWidth - pad;
 
@@ -352,7 +377,6 @@ namespace BuildATower
             GUI.Label(new Rect(x, y, 100f, lineH), "Build-A-Tower", title);
             x += 108f;
 
-            // Savings / income / expenses / avg daily profit stay grouped together.
             var economy = simulation?.Economy;
             if (economyUnlocked && economy != null)
             {
@@ -366,6 +390,27 @@ namespace BuildATower
                 DrawChip($"Save ${build.Wallet.Balance:N0}", 118f);
             }
 
+            // Temporary tower-wide chips while a shop or elevator is selected.
+            var selected = build?.SelectedRoom;
+            var selectedType = selected?.Type;
+            if (economyUnlocked && economy != null && selectedType != null &&
+                selectedType.ResolvedBuildFamily() == BuildFamily.Shops)
+            {
+                DrawChip($"Shops yday {economy.LastShopVisitsYesterday}", 108f);
+                DrawChip($"Shops ~{economy.AverageShopVisitsLast7Days:0.#}/d", 100f);
+            }
+            else if (economyUnlocked && selectedType != null && selectedType.isElevatorShaft)
+            {
+                var elev = simulation?.Elevators;
+                if (elev != null)
+                {
+                    DrawChip($"El yday {elev.PassengersYesterday}", 90f);
+                    DrawChip($"El ~{elev.AveragePassengersLast7Days:0.#}/d", 90f);
+                    DrawChip($"Wait yday {elev.AvgWaitYesterday:0.#}m", 110f);
+                    DrawChip($"Wait ~{elev.AverageWaitLast7Days:0.#}m", 100f);
+                }
+            }
+
             x = DrawStarTrack(x, y, lineH, stars != null ? stars.CurrentStars : 0);
 
             var clockText = simulation?.Clock != null ? simulation.Clock.FormatHud() : "—";
@@ -374,70 +419,216 @@ namespace BuildATower
             var climateName = simulation?.Climate?.Name ?? "—";
             DrawChip(climateName, 78f);
 
+            // Reserve space for right-cluster Info/Goals buttons.
+            var clusterW = 0f;
+            if (economyUnlocked) clusterW += 64f + 8f + 56f + 8f;
+            if (goalsUnlocked) clusterW += 64f + 8f + 72f;
+            else if (economyUnlocked) clusterW = Mathf.Max(0f, clusterW - 8f);
+
             var speedWidth = 236f;
-            if (x + speedWidth < right - 200f)
+            if (x + speedWidth < right - clusterW - 12f)
             {
                 DrawTimeSpeedButtons(x, y, speedWidth, lineH);
                 x += speedWidth + 10f;
             }
 
-            if (goalsUnlocked)
-            {
-                var pop = agents != null ? agents.Population : population;
-                var stress = agents != null ? agents.AverageStress : averageStress;
-                DrawChip($"Pop {pop}", 64f);
-                DrawChip($"Stress {stress:0}", 78f);
-                DrawChip($"Crime {simulation.Crime?.DisplayCrime ?? 0f:0}", 72f);
+            DrawTopInfoButtons(
+                right,
+                y,
+                lineH,
+                gap,
+                barTopY,
+                barH,
+                barWidth,
+                barButton,
+                wrapLabel,
+                stars,
+                agents,
+                population,
+                averageStress,
+                goalsUnlocked,
+                economyUnlocked);
 
-                if (agents?.Agents != null)
-                {
-                    var inTower = 0;
-                    var outside = 0;
-                    foreach (var agent in agents.Agents)
-                    {
-                        if (agent == null || agent.Role != AgentRole.CondoResident || !agent.HasMovedIn)
-                            continue;
-                        if (agent.JobKind == CondoJobKind.InTower) inTower++;
-                        else if (agent.JobKind == CondoJobKind.Outside) outside++;
-                    }
-
-                    if (inTower + outside > 0)
-                        DrawChip($"Condo jobs: {inTower} in-tower / {outside} outside", 210f);
-                }
-            }
-
-            if (goalsUnlocked)
-            {
-                var goalsBtnW = 72f;
-                var goalsX = right - goalsBtnW;
-                var goalsRect = new Rect(goalsX, y, goalsBtnW, lineH);
-                var arrow = _goalsOpen ? "▼" : "▶";
-                if (GUI.Button(goalsRect, $"{arrow} Goals", barButton))
-                    _goalsOpen = !_goalsOpen;
-
-                if (_goalsOpen)
-                {
-                    var goalLines = stars != null
-                        ? stars.FormatNextStarGoal(build.Grid, averageStress, population).Split('\n')
-                        : new[] { "Next ★: —" };
-                    var dropW = Mathf.Min(320f, barWidth);
-                    var dropH = 8f + goalLines.Length * 18f + 8f;
-                    _goalsDropdownRect = new Rect(right - dropW, gap + barH, dropW, dropH);
-                    GUI.Box(_goalsDropdownRect, GUIContent.none);
-                    var gy = _goalsDropdownRect.y + 6f;
-                    foreach (var goalLine in goalLines)
-                    {
-                        GUI.Label(
-                            new Rect(_goalsDropdownRect.x + 8f, gy, dropW - 16f, 18f),
-                            goalLine,
-                            wrapLabel);
-                        gy += 18f;
-                    }
-                }
-            }
-
-            // Fixed height so opening Goals never shifts the left HUD.
             return barH;
+        }
+
+        void DrawTopInfoButtons(
+            float right,
+            float y,
+            float lineH,
+            float gap,
+            float barTopY,
+            float barH,
+            float barWidth,
+            GUIStyle barButton,
+            GUIStyle wrapLabel,
+            StarSystem stars,
+            AgentSystem agents,
+            int population,
+            float averageStress,
+            bool goalsUnlocked,
+            bool economyUnlocked)
+        {
+            const float shopsW = 64f;
+            const float elevW = 56f;
+            const float towerW = 64f;
+            const float goalsW = 72f;
+            const float btnGap = 8f;
+
+            var cursor = right;
+            if (goalsUnlocked)
+            {
+                cursor -= goalsW;
+                var goalsRect = new Rect(cursor, y, goalsW, lineH);
+                var goalsArrow = _goalsOpen ? "▼" : "▶";
+                if (GUI.Button(goalsRect, $"{goalsArrow} Goals", barButton))
+                    _goalsOpen = !_goalsOpen;
+                cursor -= btnGap;
+            }
+
+            if (goalsUnlocked)
+            {
+                cursor -= towerW;
+                var towerRect = new Rect(cursor, y, towerW, lineH);
+                var towerOpen = _infoPanel == TopInfoPanel.Tower;
+                var towerArrow = towerOpen ? "▼" : "▶";
+                if (GUI.Button(towerRect, $"{towerArrow} Tower", barButton))
+                    _infoPanel = towerOpen ? TopInfoPanel.None : TopInfoPanel.Tower;
+                cursor -= btnGap;
+            }
+
+            if (economyUnlocked)
+            {
+                cursor -= elevW;
+                var elevRect = new Rect(cursor, y, elevW, lineH);
+                var elevOpen = _infoPanel == TopInfoPanel.Elev;
+                var elevArrow = elevOpen ? "▼" : "▶";
+                if (GUI.Button(elevRect, $"{elevArrow} Elev", barButton))
+                    _infoPanel = elevOpen ? TopInfoPanel.None : TopInfoPanel.Elev;
+                cursor -= btnGap;
+
+                cursor -= shopsW;
+                var shopsRect = new Rect(cursor, y, shopsW, lineH);
+                var shopsOpen = _infoPanel == TopInfoPanel.Shops;
+                var shopsArrow = shopsOpen ? "▼" : "▶";
+                if (GUI.Button(shopsRect, $"{shopsArrow} Shops", barButton))
+                    _infoPanel = shopsOpen ? TopInfoPanel.None : TopInfoPanel.Shops;
+            }
+
+            if (!economyUnlocked && _infoPanel is TopInfoPanel.Shops or TopInfoPanel.Elev)
+                _infoPanel = TopInfoPanel.None;
+            if (!goalsUnlocked && _infoPanel == TopInfoPanel.Tower)
+                _infoPanel = TopInfoPanel.None;
+
+            if (_infoPanel != TopInfoPanel.None)
+                DrawInfoDropdown(right, gap, barTopY, barH, barWidth, wrapLabel, agents, population, averageStress);
+
+            if (_goalsOpen && goalsUnlocked)
+            {
+                var goalLines = stars != null
+                    ? stars.FormatNextStarGoal(build.Grid, averageStress, population).Split('\n')
+                    : new[] { "Next ★: —" };
+                var dropW = Mathf.Min(320f, barWidth);
+                var dropH = 8f + goalLines.Length * 18f + 8f;
+                // Offset Goals panel left when an Info dropdown is also open.
+                var goalsX = right - dropW;
+                if (_infoPanel != TopInfoPanel.None)
+                    goalsX = Mathf.Max(gap, goalsX - dropW - 8f);
+                _goalsDropdownRect = new Rect(goalsX, barTopY + barH, dropW, dropH);
+                GUI.Box(_goalsDropdownRect, GUIContent.none);
+                var gy = _goalsDropdownRect.y + 6f;
+                foreach (var goalLine in goalLines)
+                {
+                    GUI.Label(
+                        new Rect(_goalsDropdownRect.x + 8f, gy, dropW - 16f, 18f),
+                        goalLine,
+                        wrapLabel);
+                    gy += 18f;
+                }
+            }
+        }
+
+        void DrawInfoDropdown(
+            float right,
+            float gap,
+            float barTopY,
+            float barH,
+            float barWidth,
+            GUIStyle wrapLabel,
+            AgentSystem agents,
+            int population,
+            float averageStress)
+        {
+            var lines = new List<string>();
+            switch (_infoPanel)
+            {
+                case TopInfoPanel.Shops:
+                {
+                    var economy = simulation?.Economy;
+                    if (economy != null)
+                    {
+                        lines.Add($"Shops yday {economy.LastShopVisitsYesterday}");
+                        lines.Add($"Shops ~{economy.AverageShopVisitsLast7Days:0.#}/d");
+                    }
+                    break;
+                }
+                case TopInfoPanel.Elev:
+                {
+                    var elev = simulation?.Elevators;
+                    if (elev != null)
+                    {
+                        lines.Add($"El yday {elev.PassengersYesterday}");
+                        lines.Add($"El ~{elev.AveragePassengersLast7Days:0.#}/d");
+                        lines.Add($"Wait yday {elev.AvgWaitYesterday:0.#}m");
+                        lines.Add($"Wait ~{elev.AverageWaitLast7Days:0.#}m");
+                    }
+                    break;
+                }
+                case TopInfoPanel.Tower:
+                {
+                    var pop = agents != null ? agents.Population : population;
+                    var stress = agents != null ? agents.AverageStress : averageStress;
+                    lines.Add($"Pop {pop}");
+                    lines.Add($"Stress {stress:0}");
+                    lines.Add($"Crime {simulation?.Crime?.DisplayCrime ?? 0f:0}");
+                    if (agents?.Agents != null)
+                    {
+                        var inTower = 0;
+                        var outside = 0;
+                        foreach (var agent in agents.Agents)
+                        {
+                            if (agent == null || agent.Role != AgentRole.CondoResident || !agent.HasMovedIn)
+                                continue;
+                            if (agent.JobKind == CondoJobKind.InTower) inTower++;
+                            else if (agent.JobKind == CondoJobKind.Outside) outside++;
+                        }
+
+                        if (inTower + outside > 0)
+                            lines.Add($"Condo jobs: {inTower} in-tower / {outside} outside");
+                    }
+                    break;
+                }
+            }
+
+            if (lines.Count == 0)
+            {
+                _infoPanel = TopInfoPanel.None;
+                return;
+            }
+
+            var dropW = Mathf.Min(280f, barWidth);
+            var dropH = 8f + lines.Count * 18f + 8f;
+            _infoDropdownRect = new Rect(right - dropW, barTopY + barH, dropW, dropH);
+            GUI.Box(_infoDropdownRect, GUIContent.none);
+            var ly = _infoDropdownRect.y + 6f;
+            foreach (var line in lines)
+            {
+                GUI.Label(
+                    new Rect(_infoDropdownRect.x + 8f, ly, dropW - 16f, 18f),
+                    line,
+                    wrapLabel);
+                ly += 18f;
+            }
         }
 
         /// <summary>
@@ -876,6 +1067,15 @@ namespace BuildATower
                 label);
             cy += row + 4f;
             return cy;
+        }
+
+        static IEnumerable<string> ElevatorTrafficLines(ElevatorShaftRuntime shaft)
+        {
+            if (shaft == null) yield break;
+            yield return $"Passengers today: {shaft.PassengersToday} (avg wait {shaft.AvgWaitToday:0.#}m)";
+            yield return $"Passengers yesterday: {shaft.PassengersYesterday} (avg wait {shaft.AvgWaitYesterday:0.#}m)";
+            yield return $"Avg passengers (7d): {shaft.AveragePassengersLast7Days:0.#}";
+            yield return $"Avg wait (7d): {shaft.AverageWaitLast7Days:0.#}m";
         }
 
         IEnumerable<string> ConferenceSelectionLines(RoomInstance room)

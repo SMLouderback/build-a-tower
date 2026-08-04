@@ -509,5 +509,35 @@ namespace BuildATower.Tests
             Assert.AreEqual(1, EconomySystem.CountNonBrokenResearchLabs(grid));
             Assert.AreEqual(2, EconomySystem.CountResearcherPool(grid));
         }
+
+        [Test]
+        public void OnNewDay_archives_shop_visits_yesterday_and_tower_average()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _);
+            Assert.IsTrue(grid.TryPlace(FastFoodShop(), new Vector2Int(0, 1), out var a));
+            Assert.IsTrue(grid.TryPlace(FastFoodShop(), new Vector2Int(10, 1), out var b));
+            for (var i = 0; i < 5; i++) a.RecordVisit();
+            for (var i = 0; i < 3; i++) b.RecordVisit();
+
+            var economy = new EconomySystem();
+            economy.OnNewDay(grid, new List<Agent>(), new FundsWallet(0));
+
+            Assert.AreEqual(0, a.VisitsToday);
+            Assert.AreEqual(0, b.VisitsToday);
+            Assert.AreEqual(5, a.VisitsYesterday);
+            Assert.AreEqual(3, b.VisitsYesterday);
+            Assert.AreEqual(5f, a.AverageVisitsLast7Days);
+            Assert.AreEqual(3f, b.AverageVisitsLast7Days);
+            Assert.AreEqual(8, economy.LastShopVisitsYesterday);
+            Assert.AreEqual(8f, economy.AverageShopVisitsLast7Days);
+
+            for (var i = 0; i < 2; i++) a.RecordVisit();
+            economy.OnNewDay(grid, new List<Agent>(), new FundsWallet(0));
+            Assert.AreEqual(2, a.VisitsYesterday);
+            Assert.AreEqual(0, b.VisitsYesterday);
+            Assert.AreEqual(3.5f, a.AverageVisitsLast7Days); // (5+2)/2
+            Assert.AreEqual(5f, economy.AverageShopVisitsLast7Days); // (8+2)/2
+        }
     }
 }

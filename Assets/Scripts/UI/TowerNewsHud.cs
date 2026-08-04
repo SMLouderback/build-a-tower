@@ -44,13 +44,13 @@ namespace BuildATower
             _tickerRect.Contains(guiPoint);
 
         /// <summary>
-        /// Prune feed, refresh banner/ticker. Draws under the top bar. Returns height used.
+        /// Prune feed, refresh banner/ticker. Draws above the top dashboard. Returns height used.
         /// </summary>
         public float Draw(
             TowerNews news,
             int dayIndex,
             float gap,
-            float topBarBottomY,
+            float stripTopY,
             GUIStyle label,
             GUIStyle button)
         {
@@ -72,7 +72,7 @@ namespace BuildATower
             if (_bannerItem != null && Time.realtimeSinceStartup >= _bannerUntilRealtime)
                 _bannerItem = null;
 
-            var y = topBarBottomY + StripGap;
+            var y = stripTopY + StripGap;
             var width = Screen.width - gap * 2f;
 
             if (IsBannerVisible && _bannerItem != null)
@@ -101,7 +101,7 @@ namespace BuildATower
             DrawTicker(news.TickerOrder(), label);
             y += TickerHeight;
 
-            return y - topBarBottomY;
+            return y - stripTopY;
         }
 
         void DrawTicker(IReadOnlyList<TowerNewsItem> items, GUIStyle label)

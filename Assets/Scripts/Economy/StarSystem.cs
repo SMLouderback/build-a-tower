@@ -11,8 +11,10 @@ namespace BuildATower
         public const float ThreeStarMaxStress = 20f;
         public const int FourStarPopulation = 100;
         public const float FourStarMaxStress = 15f;
-        public const int MaxStars = 4;
-        /// <summary>HUD star track length (5★ content comes later; unearned slots stay grey).</summary>
+        public const int FiveStarPopulation = 150;
+        public const float FiveStarMaxStress = 12f;
+        public const int MaxStars = 5;
+        /// <summary>HUD star track length (matches <see cref="MaxStars"/>).</summary>
         public const int StarSlots = 5;
 
         const string SecurityId = "service_security";
@@ -99,16 +101,26 @@ namespace BuildATower
             if (target >= 4)
                 lines += $"\n  Security {Mark(HasStaffedSecurity(grid))}";
 
+            if (target >= 5)
+            {
+                var stalls = ParkingStalls.TotalStalls(grid);
+                lines += $"\n  Valet {Mark(ParkingStalls.HasOperationalValet(grid))}";
+                lines +=
+                    $"\n  Parking stalls {stalls}/{ParkingStalls.FiveStarMinStalls} {Mark(stalls >= ParkingStalls.FiveStarMinStalls)}";
+            }
+
             return lines;
         }
 
         public static int RequiredPopulation(int stars) =>
+            stars >= 5 ? FiveStarPopulation :
             stars >= 4 ? FourStarPopulation :
             stars >= 3 ? ThreeStarPopulation :
             stars >= 2 ? TwoStarPopulation :
             OneStarPopulation;
 
         public static float AllowedStress(int stars) =>
+            stars >= 5 ? FiveStarMaxStress :
             stars >= 4 ? FourStarMaxStress :
             stars >= 3 ? ThreeStarMaxStress :
             stars >= 2 ? TwoStarMaxStress :
@@ -125,6 +137,12 @@ namespace BuildATower
             if (stars >= 2 && !HasElevator(grid)) return false;
             if (stars >= 3 && !HasOperationalServiceFacilities(grid)) return false;
             if (stars >= 4 && !HasStaffedSecurity(grid)) return false;
+            if (stars >= 5)
+            {
+                if (!ParkingStalls.HasOperationalValet(grid)) return false;
+                if (ParkingStalls.TotalStalls(grid) < ParkingStalls.FiveStarMinStalls) return false;
+            }
+
             return true;
         }
 

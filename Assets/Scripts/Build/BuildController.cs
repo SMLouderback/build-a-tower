@@ -27,9 +27,9 @@ namespace BuildATower
         const int GuideMinX = -5;
         const int GuideMaxX = 40;
         /// <summary>Full-width underground dirt band (wider than lobby guides).</summary>
-        const int DirtMinX = -80;
-        const int DirtMaxX = 100;
-        const int DirtDepth = 10;
+        const int DirtMinX = DirtBand.MinX;
+        const int DirtMaxX = DirtBand.MaxX;
+        const int DirtDepth = DirtBand.Depth;
 
         bool _draggingLobby;
         int _dragStartX;
@@ -611,6 +611,8 @@ namespace BuildATower
                 view.ClearCell(c, structureMap: true);
                 if (Grid.TryGetRoomAt(c, out var at))
                     view.PaintCell(c, at);
+                else if (DirtBand.ShouldRestore(c, Grid))
+                    view.PaintDirtCell(c);
             }
 
             foreach (var scaffold in scaffoldsPlaced)

@@ -118,6 +118,18 @@ namespace BuildATower
         /// <summary>Office room claimed as a condo workplace (in-tower jobs only).</summary>
         public RoomInstance WorkplaceRoom { get; set; }
 
+        /// <summary>Desk index within <see cref="WorkplaceRoom"/> (matches OfficeWorker HomeSlot layout).</summary>
+        public int WorkplaceSlot { get; set; }
+
+        /// <summary>True when this agent entered the tower via underground parking.</summary>
+        public bool ArrivedViaParking { get; set; }
+
+        /// <summary>Parking room holding a claimed stall, if any.</summary>
+        public RoomInstance ParkingRoom { get; set; }
+
+        /// <summary>Stall index within <see cref="ParkingRoom"/>.</summary>
+        public int ParkingSlot { get; set; }
+
         /// <summary>One-way commute duration in game minutes (outside jobs).</summary>
         public int CommuteOneWayMinutes { get; set; }
 

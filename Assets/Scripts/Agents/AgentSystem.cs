@@ -1214,7 +1214,9 @@ namespace BuildATower
                 var home = HomeCell(agent.HomeRoom, agent.HomeSlot);
                 if (agent.Phase == AgentPhase.Outside)
                 {
-                    BeginTrip(agent, LobbyExitCell(grid, home.x), home, AgentPhase.AtHome, grid);
+                    var lobby = LobbyExitCell(grid, home.x);
+                    var spawn = ArrivalSpawnCell(agent, grid, lobby);
+                    BeginTrip(agent, spawn, home, AgentPhase.AtHome, grid);
                     return;
                 }
 
@@ -1243,7 +1245,7 @@ namespace BuildATower
         {
             var minute = clock.MinuteOfDay;
             var home = HomeCell(agent.HomeRoom, agent.HomeSlot);
-            var exitCell = LobbyExitCell(grid, home.x);
+            var exitCell = DepartureExitCell(agent, grid, home.x);
 
             if (agent.Phase == AgentPhase.AtHome &&
                 agent.OutsideWorkPhase == CondoOutsidePhase.None &&
@@ -1262,7 +1264,8 @@ namespace BuildATower
             // Finished return commute but still Outside (home trip stalled) — keep trying.
             if (agent.OutsideWorkPhase == CondoOutsidePhase.None)
             {
-                BeginTrip(agent, exitCell, home, AgentPhase.AtHome, grid);
+                var spawn = ArrivalSpawnCell(agent, grid, LobbyExitCell(grid, home.x));
+                BeginTrip(agent, spawn, home, AgentPhase.AtHome, grid);
                 return;
             }
 
@@ -1285,7 +1288,8 @@ namespace BuildATower
                 case CondoOutsidePhase.ReturnCommute:
                     agent.OutsideWorkPhase = CondoOutsidePhase.None;
                     agent.OutsideDwellRemaining = 0f;
-                    BeginTrip(agent, exitCell, home, AgentPhase.AtHome, grid);
+                    var spawn = ArrivalSpawnCell(agent, grid, LobbyExitCell(grid, home.x));
+                    BeginTrip(agent, spawn, home, AgentPhase.AtHome, grid);
                     break;
             }
         }
@@ -1297,7 +1301,7 @@ namespace BuildATower
 
             var minute = clock.MinuteOfDay;
             var home = HomeCell(agent.HomeRoom, agent.HomeSlot);
-            var workplace = HomeCell(agent.WorkplaceRoom, 0);
+            var workplace = HomeCell(agent.WorkplaceRoom, agent.WorkplaceSlot);
 
             if (agent.Phase == AgentPhase.AtHome &&
                 !agent.CheckedOutToday &&
@@ -1328,7 +1332,7 @@ namespace BuildATower
         {
             var minute = clock.MinuteOfDay;
             var home = HomeCell(agent.HomeRoom, agent.HomeSlot);
-            var exitCell = LobbyExitCell(grid, home.x);
+            var lobby = LobbyExitCell(grid, home.x);
 
             if (agent.Phase == AgentPhase.Outside &&
                 !agent.CheckedOutToday &&
@@ -1336,12 +1340,18 @@ namespace BuildATower
                 minute < 12 * 60)
             {
                 agent.WorkedMinutes = 0;
-                BeginTrip(agent, exitCell, home, AgentPhase.Working, grid);
+                var spawn = ArrivalSpawnCell(agent, grid, lobby);
+                BeginTrip(agent, spawn, home, AgentPhase.Working, grid);
                 agent.CheckedOutToday = true; // reused as "started commute today"
             }
 
             if (agent.Phase == AgentPhase.Working && agent.WorkedMinutes >= agent.WorkMinutes)
-                BeginTrip(agent, agent.Cell, LobbyExitCell(grid, agent.Cell.x), AgentPhase.Outside, grid);
+                BeginTrip(
+                    agent,
+                    agent.Cell,
+                    DepartureExitCell(agent, grid, agent.Cell.x),
+                    AgentPhase.Outside,
+                    grid);
 
             if (agent.Phase == AgentPhase.Working &&
                 minute >= 11 * 60 + 30 &&
@@ -1502,18 +1512,20 @@ namespace BuildATower
             if (!shop.TryOccupyVisitorSlot()) return false;
 
             var shopCell = ShopEntryCell(shop);
-            var exitCell = LobbyExitCell(grid, shopCell.x);
-            var agent = new Agent(_nextId++, AgentRole.StreetVisitor, shop, exitCell)
+            var lobby = LobbyExitCell(grid, shopCell.x);
+            var agent = new Agent(_nextId++, AgentRole.StreetVisitor, shop, lobby)
             {
                 VisitTarget = shop,
                 PhaseAfterVisit = AgentPhase.Outside,
-                ReturnCell = exitCell,
+                ReturnCell = lobby,
                 VisitDwellRemaining = ShopVisitRules.PickDwellMinutes(shop.Type, _rng),
                 DisposableRemaining = remaining,
                 DisposableDayIndex = clock.DayIndex
             };
             _agents.Add(agent);
-            if (BeginTrip(agent, exitCell, shopCell, AgentPhase.VisitingShop, grid))
+            var spawn = ArrivalSpawnCell(agent, grid, lobby);
+            agent.ReturnCell = DepartureExitCell(agent, grid, shopCell.x);
+            if (BeginTrip(agent, spawn, shopCell, AgentPhase.VisitingShop, grid))
                 return true;
 
             CancelCommercialVisit(agent);
@@ -1931,7 +1943,7 @@ namespace BuildATower
         {
             var minute = clock.MinuteOfDay;
             var home = HomeCell(agent.HomeRoom, agent.HomeSlot);
-            var exitCell = LobbyExitCell(grid, home.x);
+            var lobby = LobbyExitCell(grid, home.x);
 
             if (agent.Phase == AgentPhase.Outside &&
                 agent.CheckInDay != clock.DayIndex &&
@@ -1940,7 +1952,8 @@ namespace BuildATower
                 !agent.HomeRoom.IsBroken &&
                 IsHotelCheckInDue(minute, agent.CheckInMinute))
             {
-                BeginTrip(agent, exitCell, home, AgentPhase.Staying, grid);
+                var spawn = ArrivalSpawnCell(agent, grid, lobby);
+                BeginTrip(agent, spawn, home, AgentPhase.Staying, grid);
                 agent.CheckInDay = clock.DayIndex;
                 agent.CheckedOutToday = false;
                 agent.CheckoutMinute = RollHotelCheckoutMinute(_rng);
@@ -1952,7 +1965,12 @@ namespace BuildATower
                 !agent.CheckedOutToday &&
                 IsHotelCheckoutDue(minute, agent.CheckoutMinute))
             {
-                BeginTrip(agent, agent.Cell, LobbyExitCell(grid, agent.Cell.x), AgentPhase.Outside, grid);
+                BeginTrip(
+                    agent,
+                    agent.Cell,
+                    DepartureExitCell(agent, grid, agent.Cell.x),
+                    AgentPhase.Outside,
+                    grid);
                 agent.CheckedOutToday = true;
                 agent.CheckInMinute = RollHotelCheckInMinute(_rng);
                 if (!HotelHasOtherOccupantStillIn(agent))
@@ -2117,6 +2135,8 @@ namespace BuildATower
 
                 if (shaft.Car.PassengerIds.Contains(agent.Id))
                 {
+                    if (agent.Phase == AgentPhase.WaitingAtElevator)
+                        _elevators.RecordBoarding(shaft, agent.ElevatorWaitMinutes);
                     agent.Phase = AgentPhase.Riding;
                     FollowElevatorCar(agent, shaft);
                     return;
@@ -2248,6 +2268,7 @@ namespace BuildATower
         {
             if (index < 0 || index >= _agents.Count) return;
             ReleaseStairsOccupancy(_agents[index]);
+            ParkingStalls.Release(_agents[index]);
             _agents.RemoveAt(index);
         }
 
@@ -2255,6 +2276,7 @@ namespace BuildATower
         {
             if (agent == null) return;
             ReleaseStairsOccupancy(agent);
+            ParkingStalls.Release(agent);
             _agents.Remove(agent);
         }
 
@@ -2446,8 +2468,15 @@ namespace BuildATower
             if (agent.Phase == AgentPhase.Outside)
             {
                 agent.Visible = false;
+                ParkingStalls.Release(agent);
                 if (agent.Role == AgentRole.Criminal)
                     agent.CriminalDwellRemaining = 0f;
+            }
+            else if (agent.ParkingRoom != null)
+            {
+                // Drop-off complete: free the stall, keep ArrivedViaParking for exit preference.
+                agent.ParkingRoom = null;
+                agent.ParkingSlot = 0;
             }
         }
 
@@ -2787,6 +2816,7 @@ namespace BuildATower
                 {
                     agent.JobKind = CondoJobKind.None;
                     agent.WorkplaceRoom = null;
+                    agent.WorkplaceSlot = 0;
                     agent.CommuteOneWayMinutes = 0;
                     agent.OutsideDwellRemaining = 0f;
                     agent.OutsideWorkPhase = CondoOutsidePhase.None;
@@ -2811,7 +2841,8 @@ namespace BuildATower
             officeRooms.Sort((a, b) => a.InstanceId.CompareTo(b.InstanceId));
 
             var inTowerWanted = CondoEmployment.InTowerWanted(officeDesks, movedIn.Count);
-            var freeSlots = new List<RoomInstance>();
+            // Free desk indices after SyncHomes under-fill: OfficeWorkers occupy 0..homeCount-1.
+            var freeSlots = new List<(RoomInstance Office, int Slot)>();
             foreach (var office in officeRooms)
             {
                 var homeCount = 0;
@@ -2823,7 +2854,7 @@ namespace BuildATower
 
                 var free = office.Type.maxOccupants - homeCount;
                 for (var i = 0; i < free; i++)
-                    freeSlots.Add(office);
+                    freeSlots.Add((office, homeCount + i));
             }
 
             var inTowerCount = Mathf.Min(inTowerWanted, freeSlots.Count);
@@ -2838,13 +2869,15 @@ namespace BuildATower
                 if (i < inTowerCount)
                 {
                     agent.JobKind = CondoJobKind.InTower;
-                    agent.WorkplaceRoom = freeSlots[i];
+                    agent.WorkplaceRoom = freeSlots[i].Office;
+                    agent.WorkplaceSlot = freeSlots[i].Slot;
                     agent.CommuteOneWayMinutes = 0;
                 }
                 else
                 {
                     agent.JobKind = CondoJobKind.Outside;
                     agent.WorkplaceRoom = null;
+                    agent.WorkplaceSlot = 0;
                     agent.CommuteOneWayMinutes = CondoEmployment.RollCommuteOneWayMinutes(_rng);
                 }
             }
@@ -2876,6 +2909,25 @@ namespace BuildATower
             if (grid == null || !grid.HasLobby) return Vector2Int.zero;
             var x = Mathf.Clamp(preferX, grid.MinX, grid.MaxX);
             return new Vector2Int(x, TowerGrid.LobbyFloor);
+        }
+
+        Vector2Int ArrivalSpawnCell(Agent agent, TowerGrid grid, Vector2Int lobbyFallback)
+        {
+            if (agent == null || grid == null) return lobbyFallback;
+            if (_rng.NextDouble() >= ParkingStalls.ArrivalViaParkingChance)
+                return lobbyFallback;
+            if (!ParkingStalls.TryClaim(agent, grid, _agents))
+                return lobbyFallback;
+            return ParkingStalls.StallCell(agent.ParkingRoom, agent.ParkingSlot);
+        }
+
+        Vector2Int DepartureExitCell(Agent agent, TowerGrid grid, int preferX)
+        {
+            if (agent != null &&
+                agent.ArrivedViaParking &&
+                ParkingStalls.TryParkingExitCell(grid, out var parkingExit))
+                return parkingExit;
+            return LobbyExitCell(grid, preferX);
         }
     }
 }

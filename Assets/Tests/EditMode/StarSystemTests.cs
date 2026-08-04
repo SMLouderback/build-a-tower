@@ -208,13 +208,15 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void MaxStars_is_four()
+        public void MaxStars_is_five()
         {
-            Assert.AreEqual(4, StarSystem.MaxStars);
+            Assert.AreEqual(5, StarSystem.MaxStars);
             Assert.AreEqual(60, StarSystem.ThreeStarPopulation);
             Assert.AreEqual(20f, StarSystem.ThreeStarMaxStress);
             Assert.AreEqual(100, StarSystem.FourStarPopulation);
             Assert.AreEqual(15f, StarSystem.FourStarMaxStress);
+            Assert.AreEqual(150, StarSystem.FiveStarPopulation);
+            Assert.AreEqual(12f, StarSystem.FiveStarMaxStress);
         }
 
         [Test]
@@ -371,6 +373,90 @@ namespace BuildATower.Tests
             StringAssert.Contains($"Pop 80/{StarSystem.FourStarPopulation}", goal);
             StringAssert.Contains("Stress 10/15", goal);
             StringAssert.Contains("Security", goal);
+        }
+
+        [Test]
+        public void TryPromote_to_five_requires_valet_and_parking_stalls()
+        {
+            var stars = new StarSystem();
+            stars.ForceStars(4);
+            var grid = GridReadyForFourStars();
+
+            Assert.IsFalse(stars.TryPromote(grid, averageStress: 10f, population: 150));
+            Assert.AreEqual(4, stars.CurrentStars);
+
+            Assert.IsTrue(grid.TryPlace(Valet(), new Vector2Int(0, -1), out _));
+            Assert.IsFalse(stars.TryPromote(grid, averageStress: 10f, population: 150));
+
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(4, -1), out _));
+            Assert.IsTrue(stars.TryPromote(grid, averageStress: 10f, population: 150));
+            Assert.AreEqual(5, stars.CurrentStars);
+        }
+
+        [Test]
+        public void TryPromote_blocks_five_when_population_or_stress_miss()
+        {
+            var stars = new StarSystem();
+            stars.ForceStars(4);
+            var grid = GridReadyForFiveStars();
+
+            Assert.IsFalse(stars.TryPromote(grid, averageStress: 10f, population: 149));
+            Assert.IsFalse(stars.TryPromote(grid, averageStress: 12.1f, population: 150));
+            Assert.AreEqual(4, stars.CurrentStars);
+        }
+
+        [Test]
+        public void FormatNextStarGoal_lists_valet_and_parking_for_five_star_tier()
+        {
+            var stars = new StarSystem();
+            stars.ForceStars(4);
+
+            var goal = stars.FormatNextStarGoal(GridReadyForFourStars(), averageStress: 10f, population: 120);
+
+            StringAssert.Contains("5★", goal);
+            StringAssert.Contains($"Pop 120/{StarSystem.FiveStarPopulation}", goal);
+            StringAssert.Contains("Stress 10/12", goal);
+            StringAssert.Contains("Valet", goal);
+            StringAssert.Contains("Parking stalls", goal);
+        }
+
+        static TowerGrid GridReadyForFourStars()
+        {
+            var grid = GridReadyForThreeStars();
+            Assert.IsTrue(grid.TryPlace(Service("service_security"), new Vector2Int(1, 1), out var security));
+            security.SetStaffedWorkers(1);
+            return grid;
+        }
+
+        static TowerGrid GridReadyForFiveStars()
+        {
+            var grid = GridReadyForFourStars();
+            Assert.IsTrue(grid.TryPlace(Valet(), new Vector2Int(0, -1), out _));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(4, -1), out _));
+            return grid;
+        }
+
+        static RoomTypeSO Valet()
+        {
+            var type = ScriptableObject.CreateInstance<RoomTypeSO>();
+            type.id = ParkingStalls.ValetId;
+            type.category = RoomCategory.Service;
+            type.size = new Vector2Int(3, 1);
+            type.allowBasement = true;
+            type.requiredStars = 4;
+            return type;
+        }
+
+        static RoomTypeSO Parking()
+        {
+            var type = ScriptableObject.CreateInstance<RoomTypeSO>();
+            type.id = ParkingStalls.ParkingId;
+            type.category = RoomCategory.Parking;
+            type.size = new Vector2Int(6, 1);
+            type.allowBasement = true;
+            type.maxOccupants = 6;
+            type.requiredStars = 4;
+            return type;
         }
     }
 }

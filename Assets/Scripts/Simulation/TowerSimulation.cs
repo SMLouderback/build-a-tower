@@ -265,6 +265,8 @@ namespace BuildATower
                     climateSpendMult,
                     _conference);
 
+                _elevators?.ArchiveDay();
+
                 _agents.SyncEventVisitors(_conference, build.Grid, _clock);
 
                 PushOpsAndQuirkNews(

@@ -186,7 +186,7 @@ namespace BuildATower
             int dirtMaxX,
             int dirtDepth = 10)
         {
-            var dirt = GetTile(new Color(0.45f, 0.32f, 0.22f, 1f), EdgeMask.None);
+            var dirt = GetTile(DirtBand.Color, EdgeMask.None);
             var lobbyGuide = GetTile(new Color(0.95f, 0.82f, 0.28f, 1f), EdgeMask.None);
 
             for (var x = lobbyMinX; x <= lobbyMaxX; x++)
@@ -198,6 +198,14 @@ namespace BuildATower
                 for (var y = -1; y >= -depth; y--)
                     structureTilemap.SetTile(new Vector3Int(x, y, 0), dirt);
             }
+        }
+
+        /// <summary>Repaints brown dirt on the structure layer (basement empty cells).</summary>
+        public void PaintDirtCell(Vector2Int cell)
+        {
+            if (structureTilemap == null) return;
+            var dirt = GetTile(DirtBand.Color, EdgeMask.None);
+            structureTilemap.SetTile(ToTileCell(cell), dirt);
         }
 
         public void ClearStructureRow(int floor, int minX, int maxX)

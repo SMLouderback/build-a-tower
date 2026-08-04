@@ -98,6 +98,16 @@ namespace BuildATower.Tests
                 Assert.GreaterOrEqual(condo.LeaveHomeMinute, 6 * 60);
                 Assert.Less(condo.LeaveHomeMinute, 9 * 60);
 
+                var officeHomeSlots = agents.Agents
+                    .Where(a => a.Role == AgentRole.OfficeWorker &&
+                                ReferenceEquals(a.HomeRoom, condo.WorkplaceRoom))
+                    .Select(a => a.HomeSlot)
+                    .ToHashSet();
+                Assert.IsFalse(officeHomeSlots.Contains(condo.WorkplaceSlot),
+                    "Condo desk slot must not overlap an OfficeWorker HomeSlot.");
+                Assert.GreaterOrEqual(condo.WorkplaceSlot, officeHomeSlots.Count);
+                Assert.Less(condo.WorkplaceSlot, condo.WorkplaceRoom.Type.maxOccupants);
+
                 claimsByOffice.TryGetValue(condo.WorkplaceRoom, out var n);
                 claimsByOffice[condo.WorkplaceRoom] = n + 1;
             }

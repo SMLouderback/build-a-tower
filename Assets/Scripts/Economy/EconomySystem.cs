@@ -18,6 +18,7 @@ namespace BuildATower
 
         readonly Dictionary<int, int> _lastIncomeByRoom = new();
         readonly Dictionary<int, int> _lastExpenseByRoom = new();
+        readonly VisitHistoryRing _towerShopVisits = new();
         System.Random _rng;
         int _midnightCount;
         long _netSum;
@@ -30,6 +31,12 @@ namespace BuildATower
         /// <summary>Running average of <see cref="LastNet"/> across completed midnights.</summary>
         public float AverageDailyProfit { get; private set; }
         public bool HasRecordedEconomyEvent { get; private set; }
+
+        /// <summary>Total shop visits across all shops archived at the last midnight.</summary>
+        public int LastShopVisitsYesterday => _towerShopVisits.Yesterday;
+
+        /// <summary>Mean tower-wide shop visits over up to the last 7 recorded midnights.</summary>
+        public float AverageShopVisitsLast7Days => _towerShopVisits.Average();
 
         public EconomySystem(int? seed = null)
         {
@@ -52,6 +59,7 @@ namespace BuildATower
             LastResearchBurn = 0;
             _lastIncomeByRoom.Clear();
             _lastExpenseByRoom.Clear();
+            var towerShopVisits = 0;
 
             foreach (var room in grid.Rooms)
                 RoomConditionRules.ApplyMidnightDecay(room);
@@ -63,6 +71,18 @@ namespace BuildATower
                     LastExpense += ElevatorDailyUpkeep;
                     _lastExpenseByRoom[room.InstanceId] = ElevatorDailyUpkeep;
                     room.RecordLifetimeExpense(ElevatorDailyUpkeep);
+                }
+                else if (ParkingStalls.IsParking(room.Type))
+                {
+                    LastExpense += ParkingStalls.ParkingDailyUpkeep;
+                    _lastExpenseByRoom[room.InstanceId] = ParkingStalls.ParkingDailyUpkeep;
+                    room.RecordLifetimeExpense(ParkingStalls.ParkingDailyUpkeep);
+                }
+                else if (ParkingStalls.IsValet(room.Type))
+                {
+                    LastExpense += ParkingStalls.ValetDailyUpkeep;
+                    _lastExpenseByRoom[room.InstanceId] = ParkingStalls.ValetDailyUpkeep;
+                    room.RecordLifetimeExpense(ParkingStalls.ValetDailyUpkeep);
                 }
 
                 var incomeBlocked = RoomConditionRules.IncomePaused(room) || room.IsBroken;
@@ -91,6 +111,8 @@ namespace BuildATower
                         room.RecordLifetimeIncome(amount);
                     }
 
+                    towerShopVisits += room.VisitsToday;
+                    room.PushVisitHistoryDay();
                     room.ResetVisitsToday();
                 }
 
@@ -106,6 +128,8 @@ namespace BuildATower
                     room.RecordLifetimeExpense(wage);
                 }
             }
+
+            _towerShopVisits.Push(towerShopVisits);
 
             if (conference != null)
             {

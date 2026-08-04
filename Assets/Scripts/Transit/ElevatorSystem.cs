@@ -10,9 +10,60 @@ namespace BuildATower
 
         readonly List<ElevatorShaftRuntime> _shafts = new();
         readonly Dictionary<int, int> _passengerDestFloor = new();
+        readonly VisitHistoryRing _towerPassengers = new();
+        readonly FloatHistoryRing _towerWaitSums = new();
         float _speedMultiplier = 1f;
 
         public IReadOnlyList<ElevatorShaftRuntime> Shafts => _shafts;
+
+        public int PassengersToday
+        {
+            get
+            {
+                var n = 0;
+                foreach (var shaft in _shafts)
+                    n += shaft.PassengersToday;
+                return n;
+            }
+        }
+
+        public float AvgWaitToday
+        {
+            get
+            {
+                var samples = 0;
+                var sum = 0f;
+                foreach (var shaft in _shafts)
+                {
+                    samples += shaft.WaitSamplesToday;
+                    sum += shaft.WaitSumToday;
+                }
+
+                return samples > 0 ? sum / samples : 0f;
+            }
+        }
+
+        public int PassengersYesterday => _towerPassengers.Yesterday;
+
+        public float AveragePassengersLast7Days => _towerPassengers.Average();
+
+        public float AvgWaitYesterday
+        {
+            get
+            {
+                var p = _towerPassengers.Yesterday;
+                return p > 0 ? _towerWaitSums.Yesterday / p : 0f;
+            }
+        }
+
+        public float AverageWaitLast7Days
+        {
+            get
+            {
+                var p = _towerPassengers.Sum();
+                return p > 0 ? _towerWaitSums.Sum() / p : 0f;
+            }
+        }
 
         public void SyncFromGrid(TowerGrid grid)
         {
@@ -112,6 +163,28 @@ namespace BuildATower
             }
 
             return null;
+        }
+
+        public void RecordBoarding(ElevatorShaftRuntime shaft, float waitMinutes)
+        {
+            if (shaft == null) return;
+            shaft.RecordBoarding(waitMinutes);
+        }
+
+        /// <summary>Push today's shaft stats into 7-day rings (call once per midnight).</summary>
+        public void ArchiveDay()
+        {
+            var towerPassengers = 0;
+            var towerWait = 0f;
+            foreach (var shaft in _shafts)
+            {
+                towerPassengers += shaft.PassengersToday;
+                towerWait += shaft.WaitSumToday;
+                shaft.ArchiveDay();
+            }
+
+            _towerPassengers.Push(towerPassengers);
+            _towerWaitSums.Push(towerWait);
         }
 
         public bool IsDrained(ElevatorShaftRuntime shaft)

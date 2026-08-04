@@ -69,6 +69,8 @@ namespace BuildATower
                     break;
                 case IncomeModel.TrafficVariable:
                     lines.Add($"Visits today: {room.VisitsToday}");
+                    lines.Add($"Visits yesterday: {room.VisitsYesterday}");
+                    lines.Add($"Avg visits (7d): {room.AverageVisitsLast7Days:0.#}");
                     lines.Add($"Earnings today: ${room.ShopEarningsToday:N0}");
                     break;
                 default:
@@ -113,8 +115,14 @@ namespace BuildATower
         /// <summary>Returns null for room types that carry no recurring upkeep.</summary>
         public static string UpkeepLine(RoomTypeSO type)
         {
-            if (type == null || !type.isElevatorShaft) return null;
-            return $"Upkeep: ${EconomySystem.ElevatorDailyUpkeep:N0} / day";
+            if (type == null) return null;
+            if (type.isElevatorShaft)
+                return $"Upkeep: ${EconomySystem.ElevatorDailyUpkeep:N0} / day";
+            if (ParkingStalls.IsParking(type))
+                return $"Upkeep: ${ParkingStalls.ParkingDailyUpkeep:N0} / day";
+            if (ParkingStalls.IsValet(type))
+                return $"Upkeep: ${ParkingStalls.ValetDailyUpkeep:N0} / day";
+            return null;
         }
 
         /// <summary>Compact "cost · income" tag for the room grid buttons.</summary>
@@ -128,6 +136,10 @@ namespace BuildATower
 
             if (type.isElevatorShaft)
                 return $"{cost} · -{Abbreviate(EconomySystem.ElevatorDailyUpkeep)}/d";
+            if (ParkingStalls.IsParking(type))
+                return $"{cost} · -{Abbreviate(ParkingStalls.ParkingDailyUpkeep)}/d";
+            if (ParkingStalls.IsValet(type))
+                return $"{cost} · -{Abbreviate(ParkingStalls.ValetDailyUpkeep)}/d";
 
             switch (type.incomeModel)
             {
