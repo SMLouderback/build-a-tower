@@ -151,7 +151,7 @@ namespace BuildATower
             foreach (var room in grid.Rooms)
             {
                 if (room?.Type == null) continue;
-                if (room.Type.isLobby || room.Type.isStairs || room.Type.isScaffolding) continue;
+                if (room.Type.isLobby || room.Type.isStairs || room.Type.isParkingRamp || room.Type.isScaffolding) continue;
                 if (room.Type.maxOccupants <= 0) continue;
                 if (room.Type.category is not (RoomCategory.Office or RoomCategory.Condo or RoomCategory.Hotel))
                     continue;

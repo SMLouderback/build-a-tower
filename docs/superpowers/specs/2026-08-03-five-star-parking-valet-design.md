@@ -46,7 +46,7 @@
 
 ### Underground Parking (`parking_underground`)
 
-- Category: Service → Utility family.  
+- Category: Parking → **Transit** family (HUD).  
 - `allowBasement = true`, `allowAboveGround = false`.  
 - `requiredStars = 4`.  
 - `size = (6,1)`, `maxOccupants = 6` (stall count).  
@@ -55,7 +55,7 @@
 
 ### Valet (`service_valet`)
 
-- Category: Service → Utility.  
+- Category: Service → **Transit** family (HUD).    
 - Basement-only; `requiredStars = 4`; `size = (3,1)`; `maxOccupants = 0`.  
 - `buildCost` ~$60,000; **$1,000/d** upkeep.  
 - Gate: room exists and not Broken (staff not required this slice).

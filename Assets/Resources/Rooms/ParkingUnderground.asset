@@ -35,5 +35,5 @@ MonoBehaviour:
   requiredStars: 4
   maxOccupants: 6
   eventCapacity: 0
-  buildFamily: 5
+  buildFamily: 6
   buildSubgroup: 0

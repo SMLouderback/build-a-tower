@@ -164,6 +164,8 @@ namespace BuildATower
                 return CanPlaceStairs(type, origin, footprint);
             if (type.isElevatorShaft)
                 return CanPlaceElevator(type, footprint, null);
+            if (type.isParkingRamp)
+                return CanPlaceParkingRamp(type, origin, footprint);
 
             foreach (var cell in footprint)
             {
@@ -228,6 +230,11 @@ namespace BuildATower
             if (type.isElevatorShaft)
             {
                 room = PlaceElevator(type, origin, footprint, clearedScaffolding, _nextId++);
+                return room != null;
+            }
+            if (type.isParkingRamp)
+            {
+                room = PlaceParkingRamp(type, origin, footprint, clearedScaffolding);
                 return room != null;
             }
 
@@ -302,21 +309,30 @@ namespace BuildATower
 
             var vacated = new List<Vector2Int>(room.OccupiedCells());
 
-            if (IsStairs(room) || IsElevator(room))
+            if (IsStairs(room) || IsElevator(room) || IsParkingRamp(room))
             {
-                var underTransit = IsStairs(room) ? _underStairs : _underElevator;
+                var underTransit = IsElevator(room) ? _underElevator : _underStairs;
                 RemoveRoom(room);
                 removed = room;
                 var restoredSeen = new HashSet<RoomInstance>();
                 foreach (var vacatedCell in vacated)
                 {
-                    // Stacked stairs may still cover this landing — keep the chain.
+                    // Stacked stairs/ramps may still cover this landing — keep the chain.
                     if (IsStairs(room))
                     {
                         var otherStairs = FindStairsCovering(vacatedCell);
                         if (otherStairs != null)
                         {
                             _cells[vacatedCell] = otherStairs;
+                            continue;
+                        }
+                    }
+                    else if (IsParkingRamp(room))
+                    {
+                        var otherRamp = FindParkingRampCovering(vacatedCell);
+                        if (otherRamp != null)
+                        {
+                            _cells[vacatedCell] = otherRamp;
                             continue;
                         }
                     }
@@ -439,6 +455,75 @@ namespace BuildATower
             return true;
         }
 
+        bool CanPlaceParkingRamp(RoomTypeSO type, Vector2Int origin, HashSet<Vector2Int> footprint)
+        {
+            foreach (var cell in footprint)
+            {
+                // Ramps may use Lobby as upper landing, never floors above G.
+                if (cell.y > LobbyFloor) return false;
+                if (!IsFloorAllowed(type, cell.y)) return false;
+                if (cell.x < MinX || cell.x > MaxX) return false;
+
+                if (_cells.TryGetValue(cell, out var occupant))
+                {
+                    if (IsElevator(occupant)) return false;
+                    if (IsParkingRamp(occupant) || IsStairs(occupant))
+                        continue;
+                    // Lobby, rooms, scaffolding may be overlapped / rebuilt.
+                    continue;
+                }
+
+                if (FindElevatorCovering(cell) != null) return false;
+                if (!HasSupportForStairs(cell, footprint)) return false;
+            }
+
+            return true;
+        }
+
+        RoomInstance PlaceParkingRamp(
+            RoomTypeSO type,
+            Vector2Int origin,
+            HashSet<Vector2Int> footprint,
+            List<RoomInstance> clearedScaffolding)
+        {
+            var seenScaffold = new HashSet<RoomInstance>();
+            foreach (var cell in footprint)
+            {
+                if (!_cells.TryGetValue(cell, out var occupant)) continue;
+                if (IsScaffolding(occupant))
+                {
+                    if (!seenScaffold.Add(occupant)) continue;
+                    RemoveRoom(occupant);
+                    clearedScaffolding.Add(occupant);
+                    continue;
+                }
+
+                // Keep the original underlay when stacking over another ramp/stairs segment.
+                if (IsParkingRamp(occupant) || IsStairs(occupant))
+                    continue;
+
+                _underStairs[cell] = occupant;
+            }
+
+            var ramp = new RoomInstance(_nextId++, type, origin, type.size);
+            Register(ramp);
+            return ramp;
+        }
+
+        static bool IsParkingRamp(RoomInstance room) =>
+            room?.Type != null && (room.Type.isParkingRamp || ParkingStalls.IsRamp(room.Type));
+
+        RoomInstance FindParkingRampCovering(Vector2Int cell)
+        {
+            foreach (var room in _rooms)
+            {
+                if (!IsParkingRamp(room)) continue;
+                if (RoomContains(room, cell)) return room;
+            }
+
+            return null;
+        }
+
         /// <summary>
         /// Corner roles inside a stairs footprint:
         /// <code>
@@ -554,6 +639,7 @@ namespace BuildATower
                 if (!IsFloorAllowed(type, cell.y)) return false;
                 if (cell.x < MinX || cell.x > MaxX) return false;
                 if (FindStairsCovering(cell) != null) return false;
+                if (FindParkingRampCovering(cell) != null) return false;
 
                 var coveringElevator = FindElevatorCovering(cell);
                 if (coveringElevator != null &&
@@ -562,7 +648,7 @@ namespace BuildATower
 
                 if (_cells.TryGetValue(cell, out var occupant))
                 {
-                    if (IsStairs(occupant)) return false;
+                    if (IsStairs(occupant) || IsParkingRamp(occupant)) return false;
                     if (IsElevator(occupant) &&
                         !ReferenceEquals(occupant, extendingShaft))
                         return false;
@@ -772,7 +858,8 @@ namespace BuildATower
         static bool IsFloorAllowed(RoomTypeSO type, int floor)
         {
             if (floor == LobbyFloor)
-                return (type.isStairs || type.isElevatorShaft) && type.allowAboveGround;
+                return (type.isStairs || type.isElevatorShaft || type.isParkingRamp) &&
+                       (type.allowAboveGround || type.allowBasement || type.isParkingRamp);
             if (floor > LobbyFloor) return type.allowAboveGround;
             if (floor < LobbyFloor) return type.allowBasement;
             return false;

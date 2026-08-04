@@ -25,6 +25,7 @@ namespace BuildATower
         public bool isScaffolding;
         public bool isStairs;
         public bool isElevatorShaft;
+        public bool isParkingRamp;
         [Min(0)] public int requiredStars;
         [Min(0)] public int maxOccupants;
         [Min(0)] public int eventCapacity;
@@ -34,7 +35,12 @@ namespace BuildATower
         public BuildFamily ResolvedBuildFamily()
         {
             if (buildFamily != BuildFamily.None) return buildFamily;
-            if (isStairs || isElevatorShaft) return BuildFamily.Transit;
+            if (isStairs || isElevatorShaft || isParkingRamp) return BuildFamily.Transit;
+            if (!string.IsNullOrEmpty(id) &&
+                (id == ParkingStalls.ParkingId ||
+                 id == ParkingStalls.ValetId ||
+                 id == ParkingStalls.RampId))
+                return BuildFamily.Transit;
             return category switch
             {
                 RoomCategory.Office => BuildFamily.Office,
@@ -42,7 +48,7 @@ namespace BuildATower
                 RoomCategory.Condo => BuildFamily.Condo,
                 RoomCategory.Commercial => BuildFamily.Shops,
                 RoomCategory.Service => BuildFamily.Utility,
-                RoomCategory.Parking => BuildFamily.Utility,
+                RoomCategory.Parking => BuildFamily.Transit,
                 _ => BuildFamily.None
             };
         }

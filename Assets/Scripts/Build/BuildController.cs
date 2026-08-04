@@ -559,6 +559,8 @@ namespace BuildATower
                 view.ClearCell(c, structureMap: true);
                 if (Grid.TryGetRoomAt(c, out var at))
                     view.PaintCell(c, at);
+                else
+                    RestoreStructureBackground(c);
             }
 
             foreach (var room in Grid.Rooms)
@@ -567,6 +569,16 @@ namespace BuildATower
                 PaintRoomKeepingTransitOnTop(room);
                 break;
             }
+        }
+
+        /// <summary>
+        /// After clearing both tilemaps, restore visual dirt on empty basement cells.
+        /// </summary>
+        void RestoreStructureBackground(Vector2Int cell)
+        {
+            if (view == null) return;
+            if (DirtBand.ShouldRestore(cell, Grid))
+                view.PaintDirtCell(cell);
         }
 
         void ReselectById(int instanceId)
@@ -611,8 +623,8 @@ namespace BuildATower
                 view.ClearCell(c, structureMap: true);
                 if (Grid.TryGetRoomAt(c, out var at))
                     view.PaintCell(c, at);
-                else if (DirtBand.ShouldRestore(c, Grid))
-                    view.PaintDirtCell(c);
+                else
+                    RestoreStructureBackground(c);
             }
 
             foreach (var scaffold in scaffoldsPlaced)
@@ -940,9 +952,11 @@ namespace BuildATower
                     ? "Pick Selector to inspect, or Lobby / Office / Condo / Hotel / Retail / Stairs / Elevator to build."
                     : SelectedRoomType.isStairs
                         ? "Stairs (2×2): BL→UR run. Stack next flight one floor up (share connecting floor). Roles 1+4 cannot overlap; 2+3 can."
-                        : SelectedRoomType.isElevatorShaft
-                            ? "Elevator (1×2): click to place. Or use Selector and drag shaft edges to resize (30 floors max)."
-                        : $"Selected: {SelectedRoomType.displayName}. Build only on top of the floor below (no overhangs).";
+                        : SelectedRoomType.isParkingRamp
+                            ? "Parking Ramp (3×2): connects Lobby/B1 to deeper parking. Stack flights to unlock B2+ stalls."
+                            : SelectedRoomType.isElevatorShaft
+                                ? "Elevator (1×2): click to place. Or use Selector and drag shaft edges to resize (30 floors max)."
+                                : $"Selected: {SelectedRoomType.displayName}. Build only on top of the floor below (no overhangs).";
         }
 
         void HandleClicks(Vector2Int cell)
@@ -1034,7 +1048,8 @@ namespace BuildATower
             SelectedRoomType.isElevatorShaft;
 
         static bool IsVisibleTransit(RoomInstance room) =>
-            room?.Type != null && (room.Type.isStairs || room.Type.isElevatorShaft);
+            room?.Type != null &&
+            (room.Type.isStairs || room.Type.isElevatorShaft || room.Type.isParkingRamp);
 
         /// <summary>
         /// Paint a room without erasing stairs/elevators that own shared cells, then

@@ -296,7 +296,8 @@ namespace BuildATower
             room.Type != null && (room.Type.isLobby || room.Type.isScaffolding);
 
         static bool IsVisibleTransit(RoomInstance room) =>
-            room?.Type != null && (room.Type.isStairs || room.Type.isElevatorShaft);
+            room?.Type != null &&
+            (room.Type.isStairs || room.Type.isElevatorShaft || room.Type.isParkingRamp);
 
         static class EdgeMask
         {

@@ -10,17 +10,17 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 00fe1abdabb23524093ed643f4aca030, type: 3}
-  m_Name: Valet
+  m_Name: ParkingRamp
   m_EditorClassIdentifier: BuildATower.Runtime::BuildATower.RoomTypeSO
-  id: service_valet
-  displayName: Valet
-  category: 7
-  size: {x: 3, y: 1}
-  buildCost: 60000
-  placeholderColor: {r: 0.55, g: 0.4, b: 0.25, a: 1}
+  id: parking_ramp
+  displayName: Parking Ramp
+  category: 5
+  size: {x: 3, y: 2}
+  buildCost: 25000
+  placeholderColor: {r: 0.42, g: 0.4, b: 0.32, a: 1}
   incomeModel: 0
   baseIncome: 0
-  noiseOutput: 0.15
+  noiseOutput: 0.1
   noiseSensitivity: 0
   requiresHousekeeping: 0
   hasActiveHours: 0
@@ -32,6 +32,7 @@ MonoBehaviour:
   isScaffolding: 0
   isStairs: 0
   isElevatorShaft: 0
+  isParkingRamp: 1
   requiredStars: 4
   maxOccupants: 0
   eventCapacity: 0

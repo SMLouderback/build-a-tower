@@ -108,6 +108,7 @@ namespace BuildATower
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/EventHall"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ParkingUnderground"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/Valet"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ParkingRamp"));
             _catalog = BuildCatalog.Group(_roomButtons);
         }
 
@@ -1013,6 +1014,7 @@ namespace BuildATower
             if (room == null) return "?";
             if (room.isElevatorShaft) return "El";
             if (room.isStairs) return "St";
+            if (room.isParkingRamp) return "Rm";
             if (!string.IsNullOrEmpty(room.id))
             {
                 if (room.id.Contains("premium")) return "P" + FamilyGlyph(room.ResolvedBuildFamily())[0];
@@ -1025,6 +1027,9 @@ namespace BuildATower
                 if (room.id.Contains("fine")) return "Fn";
                 if (room.id.Contains("fast")) return "FF";
                 if (room.id.Contains("retail")) return "Rt";
+                if (room.id.Contains("parking_ramp") || room.id == ParkingStalls.RampId) return "Rm";
+                if (room.id.Contains("parking")) return "Pk";
+                if (room.id.Contains("valet")) return "Va";
             }
 
             var shortName = ShortLabel(room.displayName);

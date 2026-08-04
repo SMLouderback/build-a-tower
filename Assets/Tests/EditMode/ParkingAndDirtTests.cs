@@ -8,12 +8,12 @@ namespace BuildATower.Tests
     public class ParkingAndDirtTests
     {
         [Test]
-        public void DirtBand_ShouldRestore_only_for_empty_basement_in_band()
+        public void DirtBand_ShouldRestore_for_vacated_elevator_basement_cell()
         {
-            Assert.IsTrue(DirtBand.ShouldRestore(new Vector2Int(0, -1), null));
-            Assert.IsFalse(DirtBand.ShouldRestore(new Vector2Int(0, 0), null));
-            Assert.IsFalse(DirtBand.ShouldRestore(new Vector2Int(0, 1), null));
-            Assert.IsFalse(DirtBand.ShouldRestore(new Vector2Int(DirtBand.MinX - 1, -1), null));
+            // Elevator resize clears structure tiles on vacated B1 cells; those must restore dirt.
+            var cell = new Vector2Int(5, -1);
+            Assert.IsTrue(DirtBand.Contains(cell));
+            Assert.IsTrue(DirtBand.ShouldRestore(cell, null));
         }
 
         [Test]
@@ -60,6 +60,57 @@ namespace BuildATower.Tests
             Assert.IsFalse(ParkingStalls.TryClaim(a, grid, new List<Agent>()));
         }
 
+        [Test]
+        public void ParkingRamp_B1_accessible_without_ramp_B2_needs_chain()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Valet(), new Vector2Int(0, -1), out _));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(4, -1), out _));
+            // B2 needs B1 support in the same columns.
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(10, -1), out _));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(10, -2), out _));
+
+            Assert.IsTrue(ParkingStalls.IsParkingFloorAccessible(grid, -1));
+            Assert.IsFalse(ParkingStalls.IsParkingFloorAccessible(grid, -2));
+            Assert.AreEqual(12, ParkingStalls.TotalStalls(grid)); // only two B1 lots
+
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -2), out _));
+            Assert.IsTrue(ParkingStalls.IsParkingFloorAccessible(grid, -2));
+            Assert.AreEqual(18, ParkingStalls.TotalStalls(grid));
+        }
+
+        [Test]
+        public void ParkingRamp_stack_unlocks_deeper_floor()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 24, 0, out _));
+            // Support columns for deep parking.
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(8, -1), out _));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(8, -2), out _));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(8, -3), out _));
+
+            Assert.AreEqual(6, ParkingStalls.TotalStalls(grid)); // B1 only
+
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -2), out _)); // -2..-1
+            Assert.AreEqual(12, ParkingStalls.TotalStalls(grid)); // B1+B2
+
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -3), out _)); // -3..-2
+            Assert.AreEqual(18, ParkingStalls.TotalStalls(grid)); // B1+B2+B3
+        }
+
+        [Test]
+        public void ParkingRamp_can_land_on_lobby()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(grid.CanPlace(Ramp(), new Vector2Int(2, -1)));
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(2, -1), out var ramp));
+            Assert.IsTrue(ramp.Type.isParkingRamp);
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(2, 0), out var atLobby));
+            Assert.AreSame(ramp, atLobby);
+        }
+
         static RoomTypeSO Lobby()
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
@@ -88,6 +139,20 @@ namespace BuildATower.Tests
             so.size = new Vector2Int(6, 1);
             so.allowBasement = true;
             so.maxOccupants = 6;
+            return so;
+        }
+
+        static RoomTypeSO Ramp()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = ParkingStalls.RampId;
+            so.displayName = "Parking Ramp";
+            so.isParkingRamp = true;
+            so.size = new Vector2Int(3, 2);
+            so.allowBasement = true;
+            so.allowAboveGround = false;
+            so.buildFamily = BuildFamily.Transit;
+            so.requiredStars = 4;
             return so;
         }
     }

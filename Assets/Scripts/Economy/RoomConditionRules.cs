@@ -12,7 +12,7 @@ namespace BuildATower
         public const float CleanPremiumMinutes = 30f;
 
         public static bool CanDegrade(RoomTypeSO t) =>
-            t != null && !t.isLobby && !t.isElevatorShaft && !t.isStairs;
+            t != null && !t.isLobby && !t.isElevatorShaft && !t.isStairs && !t.isParkingRamp;
 
         public static bool IncomePaused(RoomInstance room) =>
             room != null && room.Condition < PauseBelow;

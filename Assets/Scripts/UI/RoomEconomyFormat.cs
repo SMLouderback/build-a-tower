@@ -122,6 +122,8 @@ namespace BuildATower
                 return $"Upkeep: ${ParkingStalls.ParkingDailyUpkeep:N0} / day";
             if (ParkingStalls.IsValet(type))
                 return $"Upkeep: ${ParkingStalls.ValetDailyUpkeep:N0} / day";
+            if (ParkingStalls.IsRamp(type))
+                return $"Upkeep: ${ParkingStalls.RampDailyUpkeep:N0} / day";
             return null;
         }
 
@@ -140,6 +142,8 @@ namespace BuildATower
                 return $"{cost} · -{Abbreviate(ParkingStalls.ParkingDailyUpkeep)}/d";
             if (ParkingStalls.IsValet(type))
                 return $"{cost} · -{Abbreviate(ParkingStalls.ValetDailyUpkeep)}/d";
+            if (ParkingStalls.IsRamp(type))
+                return $"{cost} · -{Abbreviate(ParkingStalls.RampDailyUpkeep)}/d";
 
             switch (type.incomeModel)
             {

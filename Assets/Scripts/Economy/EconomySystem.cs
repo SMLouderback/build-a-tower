@@ -84,6 +84,12 @@ namespace BuildATower
                     _lastExpenseByRoom[room.InstanceId] = ParkingStalls.ValetDailyUpkeep;
                     room.RecordLifetimeExpense(ParkingStalls.ValetDailyUpkeep);
                 }
+                else if (ParkingStalls.IsRamp(room.Type))
+                {
+                    LastExpense += ParkingStalls.RampDailyUpkeep;
+                    _lastExpenseByRoom[room.InstanceId] = ParkingStalls.RampDailyUpkeep;
+                    room.RecordLifetimeExpense(ParkingStalls.RampDailyUpkeep);
+                }
 
                 var incomeBlocked = RoomConditionRules.IncomePaused(room) || room.IsBroken;
 
