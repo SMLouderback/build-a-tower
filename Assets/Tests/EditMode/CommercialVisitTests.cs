@@ -446,7 +446,7 @@ namespace BuildATower.Tests
             var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
             router.Rebuild(grid);
             var agents = new AgentSystem(router);
-            agents.SyncHomes(grid);
+            agents.SyncHomes(grid, currentStars: 0, averageCrime: 0f);
             var agent = agents.Agents.Single();
             var clock = new GameClock(1f, 12 * 60);
             return (grid, shop, agents, agent, clock);
@@ -519,8 +519,9 @@ namespace BuildATower.Tests
         static RoomTypeSO Condo()
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
-            so.id = "condo";
+            so.id = CondoLuxury.BaseId;
             so.category = RoomCategory.Condo;
+            so.luxuryBand = LuxuryBand.Base;
             so.size = Vector2Int.one;
             so.maxOccupants = 1;
             so.allowAboveGround = true;

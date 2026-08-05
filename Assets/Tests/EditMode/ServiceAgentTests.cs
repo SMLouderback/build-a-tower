@@ -369,7 +369,8 @@ namespace BuildATower.Tests
             Assert.IsTrue(grid.TryPlace(Housekeeping(), new Vector2Int(0, 1), out var hk));
             Assert.IsTrue(grid.TryPlace(Hotel(), new Vector2Int(6, 1), out var reachable));
             // Support pad so floor-3 hotel can be built, but no stairs/elevator reach it.
-            Assert.IsTrue(grid.TryPlace(Scaffold(), new Vector2Int(6, 2), out _));
+            for (var x = 6; x < 15; x++)
+                Assert.IsTrue(grid.TryPlaceScaffold(new Vector2Int(x, 2), out _));
             Assert.IsTrue(grid.TryPlace(Hotel(), new Vector2Int(6, 3), out var unreachable));
             hk.SetStaffedWorkers(1);
             reachable.QueueCleanWork(RoomConditionRules.CleanBasicMinutes);

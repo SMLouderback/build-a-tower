@@ -315,6 +315,19 @@ namespace BuildATower.Tests
                 effective);
         }
 
+        [Test]
+        public void EffectiveDemandClimateOffset_condo_upper_recession_applies_bias()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.category = RoomCategory.Condo;
+            so.luxuryBand = LuxuryBand.Upper;
+            var climateOffset = MarketClimate.Recession - MarketClimate.Normal;
+            var effective = EconomySystem.EffectiveDemandClimateOffset(so, climateOffset);
+            Assert.AreEqual(
+                climateOffset + LivingLuxury.LuxuryClimateBias(LuxuryBand.Upper, MarketClimate.Recession),
+                effective);
+        }
+
         RoomTypeSO Housekeeping()
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();

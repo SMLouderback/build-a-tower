@@ -52,8 +52,22 @@ namespace BuildATower
         string _hoverTooltip;
         readonly TowerNewsHud _newsHud = new();
 
+        enum PauseUiState
+        {
+            Playing,
+            Paused,
+            ConfirmQuit
+        }
+
+        PauseUiState _pauseUi = PauseUiState.Playing;
+        float _speedBeforePause = 1f;
+        bool _clockPausedBeforeMenu;
+
         public Rect PanelScreenRect => _panelRect;
         public Rect TopBarScreenRect => _topBarRect;
+
+        /// <summary>When true, world build input should be ignored.</summary>
+        public bool BlocksWorldInput => _pauseUi != PauseUiState.Playing;
 
         /// <summary>True when the GUI point (IMGUI / flipped Y) is over the top bar, info/goals dropdown, or side panel.</summary>
         public bool ContainsGuiPoint(Vector2 guiPoint) =>
@@ -68,6 +82,27 @@ namespace BuildATower
             if (simulation == null && build != null)
                 simulation = build.GetComponent<TowerSimulation>();
             EnsureElevatorAndCatalog();
+            GameSession.EnsureDefault();
+        }
+
+        void Update()
+        {
+            if (build == null) return;
+            if (!Input.GetKeyDown(KeyCode.Escape)) return;
+
+            if (_pauseUi == PauseUiState.ConfirmQuit)
+            {
+                _pauseUi = PauseUiState.Paused;
+                return;
+            }
+
+            if (_pauseUi == PauseUiState.Paused)
+            {
+                ResumeFromPause();
+                return;
+            }
+
+            EnterPause();
         }
 
         void EnsureElevatorAndCatalog()
@@ -93,7 +128,15 @@ namespace BuildATower
                 _roomButtons.Add(elevatorRoom);
             }
 
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoPremium"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoStudio"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoAlcove"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoBase"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoMidStandard"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoMidLoft"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoMidFamily"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoUpperStandard"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoUpperCorner"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoUpperPenthouse"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelBase"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelAccessible"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelMidStandard"));
@@ -352,6 +395,79 @@ namespace BuildATower
             GUI.EndScrollView();
 
             DrawHoverTooltip(label);
+            DrawPauseOverlay(title, label);
+        }
+
+        void EnterPause()
+        {
+            if (_pauseUi != PauseUiState.Playing) return;
+            if (simulation?.Clock != null)
+            {
+                _speedBeforePause = simulation.Clock.MinutesPerRealSecond;
+                _clockPausedBeforeMenu = simulation.Clock.Paused;
+            }
+            else
+            {
+                _speedBeforePause = 1f;
+                _clockPausedBeforeMenu = false;
+            }
+
+            simulation?.SetSpeedPreset(_speedBeforePause, paused: true);
+            _pauseUi = PauseUiState.Paused;
+        }
+
+        void ResumeFromPause()
+        {
+            if (_clockPausedBeforeMenu)
+                simulation?.SetSpeedPreset(_speedBeforePause, paused: true);
+            else
+                simulation?.SetSpeedPreset(Mathf.Max(0.01f, _speedBeforePause), paused: false);
+            _pauseUi = PauseUiState.Playing;
+        }
+
+        void ReturnToMainMenu()
+        {
+            _pauseUi = PauseUiState.Playing;
+            UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
+        }
+
+        void DrawPauseOverlay(GUIStyle title, GUIStyle label)
+        {
+            if (_pauseUi == PauseUiState.Playing) return;
+
+            GUI.Box(new Rect(0, 0, Screen.width, Screen.height), GUIContent.none);
+            var panelW = 360f;
+            var panelH = _pauseUi == PauseUiState.ConfirmQuit ? 160f : 140f;
+            var panel = new Rect(
+                (Screen.width - panelW) * 0.5f,
+                (Screen.height - panelH) * 0.5f,
+                panelW,
+                panelH);
+            GUI.Box(panel, GUIContent.none);
+
+            var cx = panel.x + 20f;
+            var cy = panel.y + 16f;
+            var inner = panelW - 40f;
+            const float btnH = 32f;
+
+            if (_pauseUi == PauseUiState.ConfirmQuit)
+            {
+                GUI.Label(new Rect(cx, cy, inner, 48f), "Leave tower? Progress is not saved.", label);
+                cy += 56f;
+                if (GUI.Button(new Rect(cx, cy, (inner - 8f) * 0.5f, btnH), "Yes"))
+                    ReturnToMainMenu();
+                if (GUI.Button(new Rect(cx + (inner - 8f) * 0.5f + 8f, cy, (inner - 8f) * 0.5f, btnH), "No"))
+                    _pauseUi = PauseUiState.Paused;
+                return;
+            }
+
+            GUI.Label(new Rect(cx, cy, inner, 28f), "Paused", title);
+            cy += 36f;
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Resume"))
+                ResumeFromPause();
+            cy += btnH + 8f;
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Main Menu"))
+                _pauseUi = PauseUiState.ConfirmQuit;
         }
 
         /// <summary>
@@ -415,11 +531,13 @@ namespace BuildATower
             var climateName = simulation?.Climate?.Name ?? "—";
             DrawChip(climateName, 78f);
 
-            // Reserve space for right-cluster Info/Goals buttons.
-            var clusterW = 0f;
+            DrawChip(GameSession.Difficulty.ToString(), 88f);
+
+            // Reserve space for right-cluster Menu/Info/Goals buttons.
+            var clusterW = 56f + 8f; // Menu
             if (economyUnlocked) clusterW += 64f + 8f + 56f + 8f;
             if (goalsUnlocked) clusterW += 64f + 8f + 72f;
-            else if (economyUnlocked) clusterW = Mathf.Max(0f, clusterW - 8f);
+            else if (economyUnlocked) clusterW = Mathf.Max(56f + 8f, clusterW - 8f);
 
             var speedWidth = 236f;
             if (x + speedWidth < right - clusterW - 12f)
@@ -472,6 +590,15 @@ namespace BuildATower
             const float btnGap = 8f;
 
             var cursor = right;
+            const float menuW = 56f;
+            cursor -= menuW;
+            if (GUI.Button(new Rect(cursor, y, menuW, lineH), "Menu", barButton))
+            {
+                if (_pauseUi == PauseUiState.Playing)
+                    EnterPause();
+            }
+            cursor -= btnGap;
+
             if (goalsUnlocked)
             {
                 cursor -= goalsW;
@@ -856,6 +983,10 @@ namespace BuildATower
                     build.SelectedRoomType != null &&
                     build.SelectedRoomType.isLobby,
                     new Color(0.75f, 0.65f, 0.35f)),
+                ("Sc", "Scaffold ($750)\nClick or drag to place walkable structural fill.",
+                    () => build.SelectScaffoldTool(),
+                    build.CurrentTool == BuildTool.Scaffold,
+                    new Color(0.76f, 0.62f, 0.40f)),
                 ("X", "Bulldoze\nDemolish a non-lobby room (grace refund if eligible).",
                     () => build.SetTool(BuildTool.Bulldoze),
                     build.CurrentTool == BuildTool.Bulldoze,
@@ -974,6 +1105,7 @@ namespace BuildATower
             var hotelLines = new List<string>();
             RoomEconomyFormat.AppendHotelSelectionLines(hotelLines, room);
             RoomEconomyFormat.AppendOfficeSelectionLines(hotelLines, room);
+            RoomEconomyFormat.AppendCondoSelectionLines(hotelLines, room);
             foreach (var line in hotelLines)
                 lines += $"\n{line}";
             lines += $"\nSize {room.size.x}×{room.size.y}";
@@ -1428,6 +1560,7 @@ namespace BuildATower
         void DrawTimeSpeedButtons(float x, float y, float width, float height)
         {
             if (simulation?.Clock == null) return;
+            if (_pauseUi != PauseUiState.Playing) return;
 
             var labels = new[] { "||", "1x", "2x", "5x", "10x", "60x" };
             var speeds = new[] { 0f, 1f, 2f, 5f, 10f, 60f };
@@ -1476,6 +1609,7 @@ namespace BuildATower
 
             RoomEconomyFormat.AppendHotelSelectionLines(lines, type);
             RoomEconomyFormat.AppendOfficeSelectionLines(lines, type);
+            RoomEconomyFormat.AppendCondoSelectionLines(lines, type);
 
             return lines;
         }
@@ -1505,7 +1639,23 @@ namespace BuildATower
                 if (displayName.Contains("Premium")) return "Prem. Office";
                 return "Office";
             }
-            if (displayName.StartsWith("Condo")) return displayName.Contains("Premium") ? "Prem. Condo" : "Condo";
+            if (displayName.StartsWith("Condo") || displayName == "Studio" || displayName == "Alcove Studio" ||
+                displayName == "One Bedroom" || displayName == "Mid Condo" || displayName == "Loft" ||
+                displayName == "Family Condo" || displayName == "Upper Condo" || displayName == "Corner Condo" ||
+                displayName == "Penthouse")
+            {
+                if (displayName == "Studio") return "Studio";
+                if (displayName == "Alcove Studio") return "Alcove";
+                if (displayName == "One Bedroom") return "1-Bed";
+                if (displayName == "Mid Condo") return "Mid Condo";
+                if (displayName == "Loft") return "Loft";
+                if (displayName == "Family Condo") return "Family";
+                if (displayName == "Upper Condo") return "Upper";
+                if (displayName == "Corner Condo") return "Corner";
+                if (displayName == "Penthouse") return "Penthouse";
+                if (displayName.Contains("Premium")) return "Prem. Condo";
+                return "Condo";
+            }
             return displayName;
         }
     }

@@ -1,4 +1,4 @@
-%YAML 1.1
+﻿%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!114 &11400000
 MonoBehaviour:
@@ -16,10 +16,10 @@ MonoBehaviour:
   displayName: Junior Suite
   category: 3
   size: {x: 5, y: 1}
-  buildCost: 60000
+  buildCost: 87000
   placeholderColor: {r: 0.54, g: 0.3, b: 0.74, a: 1}
   incomeModel: 2
-  baseIncome: 4500
+  baseIncome: 1400
   noiseOutput: 0
   noiseSensitivity: 0
   requiresHousekeeping: 1

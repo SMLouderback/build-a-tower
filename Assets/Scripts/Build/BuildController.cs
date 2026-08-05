@@ -39,13 +39,16 @@ namespace BuildATower
         bool _draggingElevatorEdge;
         bool _dragTopEdge;
         RoomInstance _elevatorEdgeShaft;
+        bool _draggingScaffold;
+        readonly HashSet<Vector2Int> _scaffoldPaintedThisDrag = new();
         bool _clearedFloorOneHint;
         readonly Dictionary<int, (bool dirty, bool broken)> _roomVisualState = new();
 
         void Awake()
         {
+            GameSession.EnsureDefault();
             Grid = new TowerGrid();
-            Wallet = new FundsWallet(startingFunds);
+            Wallet = new FundsWallet(DifficultyProfile.StartingFunds(GameSession.Difficulty));
             SelectedRoomType = lobbyType;
             RefreshHelpText();
             if (GetComponent<TowerSimulation>() == null)
@@ -72,9 +75,16 @@ namespace BuildATower
         {
             SyncConditionVisuals();
             if (worldCamera == null) return;
+            if (hud != null && hud.BlocksWorldInput)
+            {
+                if (!_draggingLobby && !_draggingElevator && !_draggingElevatorEdge && !_draggingScaffold)
+                    view.ClearGhost();
+                HoverCell = null;
+                return;
+            }
             if (IsPointerOverHud(Input.mousePosition))
             {
-                if (!_draggingLobby && !_draggingElevator && !_draggingElevatorEdge)
+                if (!_draggingLobby && !_draggingElevator && !_draggingElevatorEdge && !_draggingScaffold)
                     view.ClearGhost();
                 HoverCell = null;
                 return;
@@ -85,6 +95,7 @@ namespace BuildATower
             HandleLobbyDrag(cell);
             HandleElevatorDrag(cell);
             HandleElevatorEdgeDrag(cell);
+            HandleScaffoldDrag(cell);
             HandleHoverGhost(cell);
             HandleClicks(cell);
             if (!_draggingElevatorEdge)
@@ -98,6 +109,8 @@ namespace BuildATower
                 SelectedRoomType = null;
             if (tool != BuildTool.Select)
                 ClearSelection();
+            _draggingScaffold = false;
+            _scaffoldPaintedThisDrag.Clear();
             view.ClearGhost();
             RefreshHelpText();
             StateChanged?.Invoke();
@@ -140,6 +153,36 @@ namespace BuildATower
             view.ClearGhost();
             RefreshHelpText();
             StateChanged?.Invoke();
+        }
+
+        public void SelectScaffoldTool()
+        {
+            CurrentTool = BuildTool.Scaffold;
+            SelectedRoomType = null;
+            ClearSelection();
+            _draggingScaffold = false;
+            _scaffoldPaintedThisDrag.Clear();
+            view.ClearGhost();
+            RefreshHelpText();
+            StateChanged?.Invoke();
+        }
+
+        public bool TryPlaceScaffoldAt(Vector2Int cell)
+        {
+            if (CurrentTool != BuildTool.Scaffold || !Grid.HasLobby) return false;
+            if (!Grid.CanPlaceScaffold(cell)) return false;
+            if (!BuildEconomy.TrySpendForBuild(Wallet, TowerGrid.ScaffoldBuildCost)) return false;
+            if (!Grid.TryPlaceScaffold(cell, out var room))
+            {
+                BuildEconomy.RefundBuild(Wallet, TowerGrid.ScaffoldBuildCost);
+                return false;
+            }
+
+            if (view != null)
+                view.PaintRoom(room);
+            NotifyGridChanged();
+            StateChanged?.Invoke();
+            return true;
         }
 
         public void ClearSelection()
@@ -316,10 +359,12 @@ namespace BuildATower
             if (lobbyType == null || maxX < minX) return false;
 
             var cost = (maxX - minX + 1) * lobbyType.buildCost;
-            if (!Grid.CanPlaceLobby(minX, maxX, TowerGrid.LobbyFloor) || !Wallet.TrySpend(cost)) return false;
+            if (!Grid.CanPlaceLobby(minX, maxX, TowerGrid.LobbyFloor) ||
+                !BuildEconomy.TrySpendForBuild(Wallet, cost))
+                return false;
             if (!Grid.TryPlaceLobby(lobbyType, minX, maxX, TowerGrid.LobbyFloor, out var room))
             {
-                Wallet.Add(cost);
+                BuildEconomy.RefundBuild(Wallet, cost);
                 return false;
             }
 
@@ -339,7 +384,7 @@ namespace BuildATower
 
             var added = (newMaxX - newMinX + 1) - (Grid.MaxX - Grid.MinX + 1);
             var cost = added * lobbyType.buildCost;
-            if (!Wallet.TrySpend(cost)) return false;
+            if (!BuildEconomy.TrySpendForBuild(Wallet, cost)) return false;
 
             RoomInstance oldLobby = null;
             foreach (var room in Grid.Rooms)
@@ -353,7 +398,7 @@ namespace BuildATower
 
             if (!Grid.TryExtendLobby(lobbyType, newMinX, newMaxX, out var lobby, out _))
             {
-                Wallet.Add(cost);
+                BuildEconomy.RefundBuild(Wallet, cost);
                 return false;
             }
 
@@ -386,14 +431,19 @@ namespace BuildATower
 
             var cost = SelectedRoomType.buildCost *
                        (SelectedRoomType.isElevatorShaft ? SelectedRoomType.size.y : 1);
-            if (!Grid.CanPlace(SelectedRoomType, cell) || !Wallet.TrySpend(cost)) return false;
+            if (!Grid.CanPlace(SelectedRoomType, cell) ||
+                !BuildEconomy.TrySpendForBuild(Wallet, cost))
+                return false;
             if (!Grid.TryPlace(SelectedRoomType, cell, out var room, out var clearedScaffolding))
             {
-                Wallet.Add(cost);
+                BuildEconomy.RefundBuild(Wallet, cost);
                 return false;
             }
 
-            room.RecordConstructionSpend(cost, Time.realtimeSinceStartup, isInitialPlace: true);
+            room.RecordConstructionSpend(
+                BuildEconomy.RecordedSpend(cost),
+                Time.realtimeSinceStartup,
+                isInitialPlace: true);
             ApplyAutoHireOnPlace(room);
 
             foreach (var scaffold in clearedScaffolding)
@@ -420,18 +470,21 @@ namespace BuildATower
             var cost = added * shaft.Type.buildCost;
             if (added <= 0 ||
                 !Grid.CanExtendElevator(shaft, newMinY, newMaxY) ||
-                !Wallet.TrySpend(cost))
+                !BuildEconomy.TrySpendForBuild(Wallet, cost))
                 return false;
 
             var instanceId = shaft.InstanceId;
             if (!Grid.TryExtendElevator(shaft, newMinY, newMaxY, out _))
             {
-                Wallet.Add(cost);
+                BuildEconomy.RefundBuild(Wallet, cost);
                 return false;
             }
 
             if (TryFindRoomById(instanceId, out var currentShaft))
-                currentShaft.RecordConstructionSpend(cost, Time.realtimeSinceStartup, isInitialPlace: false);
+                currentShaft.RecordConstructionSpend(
+                    BuildEconomy.RecordedSpend(cost),
+                    Time.realtimeSinceStartup,
+                    isInitialPlace: false);
 
             BeginOrRefreshCorrectionWindow(instanceId, oldMin, oldMax);
             RepaintAfterElevatorResize(shaft, instanceId);
@@ -475,7 +528,7 @@ namespace BuildATower
             if (growing)
             {
                 var cost = delta * shaft.Type.buildCost;
-                if (!Wallet.TrySpend(cost)) return false;
+                if (!BuildEconomy.TrySpendForBuild(Wallet, cost)) return false;
             }
 
             var instanceId = shaft.InstanceId;
@@ -483,14 +536,17 @@ namespace BuildATower
             if (!Grid.TryResizeElevator(shaft, newMinY, newMaxY, out _))
             {
                 if (growing)
-                    Wallet.Add(growCost);
+                    BuildEconomy.RefundBuild(Wallet, growCost);
                 return false;
             }
 
             if (growing)
             {
                 if (TryFindRoomById(instanceId, out var currentShaft))
-                    currentShaft.RecordConstructionSpend(growCost, Time.realtimeSinceStartup, isInitialPlace: false);
+                    currentShaft.RecordConstructionSpend(
+                        BuildEconomy.RecordedSpend(growCost),
+                        Time.realtimeSinceStartup,
+                        isInitialPlace: false);
                 BeginOrRefreshCorrectionWindow(instanceId, oldMin, oldMax);
             }
             else if (ActiveCorrectionWindow != null &&
@@ -635,6 +691,43 @@ namespace BuildATower
             return true;
         }
 
+        void HandleScaffoldDrag(Vector2Int cell)
+        {
+            if (CurrentTool != BuildTool.Scaffold || !Grid.HasLobby) return;
+
+            if (Input.GetMouseButtonDown(0))
+            {
+                _draggingScaffold = true;
+                _scaffoldPaintedThisDrag.Clear();
+            }
+
+            if (!_draggingScaffold) return;
+
+            if (!_scaffoldPaintedThisDrag.Contains(cell) && TryPlaceScaffoldAt(cell))
+                _scaffoldPaintedThisDrag.Add(cell);
+
+            var showValid =
+                (Grid.TryGetRoomAt(cell, out var existing) &&
+                 existing?.Type != null &&
+                 existing.Type.isScaffolding) ||
+                (Grid.CanPlaceScaffold(cell) && BuildEconomy.CanAffordBuild(Wallet, TowerGrid.ScaffoldBuildCost));
+
+            view.SetGhost(
+                cell,
+                Vector2Int.one,
+                new Color(0.76f, 0.62f, 0.40f, 1f),
+                showValid);
+
+            if (Input.GetMouseButtonUp(0))
+            {
+                _draggingScaffold = false;
+                _scaffoldPaintedThisDrag.Clear();
+                view.ClearGhost();
+                RefreshHelpText();
+                StateChanged?.Invoke();
+            }
+        }
+
         bool IsLobbyToolActive() =>
             CurrentTool == BuildTool.PlaceRoom &&
             SelectedRoomType != null &&
@@ -663,7 +756,7 @@ namespace BuildATower
                 var maxX = Mathf.Max(_dragStartX, cell.x);
                 var width = maxX - minX + 1;
                 var cost = width * lobbyType.buildCost;
-                var valid = Grid.CanPlaceLobby(minX, maxX, TowerGrid.LobbyFloor) && Wallet.CanAfford(cost);
+                var valid = Grid.CanPlaceLobby(minX, maxX, TowerGrid.LobbyFloor) && BuildEconomy.CanAffordBuild(Wallet, cost);
                 view.SetGhost(
                     new Vector2Int(minX, TowerGrid.LobbyFloor),
                     new Vector2Int(width, 1),
@@ -689,7 +782,7 @@ namespace BuildATower
             var extendCost = added * lobbyType.buildCost;
             var extendValid = added > 0 &&
                               Grid.CanExtendLobby(newMin, newMax) &&
-                              Wallet.CanAfford(extendCost);
+                              BuildEconomy.CanAffordBuild(Wallet, extendCost);
 
             view.SetGhost(
                 new Vector2Int(newMin, TowerGrid.LobbyFloor),
@@ -731,7 +824,7 @@ namespace BuildATower
             var cost = added * _elevatorToExtend.Type.buildCost;
             var valid = added > 0 &&
                         Grid.CanExtendElevator(_elevatorToExtend, newMin, newMax) &&
-                        Wallet.CanAfford(cost);
+                        BuildEconomy.CanAffordBuild(Wallet, cost);
 
             view.SetGhost(
                 new Vector2Int(_elevatorToExtend.Origin.x, newMin),
@@ -800,7 +893,7 @@ namespace BuildATower
                            CanShortenElevator(shaft, oldMin, oldMax, newMin, newMax, now);
             var valid = geometricallyOk &&
                         policyOk &&
-                        (!growing || Wallet.CanAfford(cost));
+                        (!growing || BuildEconomy.CanAffordBuild(Wallet, cost));
 
             view.SetGhost(
                 new Vector2Int(x, newMin),
@@ -835,11 +928,28 @@ namespace BuildATower
 
         void HandleHoverGhost(Vector2Int cell)
         {
-            if (_draggingLobby || _draggingElevator || _draggingElevatorEdge) return;
+            if (_draggingLobby || _draggingElevator || _draggingElevatorEdge || _draggingScaffold) return;
 
-            if (CurrentTool == BuildTool.Select)
+            if (CurrentTool == BuildTool.Select || CurrentTool == BuildTool.Bulldoze)
             {
                 view.ClearGhost();
+                return;
+            }
+
+            if (CurrentTool == BuildTool.Scaffold)
+            {
+                if (!Grid.HasLobby)
+                {
+                    view.ClearGhost();
+                    return;
+                }
+
+                var valid = Grid.CanPlaceScaffold(cell) && BuildEconomy.CanAffordBuild(Wallet, TowerGrid.ScaffoldBuildCost);
+                view.SetGhost(
+                    cell,
+                    Vector2Int.one,
+                    new Color(0.76f, 0.62f, 0.40f, 1f),
+                    valid);
                 return;
             }
 
@@ -856,7 +966,7 @@ namespace BuildATower
                     new Vector2Int(cell.x, TowerGrid.LobbyFloor),
                     Vector2Int.one,
                     lobbyType.placeholderColor,
-                    onLobbyFloor && Wallet.CanAfford(lobbyType.buildCost));
+                    onLobbyFloor && BuildEconomy.CanAffordBuild(Wallet, lobbyType.buildCost));
                 return;
             }
 
@@ -879,7 +989,7 @@ namespace BuildATower
                 }
 
                 var cost = added * lobbyType.buildCost;
-                var valid = Grid.CanExtendLobby(newMin, newMax) && Wallet.CanAfford(cost);
+                var valid = Grid.CanExtendLobby(newMin, newMax) && BuildEconomy.CanAffordBuild(Wallet, cost);
                 view.SetGhost(
                     new Vector2Int(newMin, TowerGrid.LobbyFloor),
                     new Vector2Int(newMax - newMin + 1, 1),
@@ -898,7 +1008,7 @@ namespace BuildATower
 
             var roomCost = SelectedRoomType.buildCost *
                            (SelectedRoomType.isElevatorShaft ? SelectedRoomType.size.y : 1);
-            var roomValid = Grid.CanPlace(SelectedRoomType, cell) && Wallet.CanAfford(roomCost);
+            var roomValid = Grid.CanPlace(SelectedRoomType, cell) && BuildEconomy.CanAffordBuild(Wallet, roomCost);
             view.SetGhost(cell, SelectedRoomType.size, SelectedRoomType.placeholderColor, roomValid);
         }
 
@@ -941,6 +1051,14 @@ namespace BuildATower
                 return;
             }
 
+            if (CurrentTool == BuildTool.Scaffold)
+            {
+                HelpText =
+                    $"Scaffold (${TowerGrid.ScaffoldBuildCost}): click or drag empty supported cells. " +
+                    "Walkable fill; supports floors above. Cannot bulldoze studs that still hold something up.";
+                return;
+            }
+
             if (IsLobbyToolActive())
             {
                 HelpText = "Lobby tool: drag on Floor G past the lobby ends to extend it.";
@@ -949,7 +1067,7 @@ namespace BuildATower
 
             HelpText =
                 SelectedRoomType == null
-                    ? "Pick Selector to inspect, or Lobby / Office / Condo / Hotel / Retail / Stairs / Elevator to build."
+                    ? "Pick Selector / Scaffold / Bulldoze, or Lobby / Office / Condo / Hotel / Retail / Stairs / Elevator to build."
                     : SelectedRoomType.isStairs
                         ? "Stairs (2×2): BL→UR run. Stack next flight one floor up (share connecting floor). Roles 1+4 cannot overlap; 2+3 can."
                         : SelectedRoomType.isParkingRamp
@@ -964,7 +1082,8 @@ namespace BuildATower
             if (!Input.GetMouseButtonDown(0) ||
                 _draggingLobby ||
                 _draggingElevator ||
-                _draggingElevatorEdge)
+                _draggingElevatorEdge ||
+                _draggingScaffold)
                 return;
 
             if (CurrentTool == BuildTool.Select)
@@ -989,6 +1108,9 @@ namespace BuildATower
                 TryDemolishAt(cell);
                 return;
             }
+
+            if (CurrentTool == BuildTool.Scaffold)
+                return; // handled by HandleScaffoldDrag
 
             if (IsLobbyToolActive()) return; // handled by drag extend
             TryPlaceSelected(cell);

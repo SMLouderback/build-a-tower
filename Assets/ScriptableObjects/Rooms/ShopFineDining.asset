@@ -1,4 +1,4 @@
-%YAML 1.1
+﻿%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!114 &11400000
 MonoBehaviour:
@@ -16,10 +16,10 @@ MonoBehaviour:
   displayName: Fine Dining
   category: 4
   size: {x: 4, y: 1}
-  buildCost: 200000
+  buildCost: 290000
   placeholderColor: {r: 0.72, g: 0.22, b: 0.28, a: 1}
   incomeModel: 4
-  baseIncome: 200
+  baseIncome: 100
   noiseOutput: 0.45
   noiseSensitivity: 0
   requiresHousekeeping: 0

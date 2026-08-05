@@ -52,6 +52,8 @@ namespace BuildATower
                 lines.Add(upkeep);
 
             AppendHotelSelectionLines(lines, type);
+            AppendOfficeSelectionLines(lines, type);
+            AppendCondoSelectionLines(lines, type);
 
             switch (type.incomeModel)
             {
@@ -134,6 +136,17 @@ namespace BuildATower
             var band = type.luxuryBand == LuxuryBand.None ? LuxuryBand.Base : type.luxuryBand;
             lines.Add($"Band: {band}");
             lines.Add($"Desks: {System.Math.Max(1, type.maxOccupants)}");
+        }
+
+        /// <summary>Band + occupants for condo tool/selection details.</summary>
+        public static void AppendCondoSelectionLines(List<string> lines, RoomTypeSO type)
+        {
+            if (lines == null || type == null || type.category != RoomCategory.Condo)
+                return;
+
+            var band = type.luxuryBand == LuxuryBand.None ? LuxuryBand.Base : type.luxuryBand;
+            lines.Add($"Band: {band}");
+            lines.Add($"Occupants: {System.Math.Max(1, type.maxOccupants)}");
         }
 
         /// <summary>Returns null for room types that carry no recurring upkeep.</summary>

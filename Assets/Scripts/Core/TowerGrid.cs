@@ -885,6 +885,33 @@ namespace BuildATower
             _rooms.Remove(room);
         }
 
+        public const int ScaffoldBuildCost = 750;
+
+        /// <summary>
+        /// Player-placed 1x1 scaffolding: empty supported cell, not lobby floor.
+        /// </summary>
+        public bool CanPlaceScaffold(Vector2Int cell)
+        {
+            if (!HasLobby) return false;
+            if (cell.y == LobbyFloor) return false;
+            if (cell.x < MinX || cell.x > MaxX) return false;
+            if (_cells.ContainsKey(cell)) return false;
+            // Match scaffolding type: above-ground and basement allowed.
+            if (cell.y == LobbyFloor) return false;
+            return HasSupportFromAdjacentLevel(cell, new HashSet<Vector2Int> { cell });
+        }
+
+        public bool TryPlaceScaffold(Vector2Int cell, out RoomInstance room)
+        {
+            room = null;
+            if (!CanPlaceScaffold(cell)) return false;
+            if (_scaffoldingType != null)
+                _scaffoldingType.buildCost = ScaffoldBuildCost;
+            room = new RoomInstance(_nextId++, _scaffoldingType, cell, Vector2Int.one);
+            Register(room);
+            return true;
+        }
+
         static RoomTypeSO CreateScaffoldingType()
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
@@ -892,7 +919,7 @@ namespace BuildATower
             so.displayName = "Scaffolding";
             so.category = RoomCategory.Structure;
             so.size = Vector2Int.one;
-            so.buildCost = 0;
+            so.buildCost = ScaffoldBuildCost;
             so.isScaffolding = true;
             so.allowAboveGround = true;
             so.allowBasement = true;

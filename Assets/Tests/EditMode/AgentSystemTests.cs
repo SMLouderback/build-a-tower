@@ -52,7 +52,7 @@ namespace BuildATower.Tests
             {
                 notifiedRooms.Add(room);
                 economy.TrySellCondo(room, wallet);
-            });
+            }, currentStars: 0, averageCrime: 0f);
 
             var buyer = agents.Agents.Single();
             Assert.AreEqual(AgentPhase.Outside, buyer.Phase);
@@ -382,8 +382,9 @@ namespace BuildATower.Tests
         static RoomTypeSO Condo()
         {
             var room = ScriptableObject.CreateInstance<RoomTypeSO>();
-            room.id = "condo";
+            room.id = CondoLuxury.BaseId;
             room.category = RoomCategory.Condo;
+            room.luxuryBand = LuxuryBand.Base;
             room.size = Vector2Int.one;
             room.maxOccupants = 1;
             room.allowAboveGround = true;

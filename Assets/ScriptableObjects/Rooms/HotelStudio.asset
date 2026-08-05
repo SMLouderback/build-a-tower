@@ -1,4 +1,4 @@
-%YAML 1.1
+﻿%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!114 &11400000
 MonoBehaviour:
@@ -16,10 +16,10 @@ MonoBehaviour:
   displayName: Studio Hotel
   category: 3
   size: {x: 5, y: 1}
-  buildCost: 55000
+  buildCost: 80000
   placeholderColor: {r: 0.66, g: 0.42, b: 0.86, a: 1}
   incomeModel: 2
-  baseIncome: 4200
+  baseIncome: 1300
   noiseOutput: 0
   noiseSensitivity: 0
   requiresHousekeeping: 1

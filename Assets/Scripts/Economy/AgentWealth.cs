@@ -116,6 +116,21 @@ namespace BuildATower
                 };
             }
 
+            if (homeType.category == RoomCategory.Condo && homeType.luxuryBand != LuxuryBand.None)
+            {
+                return homeType.luxuryBand switch
+                {
+                    LuxuryBand.Base => WealthBand.Basic,
+                    LuxuryBand.Mid => WealthBand.Mid,
+                    LuxuryBand.Upper =>
+                        string.Equals(homeType.id, CondoLuxury.UpperPenthouseId, StringComparison.Ordinal) ||
+                        string.Equals(homeType.id, CondoLuxury.UpperCornerId, StringComparison.Ordinal)
+                            ? (rng.Next(2) == 0 ? WealthBand.Upper : WealthBand.Premium)
+                            : WealthBand.Upper,
+                    _ => WealthBand.Mid
+                };
+            }
+
             // Condo + legacy office without luxuryBand:
             if (homeType.requiredStars < 2)
                 // 30% Basic / 70% Mid

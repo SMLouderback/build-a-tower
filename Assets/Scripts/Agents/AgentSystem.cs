@@ -204,15 +204,8 @@ namespace BuildATower
 
                 if (role == AgentRole.CondoResident &&
                     !room.CondoSold &&
-                    existing == 0 &&
-                    !CanReachCondoFromLobby(grid, room))
-                    continue;
-
-                if (role == AgentRole.CondoResident &&
-                    !room.CondoSold &&
-                    existing == 0 &&
-                    !PassesCondoDemand(room, currentStars, climateOffset))
-                    continue;
+                    existing == 0)
+                    continue; // vacancies filled in FillCondoVacancies
 
                 var want = Mathf.Max(1, room.Type.maxOccupants);
                 if (role == AgentRole.OfficeWorker)
@@ -258,6 +251,7 @@ namespace BuildATower
             var climateStep = _climate?.Step ?? MarketClimate.Normal;
             FillOfficeVacancies(grid, currentStars, averageCrime, climateStep, reservedDesks);
             FillHotelVacancies(grid, currentStars, averageCrime, climateStep);
+            FillCondoVacancies(grid, currentStars, averageCrime, climateStep, climateOffset);
 
             // Desk reservation / condo stock may have changed — allow Tick to re-run AssignCondoJobs.
             _condoJobsAssignedDay = -1;
@@ -494,6 +488,130 @@ namespace BuildATower
             return type.luxuryBand == LuxuryBand.None ? LuxuryBand.Base : type.luxuryBand;
         }
 
+        /// <summary>
+        /// Rolls buyer wealth and sells matching empty unsold condos (full household) until
+        /// stock is filled or attempt budget is exhausted.
+        /// </summary>
+        void FillCondoVacancies(
+            TowerGrid grid, int stars, float averageCrime, int climateStep, int climateOffset)
+        {
+            if (grid == null) return;
+
+            var vacancies = CountUnsoldEmptyCondos(grid);
+            if (vacancies <= 0) return;
+
+            var maxAttempts = System.Math.Max(vacancies * 16, 16);
+            for (var attempt = 0; attempt < maxAttempts && vacancies > 0; attempt++)
+            {
+                var wealth = LivingLuxury.RollLivingBand(stars, averageCrime, climateStep, _rng);
+                if (!TryFindCondoForBuyer(
+                        grid, wealth, climateStep, climateOffset, stars, _rng, out var room))
+                    continue;
+
+                var want = System.Math.Max(1, room.Type.maxOccupants);
+                for (var slot = 0; slot < want; slot++)
+                {
+                    var homeCell = HomeCell(room, slot);
+                    var agent = new Agent(_nextId++, AgentRole.CondoResident, room, homeCell)
+                    {
+                        HomeSlot = slot,
+                        Wealth = wealth
+                    };
+                    ConfigureSchedule(agent);
+                    _agents.Add(agent);
+                }
+
+                foreach (var agent in _agents)
+                {
+                    if (!ReferenceEquals(agent.HomeRoom, room) ||
+                        agent.Phase != AgentPhase.Moving ||
+                        agent.Path == null ||
+                        agent.Path.Count > 0)
+                        continue;
+
+                    ReplanTrip(agent, allowReplan: true);
+                }
+
+                vacancies--;
+            }
+        }
+
+        int CountUnsoldEmptyCondos(TowerGrid grid)
+        {
+            var n = 0;
+            foreach (var room in grid.Rooms)
+            {
+                if (!IsClaimableUnsoldCondo(room)) continue;
+                if (CountHomeOccupants(room) > 0) continue;
+                n++;
+            }
+
+            return n;
+        }
+
+        /// <summary>
+        /// Picks an empty unsold reachable condo that <see cref="CondoLuxury.AcceptsBuyer"/> for
+        /// <paramref name="wealth"/>, passes price-tier demand with luxury climate bias, then
+        /// applies <see cref="LivingLuxury.CheckInFillMultiplier"/>. Premium prefers penthouse.
+        /// </summary>
+        public bool TryFindCondoForBuyer(
+            TowerGrid grid,
+            WealthBand wealth,
+            int climateStep,
+            int climateOffset,
+            int currentStars,
+            System.Random rng,
+            out RoomInstance room)
+        {
+            room = null;
+            if (grid == null || rng == null) return false;
+
+            RoomInstance best = null;
+            var bestRank = int.MaxValue;
+
+            foreach (var candidate in grid.Rooms)
+            {
+                if (!IsClaimableUnsoldCondo(candidate)) continue;
+                if (CountHomeOccupants(candidate) > 0) continue;
+                if (!CanReachCondoFromLobby(grid, candidate)) continue;
+                if (!PassesCondoDemand(candidate, currentStars, climateOffset)) continue;
+
+                var band = EffectiveCondoLuxuryBand(candidate.Type);
+                if (!CondoLuxury.AcceptsBuyer(band, wealth, candidate.Type.id))
+                    continue;
+
+                var rank = CondoLuxury.PremiumUnitPreferenceRank(wealth, candidate.Type.id);
+                if (rank >= bestRank) continue;
+                bestRank = rank;
+                best = candidate;
+            }
+
+            if (best == null) return false;
+
+            var fill = LivingLuxury.CheckInFillMultiplier(EffectiveCondoLuxuryBand(best.Type), climateStep);
+            if (fill < 1f && rng.NextDouble() >= fill)
+                return false;
+
+            room = best;
+            return true;
+        }
+
+        static LuxuryBand EffectiveCondoLuxuryBand(RoomTypeSO type)
+        {
+            if (ReferenceEquals(type, null)) return LuxuryBand.None;
+            return type.luxuryBand == LuxuryBand.None ? LuxuryBand.Base : type.luxuryBand;
+        }
+
+        static bool IsClaimableUnsoldCondo(RoomInstance room)
+        {
+            if (room == null || ReferenceEquals(room.Type, null)) return false;
+            if (room.Type.category != RoomCategory.Condo) return false;
+            if (room.IsBroken) return false;
+            if (room.CondoSold) return false;
+            if (room.Type.maxOccupants <= 0) return false;
+            return true;
+        }
+
         /// <summary>Lower is better. Premium prefers suite, then king.</summary>
         static int PremiumRoomPreferenceRank(WealthBand wealth, string roomId)
         {
@@ -535,7 +653,20 @@ namespace BuildATower
 
         bool PassesCondoDemand(RoomInstance room, int currentStars, int climateOffset = 0)
         {
-            var chance = PricePricing.DemandChance(room.PriceTier, currentStars, climateOffset);
+            var offset = EconomySystem.EffectiveDemandClimateOffset(room?.Type, climateOffset);
+            var climateStep = System.Math.Clamp(
+                MarketClimate.Normal + climateOffset,
+                MarketClimate.Recession,
+                MarketClimate.Boom);
+            var chance = PricePricing.DemandChance(room.PriceTier, currentStars, offset);
+            if (room?.Type != null && room.Type.category == RoomCategory.Condo)
+            {
+                var steps = PricePricing.OverpriceSteps(room.PriceTier, currentStars, offset);
+                var floor = LivingLuxury.DemandChanceFloor(room.Type.luxuryBand, climateStep, steps);
+                if (floor > chance)
+                    chance = floor;
+            }
+
             if (chance >= 1f) return true;
             if (chance <= 0f) return false;
             return _rng.NextDouble() < chance;

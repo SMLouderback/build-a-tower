@@ -1,0 +1,125 @@
+.screen {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  padding: 48px 32px;
+  background-color: rgb(18, 32, 42);
+  align-items: center;
+  justify-content: center;
+}
+
+.brand {
+  color: rgb(242, 214, 140);
+  font-size: 56px;
+  -unity-font-style: bold;
+  margin-bottom: 8px;
+  -unity-text-align: middle-center;
+}
+
+.brand-compact {
+  font-size: 28px;
+  margin-bottom: 12px;
+}
+
+.compact-header {
+  padding-top: 24px;
+  padding-bottom: 24px;
+  justify-content: flex-start;
+}
+
+.subtitle {
+  color: rgb(180, 198, 210);
+  font-size: 16px;
+  margin-bottom: 36px;
+  -unity-text-align: middle-center;
+  white-space: normal;
+  max-width: 520px;
+}
+
+.panel {
+  width: 420px;
+  max-width: 90%;
+  padding: 20px;
+  background-color: rgba(8, 16, 24, 0.88);
+  border-radius: 10px;
+  border-width: 1px;
+  border-color: rgba(242, 214, 140, 0.35);
+  align-items: stretch;
+}
+
+.panel-title {
+  color: rgb(242, 214, 140);
+  font-size: 22px;
+  -unity-font-style: bold;
+  margin-bottom: 12px;
+  -unity-text-align: middle-center;
+}
+
+.menu-button {
+  height: 48px;
+  margin-top: 6px;
+  margin-bottom: 2px;
+  font-size: 16px;
+  background-color: rgb(36, 58, 72);
+  color: rgb(236, 242, 248);
+  border-radius: 6px;
+  border-width: 1px;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.menu-button:hover {
+  background-color: rgb(48, 78, 96);
+}
+
+.difficulty-button {
+  height: auto;
+  min-height: 0;
+  margin-top: 4px;
+  margin-bottom: 0;
+  padding: 6px 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.diff-name {
+  color: rgb(236, 242, 248);
+  font-size: 15px;
+  -unity-font-style: bold;
+  margin: 0;
+  padding: 0;
+}
+
+.diff-hint {
+  color: rgb(150, 168, 180);
+  font-size: 11px;
+  margin: 1px 0 0 0;
+  padding: 0;
+  white-space: normal;
+}
+
+.secondary {
+  background-color: rgb(28, 40, 50);
+  margin-top: 14px;
+}
+
+.body {
+  color: rgb(210, 220, 228);
+  font-size: 14px;
+  white-space: normal;
+  margin-bottom: 10px;
+}
+
+.dialog {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  z-index: 10;
+}
+
+.hidden {
+  display: none;
+}

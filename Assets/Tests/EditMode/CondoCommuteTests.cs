@@ -332,8 +332,10 @@ namespace BuildATower.Tests
         static RoomTypeSO Condo()
         {
             var room = ScriptableObject.CreateInstance<RoomTypeSO>();
-            room.id = "condo";
+            room.id = CondoLuxury.MidStandardId;
             room.category = RoomCategory.Condo;
+            room.luxuryBand = LuxuryBand.Mid;
+            room.requiredStars = 2;
             room.size = Vector2Int.one;
             room.maxOccupants = 1;
             room.allowAboveGround = true;

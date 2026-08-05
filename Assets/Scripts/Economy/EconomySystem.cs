@@ -98,7 +98,8 @@ namespace BuildATower
                     HasHomeAgent(room, agents) &&
                     PassesDemand(room, currentStars, climateOffset))
                 {
-                    var amount = PricePricing.ScaledIncome(room.Type.baseIncome, room.PriceTier);
+                    var amount = BuildEconomy.ApplyIncome(
+                        PricePricing.ScaledIncome(room.Type.baseIncome, room.PriceTier));
                     LastIncome += amount;
                     _lastIncomeByRoom[room.InstanceId] = amount;
                     room.RecordLifetimeIncome(amount);
@@ -108,7 +109,7 @@ namespace BuildATower
                 {
                     if (!incomeBlocked && room.ShopEarningsToday > 0)
                     {
-                        var amount = room.ShopEarningsToday;
+                        var amount = BuildEconomy.ApplyIncome(room.ShopEarningsToday);
                         LastIncome += amount;
                         if (_lastIncomeByRoom.TryGetValue(room.InstanceId, out var existing))
                             _lastIncomeByRoom[room.InstanceId] = existing + amount;
@@ -153,6 +154,7 @@ namespace BuildATower
                         climateSpendMult);
                     if (amount <= 0) continue;
 
+                    amount = BuildEconomy.ApplyIncome(amount);
                     LastIncome += amount;
                     if (_lastIncomeByRoom.TryGetValue(room.InstanceId, out var existingMeetings))
                         _lastIncomeByRoom[room.InstanceId] = existingMeetings + amount;
@@ -167,6 +169,7 @@ namespace BuildATower
                 var eventAmount = conference.TakePendingEventIncome(out var eventHallId);
                 if (eventAmount > 0)
                 {
+                    eventAmount = BuildEconomy.ApplyIncome(eventAmount);
                     LastIncome += eventAmount;
                     var eventHall = FindRoomByInstanceId(grid, eventHallId);
                     if (eventHall != null)
@@ -254,7 +257,8 @@ namespace BuildATower
                 room.CondoSold)
                 return false;
 
-            var amount = PricePricing.ScaledIncome(room.Type.baseIncome, room.PriceTier);
+            var amount = BuildEconomy.ApplyIncome(
+                PricePricing.ScaledIncome(room.Type.baseIncome, room.PriceTier));
             wallet.Add(amount);
             room.CondoSold = true;
             room.RecordLifetimeIncome(amount);
@@ -264,14 +268,16 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Climate offset fed into demand/overprice for a room. Hotels and offices add
+        /// Climate offset fed into demand/overprice for a room. Hotels, offices, and condos add
         /// <see cref="LivingLuxury.LuxuryClimateBias"/> for the inferred climate step.
         /// </summary>
         public static int EffectiveDemandClimateOffset(RoomTypeSO type, int climateOffset)
         {
             var offset = climateOffset;
             if (type != null &&
-                (type.category == RoomCategory.Hotel || type.category == RoomCategory.Office))
+                (type.category == RoomCategory.Hotel ||
+                 type.category == RoomCategory.Office ||
+                 type.category == RoomCategory.Condo))
             {
                 var climateStep = Math.Clamp(
                     MarketClimate.Normal + climateOffset,
@@ -294,7 +300,9 @@ namespace BuildATower
             var chance = PricePricing.DemandChance(room.PriceTier, currentStars, offset);
 
             if (room?.Type != null &&
-                (room.Type.category == RoomCategory.Hotel || room.Type.category == RoomCategory.Office))
+                (room.Type.category == RoomCategory.Hotel ||
+                 room.Type.category == RoomCategory.Office ||
+                 room.Type.category == RoomCategory.Condo))
             {
                 var steps = PricePricing.OverpriceSteps(room.PriceTier, currentStars, offset);
                 var floor = LivingLuxury.DemandChanceFloor(room.Type.luxuryBand, climateStep, steps);

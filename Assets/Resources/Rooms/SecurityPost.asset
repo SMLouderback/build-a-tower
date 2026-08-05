@@ -1,4 +1,4 @@
-%YAML 1.1
+﻿%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!114 &11400000
 MonoBehaviour:
@@ -16,7 +16,7 @@ MonoBehaviour:
   displayName: Security Post
   category: 7
   size: {x: 2, y: 1}
-  buildCost: 35000
+  buildCost: 51000
   placeholderColor: {r: 0.25, g: 0.3, b: 0.45, a: 1}
   incomeModel: 0
   baseIncome: 0

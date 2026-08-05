@@ -1,0 +1,60 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+  <Style src="MainMenu.uss" />
+  <ui:VisualElement name="screen" class="screen">
+    <ui:Label name="brand-title" text="Build-A-Tower" class="brand" />
+    <ui:Label name="subtitle" text="Raise a skyscraper. House tenants. Chase stars." class="subtitle" />
+
+    <ui:VisualElement name="panel-root" class="panel">
+      <ui:Button name="btn-new-game" text="New Game" class="menu-button" />
+      <ui:Button name="btn-save-game" text="Save Game" class="menu-button" />
+      <ui:Button name="btn-load-game" text="Load Game" class="menu-button" />
+      <ui:Button name="btn-contact" text="Contact Us" class="menu-button" />
+      <ui:Button name="btn-about" text="About" class="menu-button" />
+    </ui:VisualElement>
+
+    <ui:VisualElement name="panel-difficulty" class="panel hidden">
+      <ui:Label text="Choose difficulty" class="panel-title" />
+      <ui:Button name="btn-diff-sandbox" class="menu-button difficulty-button">
+        <ui:Label text="Sandbox" class="diff-name" />
+        <ui:Label text="Free builds — test layouts without money pressure." class="diff-hint" />
+      </ui:Button>
+      <ui:Button name="btn-diff-easy" class="menu-button difficulty-button">
+        <ui:Label text="Easy" class="diff-name" />
+        <ui:Label text="More starting cash; cheaper builds; stronger income." class="diff-hint" />
+      </ui:Button>
+      <ui:Button name="btn-diff-normal" class="menu-button difficulty-button">
+        <ui:Label text="Normal" class="diff-name" />
+        <ui:Label text="Tuned baseline." class="diff-hint" />
+      </ui:Button>
+      <ui:Button name="btn-diff-hard" class="menu-button difficulty-button">
+        <ui:Label text="Hard" class="diff-name" />
+        <ui:Label text="Tighter cash; costlier builds; weaker income." class="diff-hint" />
+      </ui:Button>
+      <ui:Button name="btn-diff-extreme" class="menu-button difficulty-button">
+        <ui:Label text="Extreme" class="diff-name" />
+        <ui:Label text="Scarce cash; expensive builds; lean income." class="diff-hint" />
+      </ui:Button>
+      <ui:Button name="btn-diff-back" text="Back" class="menu-button secondary" />
+    </ui:VisualElement>
+
+    <ui:VisualElement name="panel-contact" class="panel hidden">
+      <ui:Label text="Contact Us" class="panel-title" />
+      <ui:Button name="btn-email" text="escapemobileproductions@gmail.com" class="menu-button" />
+      <ui:Button name="btn-website" text="https://escapeproductions.biz/" class="menu-button" />
+      <ui:Button name="btn-contact-back" text="Back" class="menu-button secondary" />
+    </ui:VisualElement>
+
+    <ui:VisualElement name="panel-about" class="panel hidden">
+      <ui:Label text="About" class="panel-title" />
+      <ui:Label name="about-blurb" text="Build-A-Tower is a SimTower-inspired skyscraper builder. Place rooms, house tenants and guests, manage transit, and grow your star rating." class="body" />
+      <ui:Label name="about-version" text="Version" class="body" />
+      <ui:Label name="about-copyright" text="© 2026 Escape Productions. All rights reserved." class="body" />
+      <ui:Button name="btn-about-back" text="Back" class="menu-button secondary" />
+    </ui:VisualElement>
+
+    <ui:VisualElement name="panel-dialog" class="panel dialog hidden">
+      <ui:Label name="dialog-message" text="Not available yet." class="body" />
+      <ui:Button name="btn-dialog-ok" text="OK" class="menu-button" />
+    </ui:VisualElement>
+  </ui:VisualElement>
+</ui:UXML>

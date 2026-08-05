@@ -1,4 +1,4 @@
-%YAML 1.1
+﻿%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!114 &11400000
 MonoBehaviour:
@@ -16,10 +16,10 @@ MonoBehaviour:
   displayName: Upper King
   category: 3
   size: {x: 5, y: 1}
-  buildCost: 100000
+  buildCost: 145000
   placeholderColor: {r: 0.44, g: 0.18, b: 0.66, a: 1}
   incomeModel: 2
-  baseIncome: 8000
+  baseIncome: 2400
   noiseOutput: 0
   noiseSensitivity: 0
   requiresHousekeeping: 1

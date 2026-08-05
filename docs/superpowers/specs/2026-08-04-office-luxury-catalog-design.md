@@ -4,7 +4,7 @@
 **Status:** Implemented  
 **Depends on:** Hotel luxury + four wealth bands (`luxuryBand`, `HotelLuxury` / climate bias, `Agent.Wealth`); price tiers + climate; office desk sync  
 **Parent:** Deeper living-room ladders → demand ledger → amenity heatmaps  
-**Follow-ups (tabled):** Condo luxury catalog; multi-room firm tenants; demand graph UI; proximity/noise/amenity heatmaps; cyclical office→jobs→condo/hotel demand stocks; numeric rebalance of build/rent
+**Follow-ups (tabled):** Multi-room firm tenants; demand graph UI; proximity/noise/amenity heatmaps; cyclical office→jobs→condo/hotel demand stocks; numeric rebalance of build/rent
 
 ## 1. Goals
 

@@ -118,6 +118,34 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void ResolveBand_condo_mid_is_mid()
+        {
+            var so = Living(RoomCategory.Condo, requiredStars: 2, luxuryBand: LuxuryBand.Mid);
+            Assert.AreEqual(WealthBand.Mid,
+                AgentWealth.ResolveBand(AgentRole.CondoResident, so, new System.Random(1)));
+        }
+
+        [Test]
+        public void ResolveBand_condo_penthouse_mixes_upper_premium()
+        {
+            var so = Living(RoomCategory.Condo, CondoLuxury.UpperPenthouseId,
+                requiredStars: 3, luxuryBand: LuxuryBand.Upper);
+            var upper = 0;
+            var premium = 0;
+            var rng = new System.Random(42);
+            for (var i = 0; i < 400; i++)
+            {
+                var band = AgentWealth.ResolveBand(AgentRole.CondoResident, so, rng);
+                if (band == WealthBand.Upper) upper++;
+                else if (band == WealthBand.Premium) premium++;
+                else Assert.Fail("unexpected band " + band);
+            }
+
+            Assert.That(upper, Is.InRange(140, 260));
+            Assert.That(premium, Is.InRange(140, 260));
+        }
+
+        [Test]
         public void ResolveBand_office_condo_low_stars_mix()
         {
             var office = Living(RoomCategory.Office);
