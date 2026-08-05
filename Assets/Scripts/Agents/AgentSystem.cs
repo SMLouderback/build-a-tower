@@ -225,6 +225,7 @@ namespace BuildATower
                             break;
                         existing--;
                     }
+                    continue; // vacancies filled in FillOfficeVacancies
                 }
 
                 while (existing < want)
@@ -255,10 +256,139 @@ namespace BuildATower
             }
 
             var climateStep = _climate?.Step ?? MarketClimate.Normal;
+            FillOfficeVacancies(grid, currentStars, averageCrime, climateStep, reservedDesks);
             FillHotelVacancies(grid, currentStars, averageCrime, climateStep);
 
             // Desk reservation / condo stock may have changed — allow Tick to re-run AssignCondoJobs.
             _condoJobsAssignedDay = -1;
+        }
+
+        /// <summary>
+        /// Rolls worker wealth and claims matching vacant office desks until capacity is filled
+        /// or attempt budget is exhausted. Respects condo <paramref name="reservedDesks"/>.
+        /// </summary>
+        void FillOfficeVacancies(
+            TowerGrid grid,
+            int stars,
+            float averageCrime,
+            int climateStep,
+            Dictionary<int, int> reservedDesks)
+        {
+            if (grid == null) return;
+
+            var vacancies = CountOfficeVacancies(grid, reservedDesks);
+            if (vacancies <= 0) return;
+
+            // Extra attempts cover mismatched wealth rolls (e.g. Premium vs Base-only tower).
+            var maxAttempts = System.Math.Max(vacancies * 8, 8);
+            for (var attempt = 0; attempt < maxAttempts && vacancies > 0; attempt++)
+            {
+                var wealth = LivingLuxury.RollLivingBand(stars, averageCrime, climateStep, _rng);
+                if (!TryFindOfficeDeskForWorker(
+                        grid, wealth, climateStep, _rng, reservedDesks, out var room, out var slot))
+                    continue;
+
+                var homeCell = HomeCell(room, slot);
+                var agent = new Agent(_nextId++, AgentRole.OfficeWorker, room, homeCell)
+                {
+                    HomeSlot = slot,
+                    Wealth = wealth
+                };
+                ConfigureSchedule(agent);
+                _agents.Add(agent);
+                vacancies--;
+            }
+        }
+
+        int CountOfficeVacancies(TowerGrid grid, Dictionary<int, int> reservedDesks)
+        {
+            var vacancies = 0;
+            foreach (var room in grid.Rooms)
+            {
+                if (!IsClaimableOffice(room)) continue;
+                var reserved = 0;
+                if (reservedDesks != null)
+                    reservedDesks.TryGetValue(room.InstanceId, out reserved);
+                var capacity = System.Math.Max(0, room.Type.maxOccupants - reserved);
+                var occupied = CountHomeOccupants(room);
+                if (occupied < capacity)
+                    vacancies += capacity - occupied;
+            }
+
+            return vacancies;
+        }
+
+        /// <summary>
+        /// Picks a vacant office desk that <see cref="OfficeLuxury.AcceptsWorker"/> for
+        /// <paramref name="wealth"/>, respecting condo reserved desks, then applies
+        /// <see cref="LivingLuxury.CheckInFillMultiplier"/> as an rng gate. Premium prefers
+        /// corporate floor then corner suite.
+        /// </summary>
+        public bool TryFindOfficeDeskForWorker(
+            TowerGrid grid,
+            WealthBand wealth,
+            int climateStep,
+            System.Random rng,
+            IReadOnlyDictionary<int, int> reservedDesks,
+            out RoomInstance room,
+            out int slot)
+        {
+            room = null;
+            slot = 0;
+            if (grid == null || rng == null) return false;
+
+            RoomInstance best = null;
+            var bestSlot = 0;
+            var bestRank = int.MaxValue;
+
+            foreach (var candidate in grid.Rooms)
+            {
+                if (!IsClaimableOffice(candidate)) continue;
+                var band = EffectiveOfficeLuxuryBand(candidate.Type);
+                if (!OfficeLuxury.AcceptsWorker(band, wealth, candidate.Type.id))
+                    continue;
+
+                var reserved = 0;
+                if (reservedDesks != null)
+                    reservedDesks.TryGetValue(candidate.InstanceId, out reserved);
+                var capacity = System.Math.Max(0, candidate.Type.maxOccupants - reserved);
+                var occupied = CountHomeOccupants(candidate);
+                if (occupied >= capacity) continue;
+
+                var rank = OfficeLuxury.PremiumDeskPreferenceRank(wealth, candidate.Type.id);
+                if (rank >= bestRank) continue;
+                bestRank = rank;
+                best = candidate;
+                bestSlot = occupied;
+            }
+
+            if (best == null) return false;
+
+            var fill = LivingLuxury.CheckInFillMultiplier(EffectiveOfficeLuxuryBand(best.Type), climateStep);
+            if (fill < 1f && rng.NextDouble() >= fill)
+                return false;
+
+            room = best;
+            slot = bestSlot;
+            return true;
+        }
+
+        static LuxuryBand EffectiveOfficeLuxuryBand(RoomTypeSO type)
+        {
+            if (ReferenceEquals(type, null)) return LuxuryBand.None;
+            // Legacy unbanded office assets behave as Base until the catalog lands.
+            return type.luxuryBand == LuxuryBand.None ? LuxuryBand.Base : type.luxuryBand;
+        }
+
+        static bool IsClaimableOffice(RoomInstance room)
+        {
+            // Use ReferenceEquals: UnityEngine.Object.== is true for native-uninitialized SOs
+            // (FormatterServices / net8 hosts), which would false-negative claimable checks.
+            if (room == null || ReferenceEquals(room.Type, null)) return false;
+            if (room.Type.category != RoomCategory.Office) return false;
+            if (room.IsBroken) return false;
+            if (room.Type.maxOccupants <= 0) return false;
+            return true;
         }
 
         /// <summary>
