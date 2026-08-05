@@ -302,6 +302,19 @@ namespace BuildATower.Tests
             Assert.AreEqual(2, EconomySystem.EffectiveDemandClimateOffset(HotelBase(), climateOffset: 2));
         }
 
+        [Test]
+        public void EffectiveDemandClimateOffset_office_upper_recession_applies_bias()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.category = RoomCategory.Office;
+            so.luxuryBand = LuxuryBand.Upper;
+            var climateOffset = MarketClimate.Recession - MarketClimate.Normal;
+            var effective = EconomySystem.EffectiveDemandClimateOffset(so, climateOffset);
+            Assert.AreEqual(
+                climateOffset + LivingLuxury.LuxuryClimateBias(LuxuryBand.Upper, MarketClimate.Recession),
+                effective);
+        }
+
         RoomTypeSO Housekeeping()
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();

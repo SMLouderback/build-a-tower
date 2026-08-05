@@ -264,19 +264,20 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Climate offset fed into demand/overprice for a room. Hotels add
-        /// <see cref="HotelLuxury.LuxuryClimateBias"/> for the inferred climate step.
+        /// Climate offset fed into demand/overprice for a room. Hotels and offices add
+        /// <see cref="LivingLuxury.LuxuryClimateBias"/> for the inferred climate step.
         /// </summary>
         public static int EffectiveDemandClimateOffset(RoomTypeSO type, int climateOffset)
         {
             var offset = climateOffset;
-            if (type != null && type.category == RoomCategory.Hotel)
+            if (type != null &&
+                (type.category == RoomCategory.Hotel || type.category == RoomCategory.Office))
             {
                 var climateStep = Math.Clamp(
                     MarketClimate.Normal + climateOffset,
                     MarketClimate.Recession,
                     MarketClimate.Boom);
-                offset += HotelLuxury.LuxuryClimateBias(type.luxuryBand, climateStep);
+                offset += LivingLuxury.LuxuryClimateBias(type.luxuryBand, climateStep);
             }
 
             return offset;
@@ -292,10 +293,11 @@ namespace BuildATower
 
             var chance = PricePricing.DemandChance(room.PriceTier, currentStars, offset);
 
-            if (room?.Type != null && room.Type.category == RoomCategory.Hotel)
+            if (room?.Type != null &&
+                (room.Type.category == RoomCategory.Hotel || room.Type.category == RoomCategory.Office))
             {
                 var steps = PricePricing.OverpriceSteps(room.PriceTier, currentStars, offset);
-                var floor = HotelLuxury.DemandChanceFloor(room.Type.luxuryBand, climateStep, steps);
+                var floor = LivingLuxury.DemandChanceFloor(room.Type.luxuryBand, climateStep, steps);
                 if (floor > chance)
                     chance = floor;
             }
