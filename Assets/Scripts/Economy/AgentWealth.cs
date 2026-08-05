@@ -101,6 +101,22 @@ namespace BuildATower
 
         static WealthBand ResolveOfficeCondoBand(RoomTypeSO homeType, Random rng)
         {
+            if (homeType.category == RoomCategory.Office && homeType.luxuryBand != LuxuryBand.None)
+            {
+                return homeType.luxuryBand switch
+                {
+                    LuxuryBand.Base => WealthBand.Basic,
+                    LuxuryBand.Mid => WealthBand.Mid,
+                    LuxuryBand.Upper =>
+                        string.Equals(homeType.id, OfficeLuxury.UpperFloorId, StringComparison.Ordinal) ||
+                        string.Equals(homeType.id, OfficeLuxury.UpperCornerId, StringComparison.Ordinal)
+                            ? (rng.Next(2) == 0 ? WealthBand.Upper : WealthBand.Premium)
+                            : WealthBand.Upper,
+                    _ => WealthBand.Mid
+                };
+            }
+
+            // Condo + legacy office without luxuryBand:
             if (homeType.requiredStars < 2)
                 // 30% Basic / 70% Mid
                 return rng.NextDouble() < 0.30 ? WealthBand.Basic : WealthBand.Mid;

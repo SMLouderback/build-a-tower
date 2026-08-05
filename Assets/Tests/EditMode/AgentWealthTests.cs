@@ -110,6 +110,14 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void ResolveBand_office_mid_is_mid()
+        {
+            var so = Living(RoomCategory.Office, requiredStars: 2, luxuryBand: LuxuryBand.Mid);
+            var rng = new System.Random(1);
+            Assert.AreEqual(WealthBand.Mid, AgentWealth.ResolveBand(AgentRole.OfficeWorker, so, rng));
+        }
+
+        [Test]
         public void ResolveBand_office_condo_low_stars_mix()
         {
             var office = Living(RoomCategory.Office);
