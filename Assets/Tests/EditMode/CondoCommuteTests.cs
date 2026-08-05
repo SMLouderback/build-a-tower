@@ -27,10 +27,16 @@ namespace BuildATower.Tests
             router.Rebuild(grid);
             var agents = new AgentSystem(router);
 
-            agents.SyncHomes(grid, currentStars: 5);
+            const int totalDesks = 10;
+
+            // Mid offices + 2★ keep Mid-band hire mix healthy under wealth gating.
+            agents.SyncHomes(grid, currentStars: 2);
 
             var officeWorkersBefore = agents.Agents.Count(a => a.Role == AgentRole.OfficeWorker);
-            Assert.AreEqual(10, officeWorkersBefore, "Offices should fill fully before condo move-in.");
+            Assert.AreEqual(0, CondoEmployment.InTowerWanted(totalDesks, 0),
+                "No desks reserved before condo move-in.");
+            Assert.AreEqual(totalDesks, officeWorkersBefore,
+                "Mid offices should fill fully before condo move-in.");
 
             var condos = agents.Agents.Where(a => a.Role == AgentRole.CondoResident).ToList();
             Assert.AreEqual(4, condos.Count, "Expected four condo buyers with demand guaranteed.");
@@ -50,10 +56,14 @@ namespace BuildATower.Tests
 
             Assert.AreEqual(4, agents.Agents.Count(a => a.Role == AgentRole.CondoResident && a.HasMovedIn));
 
-            agents.SyncHomes(grid, currentStars: 5);
+            agents.SyncHomes(grid, currentStars: 2);
+
+            var inTowerWanted = CondoEmployment.InTowerWanted(totalDesks, 4);
+            Assert.AreEqual(2, inTowerWanted);
 
             var officeWorkers = agents.Agents.Where(a => a.Role == AgentRole.OfficeWorker).ToList();
-            Assert.AreEqual(8, officeWorkers.Count, "10 desks − 2 reserved → 8 OfficeWorkers.");
+            Assert.AreEqual(totalDesks - inTowerWanted, officeWorkers.Count,
+                "OfficeWorkers should fill hireable capacity after reservation.");
 
             var emptySeats = 0;
             foreach (var office in new[] { officeA, officeB })
@@ -62,7 +72,8 @@ namespace BuildATower.Tests
                 emptySeats += office.Type.maxOccupants - homeCount;
             }
 
-            Assert.AreEqual(2, emptySeats, "Reserved empty seats across offices should total inTowerWanted.");
+            Assert.AreEqual(inTowerWanted, emptySeats,
+                "Reserved empty seats across offices should total inTowerWanted.");
         }
 
         [Test]
@@ -308,8 +319,10 @@ namespace BuildATower.Tests
         static RoomTypeSO Office(int maxOccupants)
         {
             var room = ScriptableObject.CreateInstance<RoomTypeSO>();
-            room.id = "office";
+            room.id = OfficeLuxury.MidStandardId;
             room.category = RoomCategory.Office;
+            room.luxuryBand = LuxuryBand.Mid;
+            room.requiredStars = 2;
             room.size = new Vector2Int(9, 1);
             room.maxOccupants = maxOccupants;
             room.allowAboveGround = true;
