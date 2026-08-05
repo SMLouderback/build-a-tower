@@ -37,6 +37,14 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void LivingLuxury_climate_bias_matches_hotel_wrapper()
+        {
+            Assert.AreEqual(
+                HotelLuxury.LuxuryClimateBias(LuxuryBand.Upper, MarketClimate.Recession),
+                LivingLuxury.LuxuryClimateBias(LuxuryBand.Upper, MarketClimate.Recession));
+        }
+
+        [Test]
         public void CheckInFillMultiplier_upper_recession_low()
         {
             Assert.AreEqual(0.2f, HotelLuxury.CheckInFillMultiplier(LuxuryBand.Upper, MarketClimate.Recession), 0.0001f);
