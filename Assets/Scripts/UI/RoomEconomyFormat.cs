@@ -125,6 +125,17 @@ namespace BuildATower
             lines.Add($"Clean: {HotelLuxury.ResolveCleanMinutes(type):0.#} min");
         }
 
+        /// <summary>Band + desks for office tool/selection details.</summary>
+        public static void AppendOfficeSelectionLines(List<string> lines, RoomTypeSO type)
+        {
+            if (lines == null || type == null || type.category != RoomCategory.Office)
+                return;
+
+            var band = type.luxuryBand == LuxuryBand.None ? LuxuryBand.Base : type.luxuryBand;
+            lines.Add($"Band: {band}");
+            lines.Add($"Desks: {System.Math.Max(1, type.maxOccupants)}");
+        }
+
         /// <summary>Returns null for room types that carry no recurring upkeep.</summary>
         public static string UpkeepLine(RoomTypeSO type)
         {

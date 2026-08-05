@@ -103,7 +103,15 @@ namespace BuildATower
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelUpperStandard"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelUpperKing"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelUpperSuite"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficePremium"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeMicro"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeStudio"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeBase"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeMidStandard"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeMidClinic"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeMidTeam"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeUpperStandard"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeUpperCorner"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeUpperFloor"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopFastFood"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopRestaurant"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopRetail"));
@@ -965,6 +973,7 @@ namespace BuildATower
                 lines += $"\n{upkeep}";
             var hotelLines = new List<string>();
             RoomEconomyFormat.AppendHotelSelectionLines(hotelLines, room);
+            RoomEconomyFormat.AppendOfficeSelectionLines(hotelLines, room);
             foreach (var line in hotelLines)
                 lines += $"\n{line}";
             lines += $"\nSize {room.size.x}×{room.size.y}";
@@ -1018,6 +1027,15 @@ namespace BuildATower
                 if (room.id == "hotel_upper_standard") return "US";
                 if (room.id == "hotel_upper_king") return "UK";
                 if (room.id == "hotel_upper_suite") return "Up";
+                if (room.id == "office_micro") return "Om";
+                if (room.id == "office_studio") return "Os";
+                if (room.id == "office_base") return "Ob";
+                if (room.id == "office_mid_standard") return "Mo";
+                if (room.id == "office_mid_clinic") return "Cl";
+                if (room.id == "office_mid_team") return "Tb";
+                if (room.id == "office_upper_standard") return "Uo";
+                if (room.id == "office_upper_corner") return "Uc";
+                if (room.id == "office_upper_floor") return "Fl";
                 if (room.id.Contains("housekeeping")) return "Hk";
                 if (room.id.Contains("maintenance")) return "Mn";
                 if (room.id.Contains("security")) return "Sc";
@@ -1457,6 +1475,7 @@ namespace BuildATower
                 lines.Add(upkeep);
 
             RoomEconomyFormat.AppendHotelSelectionLines(lines, type);
+            RoomEconomyFormat.AppendOfficeSelectionLines(lines, type);
 
             return lines;
         }
@@ -1468,7 +1487,24 @@ namespace BuildATower
             if (displayName.StartsWith("Retail")) return "Retail";
             if (displayName.StartsWith("Stairs")) return "Stairs";
             if (displayName.StartsWith("Elevator")) return "Elevator";
-            if (displayName.StartsWith("Office")) return displayName.Contains("Premium") ? "Prem. Office" : "Office";
+            if (displayName.StartsWith("Office") || displayName.EndsWith("Office") ||
+                displayName.Contains("Suite") && displayName.Contains("Professional") ||
+                displayName == "Team Bay" || displayName == "Corner Suite" || displayName == "Corporate Floor" ||
+                displayName == "Micro Office" || displayName == "Studio Office" || displayName == "Small Office" ||
+                displayName == "Mid Office" || displayName == "Upper Office")
+            {
+                if (displayName == "Micro Office") return "Micro";
+                if (displayName == "Studio Office") return "Studio";
+                if (displayName == "Small Office") return "Small";
+                if (displayName == "Mid Office") return "Mid Ofc";
+                if (displayName == "Professional Suite") return "Clinic";
+                if (displayName == "Team Bay") return "Team";
+                if (displayName == "Upper Office") return "Upper";
+                if (displayName == "Corner Suite") return "Corner";
+                if (displayName == "Corporate Floor") return "Corp";
+                if (displayName.Contains("Premium")) return "Prem. Office";
+                return "Office";
+            }
             if (displayName.StartsWith("Condo")) return displayName.Contains("Premium") ? "Prem. Condo" : "Condo";
             return displayName;
         }
