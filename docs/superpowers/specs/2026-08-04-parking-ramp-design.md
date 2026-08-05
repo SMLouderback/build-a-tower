@@ -24,6 +24,7 @@
 | B1 parking | Always eligible (with Valet) |
 | B2+ parking | Needs ramp chain to B1 or Lobby **and** a contiguous parking link (lot touches that ramp, or touches parking that does) |
 | Agent pathing | People do **not** use ramps; spawn-at-stall arrivals unchanged when eligible |
+| Lobby extend | Parking ramps on Floor G are **lobby-overlapping transit** (like stairs/elevators) — lobby may still widen past a ramp entrance |
 
 ## Room
 

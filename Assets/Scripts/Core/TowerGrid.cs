@@ -71,7 +71,7 @@ namespace BuildATower
             {
                 var cell = new Vector2Int(x, LobbyFloor);
                 if (!_cells.TryGetValue(cell, out var occupant)) continue;
-                if (IsStairs(occupant) || IsElevator(occupant)) continue;
+                if (IsLobbyOverlappingTransit(occupant)) continue;
                 if (occupant.Type == null || !occupant.Type.isLobby) return false;
             }
 
@@ -105,18 +105,17 @@ namespace BuildATower
             addedCells = (newMaxX - newMinX + 1) - oldLobby.Size.x;
             if (addedCells <= 0) return false;
 
-            // Preserve transit rooms that punch through the lobby.
+            // Preserve transit rooms that punch through the lobby (stairs, elevators, parking ramps).
             var transitOnLobby = new List<RoomInstance>();
             foreach (var room in _rooms)
             {
-                if (IsStairs(room) || IsElevator(room))
+                if (IsLobbyOverlappingTransit(room))
                     transitOnLobby.Add(room);
             }
 
             foreach (var c in oldLobby.OccupiedCells())
             {
-                if (_cells.TryGetValue(c, out var occ) &&
-                    (IsStairs(occ) || IsElevator(occ))) continue;
+                if (_cells.TryGetValue(c, out var occ) && IsLobbyOverlappingTransit(occ)) continue;
                 _cells.Remove(c);
             }
 
@@ -135,14 +134,12 @@ namespace BuildATower
                 foreach (var c in transit.OccupiedCells())
                 {
                     if (c.y != LobbyFloor) continue;
-                    if (_cells.TryGetValue(c, out var under) &&
-                        !IsStairs(under) &&
-                        !IsElevator(under))
+                    if (_cells.TryGetValue(c, out var under) && !IsLobbyOverlappingTransit(under))
                     {
-                        if (IsStairs(transit))
-                            _underStairs[c] = under;
-                        else
+                        if (IsElevator(transit))
                             _underElevator[c] = under;
+                        else
+                            _underStairs[c] = under; // stairs + parking ramps share underlay map
                     }
                     _cells[c] = transit;
                 }
@@ -854,6 +851,10 @@ namespace BuildATower
 
         static bool IsElevator(RoomInstance room) =>
             room?.Type != null && room.Type.isElevatorShaft;
+
+        /// <summary>Transit that may occupy Lobby floor cells over the lobby underlay.</summary>
+        static bool IsLobbyOverlappingTransit(RoomInstance room) =>
+            IsStairs(room) || IsElevator(room) || IsParkingRamp(room);
 
         static bool IsFloorAllowed(RoomTypeSO type, int floor)
         {

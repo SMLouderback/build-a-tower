@@ -136,6 +136,69 @@ namespace BuildATower.Tests
             Assert.AreSame(ramp, atLobby);
         }
 
+        [Test]
+        public void ParkingRamp_on_lobby_still_allows_lobby_extend()
+        {
+            var grid = new TowerGrid();
+            var lobbyType = Lobby();
+            Assert.IsTrue(grid.TryPlaceLobby(lobbyType, 0, 20, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(2, -1), out var ramp));
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(2, 0), out var atLobby));
+            Assert.AreSame(ramp, atLobby);
+
+            Assert.IsTrue(grid.CanExtendLobby(-4, 24),
+                "Lobby must extend past a parking-ramp entrance on Floor G.");
+            Assert.IsTrue(grid.TryExtendLobby(lobbyType, -4, 24, out _, out var added));
+            Assert.AreEqual(8, added);
+            Assert.AreEqual(-4, grid.MinX);
+            Assert.AreEqual(24, grid.MaxX);
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(2, 0), out var stillRamp));
+            Assert.AreSame(ramp, stillRamp, "Ramp must remain the Floor G occupant after extend.");
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(-4, 0), out var left));
+            Assert.IsTrue(left.Type.isLobby);
+        }
+
+        [Test]
+        public void ParkingRamp_long_horizontal_parking_chain_counts()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 50, 0, out _));
+            // B1 supports for four B2 lots.
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(3, -1), out _));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(9, -1), out _));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(15, -1), out _));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(21, -1), out _));
+
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -2), out _));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(3, -2), out var a));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(9, -2), out var b));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(15, -2), out var c));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(21, -2), out var d));
+
+            Assert.IsTrue(ParkingStalls.IsParkingAccessible(grid, a));
+            Assert.IsTrue(ParkingStalls.IsParkingAccessible(grid, b));
+            Assert.IsTrue(ParkingStalls.IsParkingAccessible(grid, c));
+            Assert.IsTrue(ParkingStalls.IsParkingAccessible(grid, d));
+            // B1: 4×6=24, B2 chain: 4×6=24 → 48
+            Assert.AreEqual(48, ParkingStalls.TotalStalls(grid));
+        }
+
+        [Test]
+        public void ParkingRamp_lobby_landing_ramp_seeds_b1_parking_chain()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -1), out _)); // Lobby+B1
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(3, -1), out var near));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(9, -1), out var mid));
+            Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(15, -1), out var far));
+
+            Assert.IsTrue(ParkingStalls.IsParkingAccessible(grid, near));
+            Assert.IsTrue(ParkingStalls.IsParkingAccessible(grid, mid));
+            Assert.IsTrue(ParkingStalls.IsParkingAccessible(grid, far));
+            Assert.AreEqual(18, ParkingStalls.TotalStalls(grid));
+        }
+
         static RoomTypeSO Lobby()
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();

@@ -24,8 +24,8 @@
 
 Logged 2026-08-04 for a follow-up after this plan ships:
 
-1. **Lobby expand blocked by lobby-level parking ramp** — After placing a parking ramp with its upper section on the lobby (ground entrance) and lower half on B1, the lobby can no longer expand left/right. Expected: lobby still expands around / despite the ramp entrance.
-2. **Parking contiguous chain capped at ~1 extra lot** — Spec/README allow chaining multiple garage sections edge-touching; observed that only one additional parking section beyond the ramp-touching lot counts/places as expected. Expected: arbitrary-length same-floor contiguous parking chains.
+1. ~~**Lobby expand blocked by lobby-level parking ramp**~~ — **Fixed:** `CanExtendLobby` / `TryExtendLobby` treat parking ramps as lobby-overlapping transit (like stairs/elevators).
+2. **Parking contiguous chain** — Code already supported multi-lot same-floor chains; added longer-chain regression tests. If a third lot fails in play, check for a **1+ cell gap** (lots must edge-touch) or lobby span too narrow to place further lots (now fixed by #1).
 3. **Above-ground parking** — Hotels/offices offering above-ground lots is a later feature (out of scope).
 
 ## File map
