@@ -25,6 +25,9 @@ namespace BuildATower
         Rect _topBarRect;
         Rect _goalsDropdownRect;
         Rect _infoDropdownRect;
+        Rect _mapsDropdownRect;
+        Rect _mapsGraphRect;
+        Rect _mapsLegendRect;
         readonly List<RoomTypeSO> _roomButtons = new();
         List<BuildCatalogFamily> _catalog = new();
 
@@ -38,12 +41,14 @@ namespace BuildATower
 
         TopInfoPanel _infoPanel;
         bool _goalsOpen;
+        bool _mapsOpen;
         bool _buildOpen = true;
         bool _selectionOpen = true;
         BuildFamily? _expandedFamily;
         BuildSubgroup? _expandedShopSubgroup;
         Vector2 _scroll;
         float _contentHeight = 400f;
+        TowerMapController _mapController;
 
         ResearchBranch _researchPickBranch = ResearchBranch.Marketing;
         int _researchPickLevel = 1;
@@ -69,12 +74,15 @@ namespace BuildATower
         /// <summary>When true, world build input should be ignored.</summary>
         public bool BlocksWorldInput => _pauseUi != PauseUiState.Playing;
 
-        /// <summary>True when the GUI point (IMGUI / flipped Y) is over the top bar, info/goals dropdown, or side panel.</summary>
+        /// <summary>True when the GUI point (IMGUI / flipped Y) is over the top bar, info/goals/maps dropdown, graph, or side panel.</summary>
         public bool ContainsGuiPoint(Vector2 guiPoint) =>
             _topBarRect.Contains(guiPoint) ||
             _panelRect.Contains(guiPoint) ||
             (_goalsOpen && _goalsDropdownRect.Contains(guiPoint)) ||
             (_infoPanel != TopInfoPanel.None && _infoDropdownRect.Contains(guiPoint)) ||
+            (_mapsOpen && _mapsDropdownRect.Contains(guiPoint)) ||
+            (_mapsGraphRect.width > 0f && _mapsGraphRect.Contains(guiPoint)) ||
+            (_mapsLegendRect.width > 0f && _mapsLegendRect.Contains(guiPoint)) ||
             _newsHud.ContainsGuiPoint(guiPoint);
 
         void Awake()
@@ -427,8 +435,30 @@ namespace BuildATower
 
         void ReturnToMainMenu()
         {
+            ClearMapsMode();
             _pauseUi = PauseUiState.Playing;
             UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
+        }
+
+        void ClearMapsMode()
+        {
+            _mapsOpen = false;
+            var maps = EnsureMapController();
+            if (maps != null && maps.Mode != TowerMapMode.Off)
+                maps.SetMode(TowerMapMode.Off);
+            _mapsGraphRect = Rect.zero;
+            _mapsLegendRect = Rect.zero;
+            _mapsDropdownRect = Rect.zero;
+        }
+
+        TowerMapController EnsureMapController()
+        {
+            if (_mapController != null) return _mapController;
+            if (build != null)
+                _mapController = build.GetComponent<TowerMapController>();
+            if (_mapController == null)
+                _mapController = FindAnyObjectByType<TowerMapController>();
+            return _mapController;
         }
 
         void DrawPauseOverlay(GUIStyle title, GUIStyle label)
@@ -494,6 +524,9 @@ namespace BuildATower
             _topBarRect = new Rect(gap, barTopY, barWidth, barH);
             _goalsDropdownRect = Rect.zero;
             _infoDropdownRect = Rect.zero;
+            _mapsDropdownRect = Rect.zero;
+            _mapsGraphRect = Rect.zero;
+            _mapsLegendRect = Rect.zero;
             GUI.Box(_topBarRect, GUIContent.none);
 
             var x = gap + pad;
@@ -533,11 +566,12 @@ namespace BuildATower
 
             DrawChip(GameSession.Difficulty.ToString(), 88f);
 
-            // Reserve space for right-cluster Menu/Info/Goals buttons.
+            // Reserve space for right-cluster Menu/Maps/Info/Goals buttons.
             var clusterW = 56f + 8f; // Menu
+            clusterW += 64f + 8f; // Maps
             if (economyUnlocked) clusterW += 64f + 8f + 56f + 8f;
             if (goalsUnlocked) clusterW += 64f + 8f + 72f;
-            else if (economyUnlocked) clusterW = Mathf.Max(56f + 8f, clusterW - 8f);
+            else if (economyUnlocked) clusterW = Mathf.Max(56f + 8f + 64f + 8f, clusterW - 8f);
 
             var speedWidth = 236f;
             if (x + speedWidth < right - clusterW - 12f)
@@ -587,6 +621,7 @@ namespace BuildATower
             const float elevW = 56f;
             const float towerW = 64f;
             const float goalsW = 72f;
+            const float mapsW = 64f;
             const float btnGap = 8f;
 
             var cursor = right;
@@ -636,7 +671,14 @@ namespace BuildATower
                 var shopsArrow = shopsOpen ? "▼" : "▶";
                 if (GUI.Button(shopsRect, $"{shopsArrow} Shops", barButton))
                     _infoPanel = shopsOpen ? TopInfoPanel.None : TopInfoPanel.Shops;
+                cursor -= btnGap;
             }
+
+            cursor -= mapsW;
+            var mapsRect = new Rect(cursor, y, mapsW, lineH);
+            var mapsArrow = _mapsOpen ? "▼" : "▶";
+            if (GUI.Button(mapsRect, $"{mapsArrow} Maps", barButton))
+                _mapsOpen = !_mapsOpen;
 
             if (!economyUnlocked && _infoPanel is TopInfoPanel.Shops or TopInfoPanel.Elev)
                 _infoPanel = TopInfoPanel.None;
@@ -645,6 +687,11 @@ namespace BuildATower
 
             if (_infoPanel != TopInfoPanel.None)
                 DrawInfoDropdown(right, gap, barTopY, barH, barWidth, wrapLabel, agents, population, averageStress);
+
+            if (_mapsOpen)
+                DrawMapsDropdown(right, barTopY, barH, barWidth, barButton);
+
+            DrawMapsOverlays(gap, barTopY, barH, barWidth, wrapLabel);
 
             if (_goalsOpen && goalsUnlocked)
             {
@@ -657,6 +704,8 @@ namespace BuildATower
                 var goalsX = right - dropW;
                 if (_infoPanel != TopInfoPanel.None)
                     goalsX = Mathf.Max(gap, goalsX - dropW - 8f);
+                if (_mapsOpen)
+                    goalsX = Mathf.Max(gap, goalsX - Mathf.Min(220f, barWidth) - 8f);
                 _goalsDropdownRect = new Rect(goalsX, barTopY + barH, dropW, dropH);
                 GUI.Box(_goalsDropdownRect, GUIContent.none);
                 var gy = _goalsDropdownRect.y + 6f;
@@ -668,6 +717,318 @@ namespace BuildATower
                         wrapLabel);
                     gy += 18f;
                 }
+            }
+        }
+
+        void DrawMapsDropdown(
+            float right,
+            float barTopY,
+            float barH,
+            float barWidth,
+            GUIStyle barButton)
+        {
+            var maps = EnsureMapController();
+            var mode = maps != null ? maps.Mode : TowerMapMode.Off;
+            var modes = new[]
+            {
+                TowerMapMode.Off,
+                TowerMapMode.Graph,
+                TowerMapMode.Crime,
+                TowerMapMode.Noise,
+                TowerMapMode.Traffic,
+                TowerMapMode.Economic
+            };
+
+            var rowH = 20f;
+            var pad = 6f;
+            var rows = modes.Length;
+            if (mode == TowerMapMode.Traffic) rows += 1;
+            if (mode == TowerMapMode.Economic) rows += 1;
+
+            var dropW = Mathf.Min(220f, barWidth);
+            var dropH = pad * 2f + rows * rowH + 4f;
+            // Sit under Maps button cluster (left of Menu).
+            _mapsDropdownRect = new Rect(right - dropW - 56f - 8f, barTopY + barH, dropW, dropH);
+            GUI.Box(_mapsDropdownRect, GUIContent.none);
+
+            var ly = _mapsDropdownRect.y + pad;
+            var lx = _mapsDropdownRect.x + 6f;
+            var innerW = dropW - 12f;
+
+            foreach (var entry in modes)
+            {
+                var label = entry == TowerMapMode.Off ? "Off" : entry.ToString();
+                var selected = mode == entry;
+                var text = selected ? $"● {label}" : $"○ {label}";
+                if (GUI.Button(new Rect(lx, ly, innerW, rowH - 2f), text, barButton))
+                {
+                    if (maps != null)
+                        maps.SetMode(entry);
+                    mode = entry;
+                }
+
+                ly += rowH;
+            }
+
+            if (maps == null) return;
+
+            if (mode == TowerMapMode.Traffic)
+            {
+                var today = maps.TrafficWindow == TrafficMapWindow.Today;
+                var toggle = today ? "Window: Today● |  Avg30" : "Window: Today  |  Avg30●";
+                if (GUI.Button(new Rect(lx, ly, innerW, rowH - 2f), toggle, barButton))
+                {
+                    maps.TrafficWindow = today ? TrafficMapWindow.Average30 : TrafficMapWindow.Today;
+                    maps.RebuildAndPaint();
+                }
+            }
+            else if (mode == TowerMapMode.Economic)
+            {
+                var view = maps.EconomicView;
+                string toggle = view switch
+                {
+                    EconomicMapView.Profit => "View: Profit● Demand Blend",
+                    EconomicMapView.Demand => "View: Profit Demand● Blend",
+                    _ => "View: Profit Demand Blend●"
+                };
+                if (GUI.Button(new Rect(lx, ly, innerW, rowH - 2f), toggle, barButton))
+                {
+                    maps.EconomicView = view switch
+                    {
+                        EconomicMapView.Profit => EconomicMapView.Demand,
+                        EconomicMapView.Demand => EconomicMapView.Blend,
+                        _ => EconomicMapView.Profit
+                    };
+                    maps.RebuildAndPaint();
+                }
+            }
+        }
+
+        void DrawMapsOverlays(
+            float gap,
+            float barTopY,
+            float barH,
+            float barWidth,
+            GUIStyle wrapLabel)
+        {
+            var maps = EnsureMapController();
+            if (maps == null) return;
+
+            if (maps.Mode == TowerMapMode.Graph)
+                DrawMapsGraphPanel(gap, barTopY, barH, barWidth, wrapLabel, maps);
+
+            if (maps.Mode is TowerMapMode.Crime or TowerMapMode.Noise or TowerMapMode.Traffic
+                or TowerMapMode.Economic)
+                DrawMapsLegend(gap, barTopY, barH, wrapLabel, maps);
+        }
+
+        void DrawMapsGraphPanel(
+            float gap,
+            float barTopY,
+            float barH,
+            float barWidth,
+            GUIStyle wrapLabel,
+            TowerMapController maps)
+        {
+            var history = maps.Analytics.ClimateHistory;
+            var panelW = Mathf.Min(360f, barWidth * 0.45f);
+            var panelH = 118f;
+            var panelX = gap;
+            var panelY = barTopY + barH + 4f;
+            // Keep clear of left build panel.
+            if (_panelRect.width > 0f)
+                panelX = Mathf.Max(gap, _panelRect.xMax + 8f);
+
+            _mapsGraphRect = new Rect(panelX, panelY, panelW, panelH);
+            GUI.Box(_mapsGraphRect, GUIContent.none);
+
+            var titleStyle = new GUIStyle(wrapLabel) { fontStyle = FontStyle.Bold };
+            GUI.Label(
+                new Rect(panelX + 8f, panelY + 4f, panelW - 100f, 18f),
+                "Climate / Vacancy (90d)",
+                titleStyle);
+            var climateName = simulation?.Climate?.Name ?? "—";
+            GUI.Label(
+                new Rect(panelX + panelW - 88f, panelY + 4f, 80f, 18f),
+                climateName,
+                wrapLabel);
+
+            var sparkY = panelY + 24f;
+            var sparkH = 26f;
+            var sparkPad = 8f;
+            DrawSparklineRow(
+                new Rect(panelX + sparkPad, sparkY, panelW - sparkPad * 2f, sparkH),
+                "Climate",
+                history,
+                s => s.climateStep / 4f,
+                new Color(0.45f, 0.75f, 1f),
+                wrapLabel);
+            sparkY += sparkH + 4f;
+            DrawSparklineRow(
+                new Rect(panelX + sparkPad, sparkY, panelW - sparkPad * 2f, sparkH),
+                "Spend ×",
+                history,
+                s => Mathf.Clamp01((s.spendMult - 0.6f) / 0.8f),
+                new Color(0.55f, 0.9f, 0.55f),
+                wrapLabel);
+            sparkY += sparkH + 4f;
+            DrawSparklineRow(
+                new Rect(panelX + sparkPad, sparkY, panelW - sparkPad * 2f, sparkH),
+                "Vacancy",
+                history,
+                s => s.demandProxy,
+                new Color(1f, 0.75f, 0.4f),
+                wrapLabel);
+        }
+
+        void DrawSparklineRow(
+            Rect rect,
+            string label,
+            System.Collections.Generic.IReadOnlyList<(int climateStep, float spendMult, float demandProxy)> history,
+            System.Func<(int climateStep, float spendMult, float demandProxy), float> pick,
+            Color color,
+            GUIStyle wrapLabel)
+        {
+            GUI.Label(new Rect(rect.x, rect.y, 58f, rect.height), label, wrapLabel);
+            var chart = new Rect(rect.x + 60f, rect.y + 2f, rect.width - 60f, rect.height - 4f);
+            EnsureWhiteTex();
+            GUI.DrawTexture(chart, _whiteTex, ScaleMode.StretchToFill, false, 0f, new Color(0f, 0f, 0f, 0.35f), 0f, 0f);
+
+            if (history == null || history.Count == 0)
+            {
+                GUI.Label(chart, "  (no samples yet)", wrapLabel);
+                return;
+            }
+
+            var n = history.Count;
+            var step = chart.width / Mathf.Max(1, n - 1);
+            for (var i = 0; i < n; i++)
+            {
+                var v = Mathf.Clamp01(pick(history[i]));
+                var px = chart.x + (n == 1 ? chart.width * 0.5f : i * step);
+                var py = chart.yMax - 2f - v * (chart.height - 4f);
+                GUI.DrawTexture(
+                    new Rect(px - 1f, py - 1f, 2f, 2f),
+                    _whiteTex,
+                    ScaleMode.StretchToFill,
+                    false,
+                    0f,
+                    color,
+                    0f,
+                    0f);
+                if (i > 0)
+                {
+                    var prev = Mathf.Clamp01(pick(history[i - 1]));
+                    var px0 = chart.x + (i - 1) * step;
+                    var py0 = chart.yMax - 2f - prev * (chart.height - 4f);
+                    // Simple stepped connector (few pixels).
+                    var midY = (py0 + py) * 0.5f;
+                    GUI.DrawTexture(
+                        new Rect(Mathf.Min(px0, px), midY, Mathf.Abs(px - px0) + 1f, 1f),
+                        _whiteTex,
+                        ScaleMode.StretchToFill,
+                        false,
+                        0f,
+                        color,
+                        0f,
+                        0f);
+                }
+            }
+        }
+
+        void DrawMapsLegend(float gap, float barTopY, float barH, GUIStyle wrapLabel, TowerMapController maps)
+        {
+            var isProfit = maps.Mode == TowerMapMode.Economic &&
+                           maps.EconomicView == EconomicMapView.Profit;
+
+            var title = maps.Mode switch
+            {
+                TowerMapMode.Crime => "Crime",
+                TowerMapMode.Noise => "Noise",
+                TowerMapMode.Traffic => maps.TrafficWindow == TrafficMapWindow.Today
+                    ? "Traffic · Today"
+                    : "Traffic · 30-day Avg",
+                TowerMapMode.Economic => maps.EconomicView switch
+                {
+                    EconomicMapView.Profit => "Economic · Profit",
+                    EconomicMapView.Demand => "Economic · Demand",
+                    _ => "Economic · Blend"
+                },
+                _ => maps.Mode.ToString()
+            };
+
+            var meaning = isProfit
+                ? "Red = loss · grey = break-even · green = profit (scaled to today’s tower)"
+                : maps.Mode switch
+                {
+                    TowerMapMode.Crime => "Blue = low risk · red = high risk",
+                    TowerMapMode.Noise => "Blue = quiet · red = louder / bother",
+                    TowerMapMode.Traffic => "Blue = light · red = busy",
+                    TowerMapMode.Economic => "Blue = low stress · red = high stress",
+                    _ => "Blue = low · red = high"
+                };
+
+            var panelH = 68f;
+            var w = 320f;
+            var legendX = gap;
+            if (_panelRect.width > 0f)
+                legendX = Mathf.Max(gap, _panelRect.xMax + 8f);
+            _mapsLegendRect = new Rect(legendX, barTopY + barH + 4f, w, panelH);
+            GUI.Box(_mapsLegendRect, GUIContent.none);
+
+            var pad = 8f;
+            var y = _mapsLegendRect.y + 4f;
+            GUI.Label(
+                new Rect(_mapsLegendRect.x + pad, y, w - pad * 2f, 16f),
+                title,
+                wrapLabel);
+            y += 16f;
+            GUI.Label(
+                new Rect(_mapsLegendRect.x + pad, y, w - pad * 2f, 14f),
+                meaning,
+                wrapLabel);
+            y += 15f;
+
+            const int swatches = 20;
+            var barX = _mapsLegendRect.x + pad;
+            var barW = w - pad * 2f;
+            var swW = barW / swatches;
+            var barY = y;
+            var barHgt = 10f;
+            for (var i = 0; i < swatches; i++)
+            {
+                Color c;
+                if (isProfit)
+                {
+                    // −1 … 0 … +1 across the bar
+                    var signed = (i / (float)(swatches - 1)) * 2f - 1f;
+                    if (!HeatmapColors.TryProfitColor(signed, out c))
+                        c = HeatmapColors.Grey;
+                }
+                else
+                {
+                    var t = i / (float)(swatches - 1);
+                    c = t <= 0.001f ? HeatmapColors.Grey : HeatmapColors.RiskColor(t);
+                }
+
+                var prev = GUI.color;
+                GUI.color = new Color(c.r, c.g, c.b, 1f);
+                GUI.DrawTexture(new Rect(barX + i * swW, barY, swW + 0.5f, barHgt), Texture2D.whiteTexture);
+                GUI.color = prev;
+            }
+
+            y = barY + barHgt + 2f;
+            var labelStyle = wrapLabel;
+            if (isProfit)
+            {
+                GUI.Label(new Rect(barX, y, barW * 0.4f, 14f), "−100 loss", labelStyle);
+                GUI.Label(new Rect(barX + barW * 0.42f, y, barW * 0.16f, 14f), "0", labelStyle);
+                GUI.Label(new Rect(barX + barW * 0.55f, y, barW * 0.45f, 14f), "+100 profit", labelStyle);
+            }
+            else
+            {
+                GUI.Label(new Rect(barX, y, 40f, 14f), "0", labelStyle);
+                GUI.Label(new Rect(barX + barW - 36f, y, 36f, 14f), "100", labelStyle);
             }
         }
 

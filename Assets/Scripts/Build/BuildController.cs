@@ -53,6 +53,8 @@ namespace BuildATower
             RefreshHelpText();
             if (GetComponent<TowerSimulation>() == null)
                 gameObject.AddComponent<TowerSimulation>();
+            if (GetComponent<TowerMapController>() == null)
+                gameObject.AddComponent<TowerMapController>();
         }
 
         void Start()

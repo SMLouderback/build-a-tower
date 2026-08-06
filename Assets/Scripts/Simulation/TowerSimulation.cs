@@ -106,6 +106,10 @@ namespace BuildATower
         public ElevatorSystem Elevators => _elevators;
         public TransitRouter Router => _router;
 
+        const float AgentSampleIntervalGameMinutes = 2f;
+        float _agentSampleAccumulator;
+        TowerMapController _mapController;
+
         public void SetSpeedPreset(float minutesPerRealSecond, bool paused)
         {
             _clock.Paused = paused;
@@ -207,9 +211,43 @@ namespace BuildATower
             research?.TickProgress(
                 _clock.LastTickGameMinutes,
                 EconomySystem.CountResearcherPool(build.Grid));
+            SampleAgentsForMaps(_clock.LastTickGameMinutes);
             if (agentView != null)
                 agentView.Sync(_agents.Agents);
         }
+
+        void SampleAgentsForMaps(float gameMinutes)
+        {
+            if (gameMinutes <= 0f || _agents?.Agents == null) return;
+            _agentSampleAccumulator += gameMinutes;
+            if (_agentSampleAccumulator < AgentSampleIntervalGameMinutes) return;
+            _agentSampleAccumulator = 0f;
+
+            var maps = EnsureMapController();
+            if (maps == null) return;
+
+            foreach (var agent in _agents.Agents)
+            {
+                if (agent == null) continue;
+                if (agent.Phase == AgentPhase.Outside) continue;
+
+                if (agent.Phase == AgentPhase.WaitingAtElevator)
+                    maps.SampleAgentCell(agent.Cell, waiting: true);
+                else if (agent.Phase is AgentPhase.Moving or AgentPhase.Riding)
+                    maps.SampleAgentCell(agent.Cell, waiting: false);
+            }
+        }
+
+        TowerMapController EnsureMapController()
+        {
+            if (_mapController != null) return _mapController;
+            _mapController = GetComponent<TowerMapController>() ??
+                             FindAnyObjectByType<TowerMapController>();
+            return _mapController;
+        }
+
+        static float DemandProxyFromVacancy(TowerGrid grid, AgentSystem agents) =>
+            TowerMapController.ComputeTowerVacancyPressure(grid, agents);
 
         void TrySubscribe()
         {
@@ -283,6 +321,12 @@ namespace BuildATower
                     _stars.EvaluateQuarterly(build.Grid, _agents.AverageStress, _agents.Population);
                 else
                     _stars.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
+
+                EnsureMapController()?.NotifyMidnight(
+                    day,
+                    _climate?.Step ?? MarketClimate.Normal,
+                    climateSpendMult,
+                    DemandProxyFromVacancy(build.Grid, _agents));
             }
 
             _lastDayIndex = _clock.DayIndex;

@@ -12,11 +12,13 @@ namespace BuildATower
         [SerializeField] Tilemap structureTilemap;
         [SerializeField] Tilemap roomsTilemap;
         [SerializeField] Tilemap ghostTilemap;
+        [SerializeField] Tilemap heatmapTilemap;
 
         readonly Dictionary<(Color color, byte edges), Tile> _tiles = new();
         readonly List<Vector3Int> _ghostCells = new();
         readonly List<Vector3Int> _selectionCells = new();
         readonly List<Vector3Int> _handleCells = new();
+        readonly List<Vector3Int> _heatmapCells = new();
 
         /// <param name="skipCell">
         /// When painting a non-transit room, skip these logic cells (e.g. stairs/elevator
@@ -141,6 +143,99 @@ namespace BuildATower
             foreach (var cell in _selectionCells)
                 ghostTilemap.SetTile(cell, null);
             _selectionCells.Clear();
+        }
+
+        public void EnsureHeatmapTilemap()
+        {
+            if (heatmapTilemap == null)
+            {
+                if (roomsTilemap == null) return;
+                var parent = roomsTilemap.transform.parent;
+                if (parent == null) return;
+
+                var go = new GameObject("Heatmap");
+                go.transform.SetParent(parent, false);
+                go.transform.localPosition = Vector3.zero;
+                heatmapTilemap = go.AddComponent<Tilemap>();
+                go.AddComponent<TilemapRenderer>();
+            }
+
+            ApplyHeatmapSorting();
+        }
+
+        void ApplyHeatmapSorting()
+        {
+            if (heatmapTilemap == null ||
+                !heatmapTilemap.TryGetComponent<TilemapRenderer>(out var heatmapRenderer))
+                return;
+
+            var roomsOrder = 0;
+            if (roomsTilemap != null &&
+                roomsTilemap.TryGetComponent<TilemapRenderer>(out var roomsRenderer))
+                roomsOrder = roomsRenderer.sortingOrder;
+
+            var order = roomsOrder + 1;
+
+            if (ghostTilemap != null &&
+                ghostTilemap.TryGetComponent<TilemapRenderer>(out var ghostRenderer))
+            {
+                // Keep ghosts/selection above heatmap (rooms < heatmap < ghost).
+                if (ghostRenderer.sortingOrder <= order)
+                    ghostRenderer.sortingOrder = order + 1;
+                order = Mathf.Min(order, ghostRenderer.sortingOrder - 1);
+            }
+
+            heatmapRenderer.sortingOrder = Mathf.Max(order, roomsOrder + 1);
+        }
+
+        public void PaintHeatmap(
+            IEnumerable<Vector2Int> roomCells,
+            IEnumerable<KeyValuePair<Vector2Int, float>> scores,
+            HeatmapColorScale scale)
+        {
+            EnsureHeatmapTilemap();
+            ClearHeatmap();
+            if (heatmapTilemap == null) return;
+
+            // Grey-wash all tower room cells so room colors do not show through.
+            if (roomCells != null)
+            {
+                foreach (var cell in roomCells)
+                {
+                    var tc = ToTileCell(cell);
+                    heatmapTilemap.SetTile(tc, GetTile(HeatmapColors.Grey, EdgeMask.All));
+                    _heatmapCells.Add(tc);
+                }
+            }
+
+            if (scores == null) return;
+
+            foreach (var kv in scores)
+            {
+                Color c;
+                if (scale == HeatmapColorScale.Profit)
+                {
+                    if (!HeatmapColors.TryProfitColor(kv.Value, out c)) continue;
+                }
+                else
+                {
+                    // Score exactly 0 = grey only (no blue tint).
+                    if (kv.Value <= 0.02f) continue;
+                    c = HeatmapColors.RiskColor(kv.Value);
+                }
+
+                var tc = ToTileCell(kv.Key);
+                heatmapTilemap.SetTile(tc, GetTile(c, EdgeMask.All));
+                _heatmapCells.Add(tc);
+            }
+        }
+
+        public void ClearHeatmap()
+        {
+            if (heatmapTilemap == null) return;
+            foreach (var cell in _heatmapCells)
+                heatmapTilemap.SetTile(cell, null);
+            _heatmapCells.Clear();
         }
 
         public void SetElevatorEdgeHandles(RoomInstance shaft)
