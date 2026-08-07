@@ -1,7 +1,7 @@
 # Build-A-Tower — Lobby Panorama Segments (5-cell reveal)
 
 **Date:** 2026-08-07  
-**Status:** Approved  
+**Status:** Implemented  
 **Depends on:** Structure cutaway art (`2026-08-07-structure-cutaway-art-design.md`); `StructureCutawayArt` / `TilemapTowerView` lobby paint path  
 **Parent:** Visual polish → cohesive hotel lobby  
 **Follow-ups:** Double-height lobby; soft pan-boundary lighting; retire `lobby_mid_*` entirely once pans prove out
