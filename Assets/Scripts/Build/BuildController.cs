@@ -55,6 +55,15 @@ namespace BuildATower
                 gameObject.AddComponent<TowerSimulation>();
             if (GetComponent<TowerMapController>() == null)
                 gameObject.AddComponent<TowerMapController>();
+            EnsureDayNightSkyOnMainCamera();
+        }
+
+        static void EnsureDayNightSkyOnMainCamera()
+        {
+            var cam = Camera.main;
+            if (cam == null) return;
+            if (cam.GetComponent<DayNightSkyController>() != null) return;
+            cam.gameObject.AddComponent<DayNightSkyController>();
         }
 
         void Start()
@@ -717,7 +726,7 @@ namespace BuildATower
             view.SetGhost(
                 cell,
                 Vector2Int.one,
-                new Color(0.76f, 0.62f, 0.40f, 1f),
+                TowerLookPalette.Scaffold,
                 showValid);
 
             if (Input.GetMouseButtonUp(0))
@@ -762,7 +771,7 @@ namespace BuildATower
                 view.SetGhost(
                     new Vector2Int(minX, TowerGrid.LobbyFloor),
                     new Vector2Int(width, 1),
-                    lobbyType.placeholderColor,
+                    TowerLookPalette.ForRoom(lobbyType),
                     valid);
 
                 if (Input.GetMouseButtonUp(0))
@@ -789,7 +798,7 @@ namespace BuildATower
             view.SetGhost(
                 new Vector2Int(newMin, TowerGrid.LobbyFloor),
                 new Vector2Int(newMax - newMin + 1, 1),
-                lobbyType.placeholderColor,
+                TowerLookPalette.ForRoom(lobbyType),
                 extendValid);
 
             if (Input.GetMouseButtonUp(0))
@@ -831,7 +840,7 @@ namespace BuildATower
             view.SetGhost(
                 new Vector2Int(_elevatorToExtend.Origin.x, newMin),
                 new Vector2Int(1, newMax - newMin + 1),
-                _elevatorToExtend.Type.placeholderColor,
+                TowerLookPalette.ForRoom(_elevatorToExtend.Type),
                 valid);
 
             if (!Input.GetMouseButtonUp(0)) return;
@@ -900,7 +909,7 @@ namespace BuildATower
             view.SetGhost(
                 new Vector2Int(x, newMin),
                 new Vector2Int(1, newMax - newMin + 1),
-                shaft.Type.placeholderColor,
+                TowerLookPalette.ForRoom(shaft.Type),
                 valid);
 
             if (!Input.GetMouseButtonUp(0)) return;
@@ -950,7 +959,7 @@ namespace BuildATower
                 view.SetGhost(
                     cell,
                     Vector2Int.one,
-                    new Color(0.76f, 0.62f, 0.40f, 1f),
+                    TowerLookPalette.Scaffold,
                     valid);
                 return;
             }
@@ -967,7 +976,7 @@ namespace BuildATower
                 view.SetGhost(
                     new Vector2Int(cell.x, TowerGrid.LobbyFloor),
                     Vector2Int.one,
-                    lobbyType.placeholderColor,
+                    TowerLookPalette.ForRoom(lobbyType),
                     onLobbyFloor && BuildEconomy.CanAffordBuild(Wallet, lobbyType.buildCost));
                 return;
             }
@@ -995,7 +1004,7 @@ namespace BuildATower
                 view.SetGhost(
                     new Vector2Int(newMin, TowerGrid.LobbyFloor),
                     new Vector2Int(newMax - newMin + 1, 1),
-                    lobbyType.placeholderColor,
+                    TowerLookPalette.ForRoom(lobbyType),
                     valid);
                 return;
             }
@@ -1011,7 +1020,7 @@ namespace BuildATower
             var roomCost = SelectedRoomType.buildCost *
                            (SelectedRoomType.isElevatorShaft ? SelectedRoomType.size.y : 1);
             var roomValid = Grid.CanPlace(SelectedRoomType, cell) && BuildEconomy.CanAffordBuild(Wallet, roomCost);
-            view.SetGhost(cell, SelectedRoomType.size, SelectedRoomType.placeholderColor, roomValid);
+            view.SetGhost(cell, SelectedRoomType.size, TowerLookPalette.ForRoom(SelectedRoomType), roomValid);
         }
 
         void ClearFloorOneHintIfNeeded()
@@ -1198,6 +1207,18 @@ namespace BuildATower
             Grid != null &&
             Grid.TryGetRoomAt(cell, out var at) &&
             IsVisibleTransit(at);
+
+        public void RepaintAllRooms()
+        {
+            if (view == null || Grid == null) return;
+            foreach (var room in Grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                if (IsVisibleTransit(room)) continue;
+                view.PaintRoom(room, IsTransitOwnedCell);
+            }
+            RepaintAllVisibleTransit();
+        }
 
         void RepaintAllVisibleTransit()
         {

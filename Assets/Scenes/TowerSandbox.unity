@@ -456,6 +456,7 @@ GameObject:
   - component: {fileID: 1093245805}
   - component: {fileID: 1093245807}
   - component: {fileID: 1093245806}
+  - component: {fileID: 1093245809}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -473,7 +474,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 2
-  m_BackGroundColor: {r: 0.36, g: 0.64, b: 0.86, a: 1}
+  m_BackGroundColor: {r: 0.48, g: 0.74, b: 0.94, a: 1}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -531,6 +532,20 @@ MonoBehaviour:
   zoomSpeed: 2
   minOrtho: 5
   maxOrtho: 40
+--- !u!114 &1093245809
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1093245804}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 672448db8cf8a2f46b424f7b5b0a42d6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: BuildATower.Runtime::BuildATower.DayNightSkyController
+  targetCamera: {fileID: 1093245805}
+  simulation: {fileID: 0}
 --- !u!81 &1093245807
 AudioListener:
   m_ObjectHideFlags: 0

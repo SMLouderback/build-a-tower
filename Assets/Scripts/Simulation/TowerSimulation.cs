@@ -122,6 +122,8 @@ namespace BuildATower
             if (build == null)
                 build = GetComponent<BuildController>() ?? FindAnyObjectByType<BuildController>();
 
+            EnsureDayNightSkyController();
+
             _clock = new GameClock(minutesPerRealSecond, startMinuteOfDay);
             _elevators = new ElevatorSystem();
             _pathfinder = new StairsPathfinder();
@@ -466,6 +468,17 @@ namespace BuildATower
             }
 
             return total;
+        }
+
+        /// <summary>
+        /// Scene wiring preferred; this covers play from scenes that omit the component.
+        /// </summary>
+        static void EnsureDayNightSkyController()
+        {
+            var cam = Camera.main;
+            if (cam == null) return;
+            if (cam.GetComponent<DayNightSkyController>() != null) return;
+            cam.gameObject.AddComponent<DayNightSkyController>();
         }
     }
 }

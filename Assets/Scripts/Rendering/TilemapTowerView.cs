@@ -8,17 +8,44 @@ namespace BuildATower
     {
         const int TilePixels = 16;
         const int BorderThickness = 2;
+        const int LightingBucketMinutes = 15;
 
         [SerializeField] Tilemap structureTilemap;
         [SerializeField] Tilemap roomsTilemap;
         [SerializeField] Tilemap ghostTilemap;
         [SerializeField] Tilemap heatmapTilemap;
+        [SerializeField] BuildController build;
+        [SerializeField] TowerSimulation simulation;
 
         readonly Dictionary<(Color color, byte edges), Tile> _tiles = new();
         readonly List<Vector3Int> _ghostCells = new();
         readonly List<Vector3Int> _selectionCells = new();
         readonly List<Vector3Int> _handleCells = new();
         readonly List<Vector3Int> _heatmapCells = new();
+        int _lastLightingBucket = int.MinValue;
+
+        void Awake()
+        {
+            if (build == null)
+                build = FindAnyObjectByType<BuildController>();
+            if (simulation == null)
+            {
+                simulation = build != null
+                    ? build.GetComponent<TowerSimulation>()
+                    : null;
+                if (simulation == null)
+                    simulation = FindAnyObjectByType<TowerSimulation>();
+            }
+        }
+
+        void Update()
+        {
+            if (build == null || simulation?.Clock == null) return;
+            var bucket = simulation.Clock.MinuteOfDay / LightingBucketMinutes;
+            if (bucket == _lastLightingBucket) return;
+            _lastLightingBucket = bucket;
+            build.RepaintAllRooms();
+        }
 
         /// <param name="skipCell">
         /// When painting a non-transit room, skip these logic cells (e.g. stairs/elevator
@@ -368,23 +395,46 @@ namespace BuildATower
             new(logic.x, logic.y, 0);
 
         /// <summary>
-        /// Broken: dark desaturated. Dirty (else): brownish wash. Otherwise placeholder.
+        /// Palette → broken/dirty wash → interior lighting by time of day.
         /// </summary>
-        public static Color RoomPaintColor(RoomInstance room)
+        public Color RoomPaintColor(RoomInstance room) =>
+            RoomPaintColor(room, CurrentMinuteOfDay());
+
+        public static Color RoomPaintColor(RoomInstance room, int minuteOfDay)
         {
-            var baseColor = room?.Type != null ? room.Type.placeholderColor : Color.magenta;
+            var baseColor = room?.Type != null
+                ? TowerLookPalette.ForRoom(room.Type)
+                : Color.magenta;
             if (room == null) return baseColor;
+
             if (room.IsBroken)
             {
                 var gray = baseColor.grayscale;
                 var c = Color.Lerp(baseColor, new Color(gray, gray, gray, baseColor.a), 0.75f);
-                return new Color(c.r * 0.45f, c.g * 0.45f, c.b * 0.45f, baseColor.a);
+                baseColor = new Color(c.r * 0.45f, c.g * 0.45f, c.b * 0.45f, baseColor.a);
+            }
+            else if (room.Dirty)
+            {
+                baseColor = Color.Lerp(baseColor, new Color(0.45f, 0.28f, 0.12f, baseColor.a), 0.55f);
             }
 
-            if (room.Dirty)
-                return Color.Lerp(baseColor, new Color(0.45f, 0.28f, 0.12f, baseColor.a), 0.55f);
+            return InteriorLighting.Apply(baseColor, minuteOfDay, IsSubterranean(room));
+        }
 
-            return baseColor;
+        int CurrentMinuteOfDay()
+        {
+            if (simulation == null)
+                simulation = FindAnyObjectByType<TowerSimulation>();
+            return simulation?.Clock != null ? simulation.Clock.MinuteOfDay : DayNightSky.DayStart;
+        }
+
+        static bool IsSubterranean(RoomInstance room)
+        {
+            if (room?.Type == null) return false;
+            if (room.Origin.y < TowerGrid.LobbyFloor) return true;
+            return room.Type.category == RoomCategory.Parking ||
+                   ParkingStalls.IsParking(room.Type) ||
+                   ParkingStalls.IsRamp(room.Type);
         }
 
         static bool UsesStructureMap(RoomInstance room) =>

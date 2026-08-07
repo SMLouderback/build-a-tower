@@ -10,7 +10,8 @@ namespace BuildATower
         public const int MinX = -80;
         public const int MaxX = 100;
         public const int Depth = 10;
-        public static readonly Color Color = new(0.45f, 0.32f, 0.22f, 1f);
+        // Richer earth brown so dirt reads against sky / rooms.
+        public static readonly Color Color = new(0.55f, 0.36f, 0.18f, 1f);
 
         public static bool Contains(Vector2Int cell) =>
             cell.y < TowerGrid.LobbyFloor &&

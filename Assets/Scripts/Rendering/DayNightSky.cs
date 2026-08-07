@@ -18,7 +18,8 @@ namespace BuildATower
 
         public static readonly Color Night = new(0.05f, 0.07f, 0.18f, 1f);
         public static readonly Color Sunrise = new(0.95f, 0.45f, 0.28f, 1f);
-        public static readonly Color Day = new(0.42f, 0.70f, 0.92f, 1f);
+        // Brighter cutaway day blue (locked band ~0.42–0.55 / 0.70–0.78 / 0.92–0.95).
+        public static readonly Color Day = new(0.48f, 0.74f, 0.94f, 1f);
         public static readonly Color Sunset = new(0.92f, 0.38f, 0.22f, 1f);
 
         public static Color ColorAtMinute(int minuteOfDay)
