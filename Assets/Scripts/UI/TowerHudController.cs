@@ -50,6 +50,16 @@ namespace BuildATower
         float _contentHeight = 400f;
         TowerMapController _mapController;
 
+        // Maps Graph metric toggles (shared chart).
+        bool _graphShowClimate = true;
+        bool _graphShowSpend;
+        bool _graphShowVacancy;
+        bool _graphShowPopulation = true;
+        bool _graphShowIncome = true;
+        bool _graphShowLosses = true;
+        bool _graphShowSavings = true;
+        bool _graphShowStars = true;
+
         ResearchBranch _researchPickBranch = ResearchBranch.Marketing;
         int _researchPickLevel = 1;
 
@@ -739,17 +749,26 @@ namespace BuildATower
                 TowerMapMode.Economic
             };
 
-            var rowH = 20f;
+            var rowH = 22f;
             var pad = 6f;
-            var rows = modes.Length;
-            if (mode == TowerMapMode.Traffic) rows += 1;
-            if (mode == TowerMapMode.Economic) rows += 1;
+            var subH = 0f;
+            if (mode == TowerMapMode.Traffic) subH = 44f;
+            else if (mode == TowerMapMode.Economic) subH = 44f;
 
-            var dropW = Mathf.Min(220f, barWidth);
-            var dropH = pad * 2f + rows * rowH + 4f;
+            var dropW = Mathf.Min(260f, barWidth);
+            var dropH = pad * 2f + modes.Length * rowH + subH + 4f;
             // Sit under Maps button cluster (left of Menu).
             _mapsDropdownRect = new Rect(right - dropW - 56f - 8f, barTopY + barH, dropW, dropH);
-            GUI.Box(_mapsDropdownRect, GUIContent.none);
+            EnsureWhiteTex();
+            GUI.DrawTexture(
+                _mapsDropdownRect,
+                _whiteTex,
+                ScaleMode.StretchToFill,
+                false,
+                0f,
+                new Color(0.14f, 0.15f, 0.18f, 0.96f),
+                0f,
+                0f);
 
             var ly = _mapsDropdownRect.y + pad;
             var lx = _mapsDropdownRect.x + 6f;
@@ -759,8 +778,12 @@ namespace BuildATower
             {
                 var label = entry == TowerMapMode.Off ? "Off" : entry.ToString();
                 var selected = mode == entry;
-                var text = selected ? $"● {label}" : $"○ {label}";
-                if (GUI.Button(new Rect(lx, ly, innerW, rowH - 2f), text, barButton))
+                DrawMapsChoiceButton(
+                    new Rect(lx, ly, innerW, rowH - 2f),
+                    label,
+                    selected,
+                    barButton);
+                if (GUI.Button(new Rect(lx, ly, innerW, rowH - 2f), GUIContent.none, GUIStyle.none))
                 {
                     if (maps != null)
                         maps.SetMode(entry);
@@ -774,34 +797,101 @@ namespace BuildATower
 
             if (mode == TowerMapMode.Traffic)
             {
-                var today = maps.TrafficWindow == TrafficMapWindow.Today;
-                var toggle = today ? "Window: Today● |  Avg30" : "Window: Today  |  Avg30●";
-                if (GUI.Button(new Rect(lx, ly, innerW, rowH - 2f), toggle, barButton))
+                GUI.Label(
+                    new Rect(lx, ly, innerW, 16f),
+                    "Traffic window (click one):",
+                    barButton);
+                ly += 18f;
+                var half = (innerW - 4f) * 0.5f;
+                var todayOn = maps.TrafficWindow == TrafficMapWindow.Today;
+                DrawMapsChoiceButton(new Rect(lx, ly, half, 22f), "Today", todayOn, barButton);
+                if (GUI.Button(new Rect(lx, ly, half, 22f), GUIContent.none, GUIStyle.none))
                 {
-                    maps.TrafficWindow = today ? TrafficMapWindow.Average30 : TrafficMapWindow.Today;
+                    maps.TrafficWindow = TrafficMapWindow.Today;
+                    maps.RebuildAndPaint();
+                }
+
+                DrawMapsChoiceButton(
+                    new Rect(lx + half + 4f, ly, half, 22f),
+                    "30-day Avg",
+                    !todayOn,
+                    barButton);
+                if (GUI.Button(new Rect(lx + half + 4f, ly, half, 22f), GUIContent.none, GUIStyle.none))
+                {
+                    maps.TrafficWindow = TrafficMapWindow.Average30;
                     maps.RebuildAndPaint();
                 }
             }
             else if (mode == TowerMapMode.Economic)
             {
+                GUI.Label(
+                    new Rect(lx, ly, innerW, 16f),
+                    "Economic view (click one):",
+                    barButton);
+                ly += 18f;
+                var third = (innerW - 8f) / 3f;
                 var view = maps.EconomicView;
-                string toggle = view switch
-                {
-                    EconomicMapView.Profit => "View: Profit● Demand Blend",
-                    EconomicMapView.Demand => "View: Profit Demand● Blend",
-                    _ => "View: Profit Demand Blend●"
-                };
-                if (GUI.Button(new Rect(lx, ly, innerW, rowH - 2f), toggle, barButton))
-                {
-                    maps.EconomicView = view switch
+                DrawMapsSegOption(
+                    lx, ly, third, "Profit", view == EconomicMapView.Profit, barButton,
+                    () =>
                     {
-                        EconomicMapView.Profit => EconomicMapView.Demand,
-                        EconomicMapView.Demand => EconomicMapView.Blend,
-                        _ => EconomicMapView.Profit
-                    };
-                    maps.RebuildAndPaint();
-                }
+                        maps.EconomicView = EconomicMapView.Profit;
+                        maps.RebuildAndPaint();
+                    });
+                DrawMapsSegOption(
+                    lx + third + 4f, ly, third, "Demand", view == EconomicMapView.Demand, barButton,
+                    () =>
+                    {
+                        maps.EconomicView = EconomicMapView.Demand;
+                        maps.RebuildAndPaint();
+                    });
+                DrawMapsSegOption(
+                    lx + (third + 4f) * 2f, ly, third, "Blend", view == EconomicMapView.Blend, barButton,
+                    () =>
+                    {
+                        maps.EconomicView = EconomicMapView.Blend;
+                        maps.RebuildAndPaint();
+                    });
             }
+        }
+
+        void DrawMapsSegOption(
+            float x,
+            float y,
+            float w,
+            string label,
+            bool selected,
+            GUIStyle barButton,
+            System.Action onClick)
+        {
+            DrawMapsChoiceButton(new Rect(x, y, w, 22f), label, selected, barButton);
+            if (GUI.Button(new Rect(x, y, w, 22f), GUIContent.none, GUIStyle.none))
+                onClick?.Invoke();
+        }
+
+        void DrawMapsChoiceButton(Rect rect, string label, bool selected, GUIStyle barButton)
+        {
+            EnsureWhiteTex();
+            var fill = selected
+                ? new Color(0.28f, 0.48f, 0.78f, 1f)
+                : new Color(0.22f, 0.23f, 0.26f, 1f);
+            var outline = selected
+                ? new Color(0.75f, 0.88f, 1f, 1f)
+                : new Color(0.45f, 0.47f, 0.52f, 1f);
+            GUI.DrawTexture(rect, _whiteTex, ScaleMode.StretchToFill, false, 0f, fill, 0f, 0f);
+            GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, 2f), _whiteTex, ScaleMode.StretchToFill, false, 0f, outline, 0f, 0f);
+            GUI.DrawTexture(new Rect(rect.x, rect.yMax - 2f, rect.width, 2f), _whiteTex, ScaleMode.StretchToFill, false, 0f, outline, 0f, 0f);
+            GUI.DrawTexture(new Rect(rect.x, rect.y, 2f, rect.height), _whiteTex, ScaleMode.StretchToFill, false, 0f, outline, 0f, 0f);
+            GUI.DrawTexture(new Rect(rect.xMax - 2f, rect.y, 2f, rect.height), _whiteTex, ScaleMode.StretchToFill, false, 0f, outline, 0f, 0f);
+
+            var style = new GUIStyle(barButton)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = selected ? FontStyle.Bold : FontStyle.Normal,
+                normal = { textColor = selected ? Color.white : new Color(0.82f, 0.84f, 0.88f) }
+            };
+            var text = selected ? $"● {label}" : label;
+            GUI.Label(rect, text, style);
         }
 
         void DrawMapsOverlays(
@@ -830,85 +920,419 @@ namespace BuildATower
             GUIStyle wrapLabel,
             TowerMapController maps)
         {
-            var history = maps.Analytics.ClimateHistory;
-            var panelW = Mathf.Min(360f, barWidth * 0.45f);
-            var panelH = 118f;
+            var history = maps.Analytics.DayHistory;
+            var stars = maps.Analytics.StarEvents;
+
+            // Large analytics panel: remaining view right of build strip, below top bar.
             var panelX = gap;
-            var panelY = barTopY + barH + 4f;
-            // Keep clear of left build panel.
             if (_panelRect.width > 0f)
                 panelX = Mathf.Max(gap, _panelRect.xMax + 8f);
+            var panelY = barTopY + barH + 4f;
+            var panelW = Mathf.Max(320f, Screen.width - panelX - gap);
+            var panelH = Mathf.Max(280f, Screen.height - panelY - gap);
 
             _mapsGraphRect = new Rect(panelX, panelY, panelW, panelH);
-            GUI.Box(_mapsGraphRect, GUIContent.none);
+            EnsureWhiteTex();
+            // Solid panel so tower tiles do not wash out the chart.
+            GUI.DrawTexture(
+                _mapsGraphRect,
+                _whiteTex,
+                ScaleMode.StretchToFill,
+                false,
+                0f,
+                new Color(0.12f, 0.13f, 0.16f, 0.97f),
+                0f,
+                0f);
+            GUI.DrawTexture(
+                new Rect(panelX, panelY, panelW, 2f),
+                _whiteTex,
+                ScaleMode.StretchToFill,
+                false,
+                0f,
+                new Color(0.55f, 0.6f, 0.7f, 1f),
+                0f,
+                0f);
 
             var titleStyle = new GUIStyle(wrapLabel) { fontStyle = FontStyle.Bold };
+            var pad = 10f;
+            var y = panelY + 8f;
+
+            const float closeW = 88f;
+            const float closeH = 28f;
+            var closeRect = new Rect(panelX + panelW - pad - closeW, panelY + 6f, closeW, closeH);
+            var closeStyle = new GUIStyle(GUI.skin.button)
+            {
+                fontStyle = FontStyle.Bold,
+                fontSize = 13
+            };
+            if (GUI.Button(closeRect, "Close", closeStyle))
+            {
+                maps.SetMode(TowerMapMode.Off);
+                _mapsOpen = false;
+                _mapsGraphRect = Rect.zero;
+                return;
+            }
+
             GUI.Label(
-                new Rect(panelX + 8f, panelY + 4f, panelW - 100f, 18f),
-                "Climate / Vacancy (90d)",
+                new Rect(panelX + pad, y, panelW - closeW - pad * 3f, 22f),
+                "Tower Analytics · last 90 midnights",
                 titleStyle);
+            y += 24f;
             var climateName = simulation?.Climate?.Name ?? "—";
             GUI.Label(
-                new Rect(panelX + panelW - 88f, panelY + 4f, 80f, 18f),
-                climateName,
+                new Rect(panelX + pad, y, panelW - pad * 2f, 18f),
+                $"Climate: {climateName}",
                 wrapLabel);
+            y += 20f;
 
-            var sparkY = panelY + 24f;
-            var sparkH = 26f;
-            var sparkPad = 8f;
-            DrawSparklineRow(
-                new Rect(panelX + sparkPad, sparkY, panelW - sparkPad * 2f, sparkH),
-                "Climate",
-                history,
-                s => s.climateStep / 4f,
-                new Color(0.45f, 0.75f, 1f),
-                wrapLabel);
-            sparkY += sparkH + 4f;
-            DrawSparklineRow(
-                new Rect(panelX + sparkPad, sparkY, panelW - sparkPad * 2f, sparkH),
-                "Spend ×",
-                history,
-                s => Mathf.Clamp01((s.spendMult - 0.6f) / 0.8f),
-                new Color(0.55f, 0.9f, 0.55f),
-                wrapLabel);
-            sparkY += sparkH + 4f;
-            DrawSparklineRow(
-                new Rect(panelX + sparkPad, sparkY, panelW - sparkPad * 2f, sparkH),
-                "Vacancy",
-                history,
-                s => s.demandProxy,
-                new Color(1f, 0.75f, 0.4f),
-                wrapLabel);
-        }
+            // Metric toggles — same chart space, on/off per series.
+            var toggleH = 22f;
+            var tx = panelX + pad;
+            var toggleRowY = y;
+            void MetricToggle(ref bool on, string label, Color swatch, float width)
+            {
+                if (tx + width > panelX + panelW - pad)
+                {
+                    tx = panelX + pad;
+                    toggleRowY += toggleH + 4f;
+                }
 
-        void DrawSparklineRow(
-            Rect rect,
-            string label,
-            System.Collections.Generic.IReadOnlyList<(int climateStep, float spendMult, float demandProxy)> history,
-            System.Func<(int climateStep, float spendMult, float demandProxy), float> pick,
-            Color color,
-            GUIStyle wrapLabel)
-        {
-            GUI.Label(new Rect(rect.x, rect.y, 58f, rect.height), label, wrapLabel);
-            var chart = new Rect(rect.x + 60f, rect.y + 2f, rect.width - 60f, rect.height - 4f);
+                var r = new Rect(tx, toggleRowY, width, toggleH);
+                var prev = GUI.color;
+                GUI.color = new Color(swatch.r, swatch.g, swatch.b, on ? 1f : 0.35f);
+                EnsureWhiteTex();
+                GUI.DrawTexture(new Rect(r.x + 4f, r.y + 6f, 10f, 10f), _whiteTex);
+                GUI.color = prev;
+                var text = on ? $"● {label}" : $"○ {label}";
+                if (GUI.Button(new Rect(r.x + 16f, r.y, width - 16f, toggleH), text))
+                    on = !on;
+                tx += width + 6f;
+            }
+
+            MetricToggle(ref _graphShowClimate, "Climate", new Color(0.45f, 0.75f, 1f), 88f);
+            MetricToggle(ref _graphShowSpend, "Spend ×", new Color(0.55f, 0.9f, 0.55f), 88f);
+            MetricToggle(ref _graphShowVacancy, "Vacancy", new Color(1f, 0.75f, 0.4f), 88f);
+            MetricToggle(ref _graphShowPopulation, "Population", new Color(0.75f, 0.55f, 1f), 100f);
+            MetricToggle(ref _graphShowIncome, "Income", new Color(0.25f, 0.85f, 0.4f), 88f);
+            MetricToggle(ref _graphShowLosses, "Losses", new Color(0.95f, 0.3f, 0.25f), 80f);
+            MetricToggle(ref _graphShowSavings, "Savings", new Color(1f, 0.85f, 0.25f), 88f);
+            MetricToggle(ref _graphShowStars, "★ Stars", new Color(1f, 0.95f, 0.55f), 88f);
+            y = toggleRowY + toggleH + 8f;
+
+            // Reserve gutters for axis labels inside the panel.
+            const float yAxisW = 58f;
+            const float xAxisH = 22f;
+            var plotOuter = new Rect(
+                panelX + pad,
+                y,
+                panelW - pad * 2f,
+                panelY + panelH - y - pad - 18f);
+            var chart = new Rect(
+                plotOuter.x + yAxisW,
+                plotOuter.y,
+                Mathf.Max(80f, plotOuter.width - yAxisW),
+                Mathf.Max(60f, plotOuter.height - xAxisH));
+
             EnsureWhiteTex();
-            GUI.DrawTexture(chart, _whiteTex, ScaleMode.StretchToFill, false, 0f, new Color(0f, 0f, 0f, 0.35f), 0f, 0f);
+            GUI.DrawTexture(
+                chart,
+                _whiteTex,
+                ScaleMode.StretchToFill,
+                false,
+                0f,
+                new Color(0.08f, 0.09f, 0.12f, 1f),
+                0f,
+                0f);
 
             if (history == null || history.Count == 0)
             {
-                GUI.Label(chart, "  (no samples yet)", wrapLabel);
+                GUI.Label(
+                    new Rect(chart.x + 12f, chart.y + 12f, chart.width - 24f, 40f),
+                    "No midnight samples yet — advance time past a day roll.",
+                    wrapLabel);
                 return;
             }
 
             var n = history.Count;
-            var step = chart.width / Mathf.Max(1, n - 1);
+            // Horizontal grid
+            for (var g = 0; g <= 4; g++)
+            {
+                var gy = chart.y + chart.height * (g / 4f);
+                GUI.DrawTexture(
+                    new Rect(chart.x, gy, chart.width, 1f),
+                    _whiteTex,
+                    ScaleMode.StretchToFill,
+                    false,
+                    0f,
+                    new Color(1f, 1f, 1f, 0.08f),
+                    0f,
+                    0f);
+            }
+
+            // Vertical grid (day ticks)
+            for (var g = 0; g <= 4; g++)
+            {
+                var gx = chart.x + chart.width * (g / 4f);
+                GUI.DrawTexture(
+                    new Rect(gx, chart.y, 1f, chart.height),
+                    _whiteTex,
+                    ScaleMode.StretchToFill,
+                    false,
+                    0f,
+                    new Color(1f, 1f, 1f, 0.06f),
+                    0f,
+                    0f);
+            }
+
+            DrawGraphAxes(chart, history, wrapLabel);
+
+            if (_graphShowStars && stars != null)
+                DrawStarMarkers(chart, history, stars, wrapLabel);
+
+            void DrawMetric(bool on, Color color, System.Func<TowerDaySample, float> pick)
+            {
+                if (!on) return;
+                DrawNormalizedSeries(chart, history, pick, color);
+            }
+
+            DrawMetric(_graphShowClimate, new Color(0.45f, 0.75f, 1f), s => s.ClimateStep / 4f);
+            DrawMetric(_graphShowSpend, new Color(0.55f, 0.9f, 0.55f), s => Mathf.Clamp01((s.SpendMult - 0.6f) / 0.8f));
+            DrawMetric(_graphShowVacancy, new Color(1f, 0.75f, 0.4f), s => s.Vacancy);
+            DrawMetric(_graphShowPopulation, new Color(0.75f, 0.55f, 1f), s => s.Population);
+            DrawMetric(_graphShowIncome, new Color(0.25f, 0.85f, 0.4f), s => s.DailyIncome);
+            DrawMetric(_graphShowLosses, new Color(0.95f, 0.3f, 0.25f), s => s.DailyExpense);
+            DrawMetric(_graphShowSavings, new Color(1f, 0.85f, 0.25f), s => s.Savings);
+
+            // Latest values strip
+            var last = history[n - 1];
+            var footer =
+                $"Day {last.DayIndex}  ·  Pop {last.Population}  ·  In ${last.DailyIncome:N0}  ·  Loss ${last.DailyExpense:N0}  ·  Save ${last.Savings:N0}  ·  {last.Stars}★";
+            GUI.Label(
+                new Rect(panelX + pad, panelY + panelH - 16f, panelW - pad * 2f, 14f),
+                footer,
+                wrapLabel);
+        }
+
+        void DrawGraphAxes(
+            Rect chart,
+            System.Collections.Generic.IReadOnlyList<TowerDaySample> history,
+            GUIStyle wrapLabel)
+        {
+            if (history == null || history.Count == 0) return;
+
+            var firstDay = history[0].DayIndex;
+            var lastDay = history[history.Count - 1].DayIndex;
+            var tiny = new GUIStyle(wrapLabel) { fontSize = Mathf.Max(10, wrapLabel.fontSize - 1) };
+
+            // X-axis: day labels (always when history exists).
+            GUI.Label(new Rect(chart.x, chart.yMax + 2f, 70f, 16f), $"Day {firstDay}", tiny);
+            if (lastDay != firstDay)
+            {
+                var mid = (firstDay + lastDay) / 2;
+                GUI.Label(
+                    new Rect(chart.x + chart.width * 0.5f - 28f, chart.yMax + 2f, 70f, 16f),
+                    $"Day {mid}",
+                    tiny);
+                GUI.Label(
+                    new Rect(chart.xMax - 70f, chart.yMax + 2f, 70f, 16f),
+                    $"Day {lastDay}",
+                    tiny);
+            }
+
+            GUI.Label(
+                new Rect(chart.x + chart.width * 0.5f - 16f, chart.yMax + 14f, 40f, 14f),
+                "Day",
+                tiny);
+
+            // Y-axis: depends on which value series are selected (stars are markers only).
+            var moneyOn = (_graphShowIncome ? 1 : 0) + (_graphShowLosses ? 1 : 0) + (_graphShowSavings ? 1 : 0);
+            var otherCount =
+                (_graphShowClimate ? 1 : 0) +
+                (_graphShowSpend ? 1 : 0) +
+                (_graphShowVacancy ? 1 : 0) +
+                (_graphShowPopulation ? 1 : 0);
+            var valueSeries = moneyOn + otherCount;
+
+            if (valueSeries == 0)
+            {
+                GUI.Label(new Rect(chart.x - 56f, chart.y + chart.height * 0.5f - 8f, 54f, 16f), "—", tiny);
+                return;
+            }
+
+            string FormatY(float t01, float max, string kind)
+            {
+                var v = t01 * max;
+                return kind switch
+                {
+                    "money" => AbbreviateAxisMoney(v),
+                    "pop" => Mathf.RoundToInt(v).ToString(),
+                    "climate" => ClimateAxisLabel(t01),
+                    "spend" => $"{0.6f + t01 * 0.8f:0.00}×",
+                    "vacancy" => $"{Mathf.RoundToInt(t01 * 100f)}%",
+                    _ => $"{Mathf.RoundToInt(t01 * 100f)}%"
+                };
+            }
+
+            // Single series → absolute units. Mixed → relative % + scale note.
+            string kind;
+            float max;
+            string axisTitle;
+            if (valueSeries == 1 && moneyOn == 1)
+            {
+                kind = "money";
+                max = MaxOfEnabledMoney(history);
+                axisTitle = _graphShowIncome && !_graphShowLosses && !_graphShowSavings ? "Income $"
+                    : _graphShowLosses && !_graphShowIncome && !_graphShowSavings ? "Losses $"
+                    : _graphShowSavings && !_graphShowIncome && !_graphShowLosses ? "Savings $"
+                    : "$";
+            }
+            else if (valueSeries == 1 && _graphShowPopulation)
+            {
+                kind = "pop";
+                max = MaxOf(history, s => s.Population);
+                axisTitle = "Pop";
+            }
+            else if (valueSeries == 1 && _graphShowClimate)
+            {
+                kind = "climate";
+                max = 1f;
+                axisTitle = "Climate";
+            }
+            else if (valueSeries == 1 && _graphShowSpend)
+            {
+                kind = "spend";
+                max = 1f;
+                axisTitle = "Spend";
+            }
+            else if (valueSeries == 1 && _graphShowVacancy)
+            {
+                kind = "vacancy";
+                max = 1f;
+                axisTitle = "Vacancy";
+            }
+            else if (moneyOn > 0 && otherCount == 0)
+            {
+                // Multiple money series still self-normalize per line; show relative + note.
+                kind = "rel";
+                max = 1f;
+                axisTitle = "Rel %";
+            }
+            else
+            {
+                kind = "rel";
+                max = 1f;
+                axisTitle = "Rel %";
+            }
+
+            for (var g = 0; g <= 4; g++)
+            {
+                var t = 1f - g / 4f; // top = max
+                var gy = chart.y + chart.height * (g / 4f) - 7f;
+                string label;
+                if (kind == "rel")
+                    label = $"{Mathf.RoundToInt(t * 100f)}%";
+                else
+                    label = FormatY(t, Mathf.Max(0.0001f, max), kind);
+
+                GUI.Label(new Rect(chart.x - 56f, gy, 54f, 14f), label, tiny);
+            }
+
+            GUI.Label(new Rect(chart.x - 56f, chart.y - 14f, 54f, 14f), axisTitle, tiny);
+
+            if (kind == "rel")
+            {
+                GUI.Label(
+                    new Rect(chart.x, chart.y - 14f, chart.width, 14f),
+                    BuildRelativeScaleNote(history),
+                    tiny);
+            }
+        }
+
+        string BuildRelativeScaleNote(System.Collections.Generic.IReadOnlyList<TowerDaySample> history)
+        {
+            var parts = new System.Collections.Generic.List<string>(6);
+            if (_graphShowClimate) parts.Add("Climate 0–4");
+            if (_graphShowSpend) parts.Add("Spend 0.6–1.4×");
+            if (_graphShowVacancy) parts.Add($"Vacancy max {MaxOf(history, s => s.Vacancy) * 100f:0}%");
+            if (_graphShowPopulation) parts.Add($"Pop max {Mathf.RoundToInt(MaxOf(history, s => s.Population))}");
+            if (_graphShowIncome) parts.Add($"In max {AbbreviateAxisMoney(MaxOf(history, s => s.DailyIncome))}");
+            if (_graphShowLosses) parts.Add($"Loss max {AbbreviateAxisMoney(MaxOf(history, s => s.DailyExpense))}");
+            if (_graphShowSavings) parts.Add($"Save max {AbbreviateAxisMoney(MaxOf(history, s => s.Savings))}");
+            if (parts.Count == 0) return string.Empty;
+            return "Each line = own max · " + string.Join(" · ", parts);
+        }
+
+        float MaxOfEnabledMoney(System.Collections.Generic.IReadOnlyList<TowerDaySample> history)
+        {
+            var max = 0.0001f;
+            if (_graphShowIncome) max = Mathf.Max(max, MaxOf(history, s => s.DailyIncome));
+            if (_graphShowLosses) max = Mathf.Max(max, MaxOf(history, s => s.DailyExpense));
+            if (_graphShowSavings) max = Mathf.Max(max, MaxOf(history, s => s.Savings));
+            return max;
+        }
+
+        static float MaxOf(
+            System.Collections.Generic.IReadOnlyList<TowerDaySample> history,
+            System.Func<TowerDaySample, float> pick)
+        {
+            var max = 0.0001f;
+            if (history == null) return max;
+            for (var i = 0; i < history.Count; i++)
+            {
+                var v = pick(history[i]);
+                if (v > max) max = v;
+            }
+
+            return max;
+        }
+
+        static string AbbreviateAxisMoney(float v)
+        {
+            var n = Mathf.Abs(v);
+            if (n >= 1_000_000f) return $"${v / 1_000_000f:0.#}M";
+            if (n >= 10_000f) return $"${v / 1000f:0.#}k";
+            return $"${Mathf.RoundToInt(v):N0}";
+        }
+
+        static string ClimateAxisLabel(float t01)
+        {
+            var step = Mathf.Clamp(Mathf.RoundToInt(t01 * 4f), 0, 4);
+            return step switch
+            {
+                0 => "Rec",
+                1 => "Slow",
+                2 => "Norm",
+                3 => "Str",
+                _ => "Boom"
+            };
+        }
+
+        void DrawNormalizedSeries(
+            Rect chart,
+            System.Collections.Generic.IReadOnlyList<TowerDaySample> history,
+            System.Func<TowerDaySample, float> pick,
+            Color color)
+        {
+            if (history == null || history.Count == 0) return;
+            var n = history.Count;
+            var max = 0.0001f;
             for (var i = 0; i < n; i++)
             {
-                var v = Mathf.Clamp01(pick(history[i]));
-                var px = chart.x + (n == 1 ? chart.width * 0.5f : i * step);
-                var py = chart.yMax - 2f - v * (chart.height - 4f);
+                var v = pick(history[i]);
+                if (v > max) max = v;
+            }
+
+            var step = chart.width / Mathf.Max(1, n - 1);
+            float X(int i) => chart.x + (n == 1 ? chart.width * 0.5f : i * step);
+            float Y(float raw) => chart.yMax - 2f - Mathf.Clamp01(raw / max) * (chart.height - 4f);
+
+            EnsureWhiteTex();
+            for (var i = 0; i < n; i++)
+            {
+                var py = Y(pick(history[i]));
+                var px = X(i);
                 GUI.DrawTexture(
-                    new Rect(px - 1f, py - 1f, 2f, 2f),
+                    new Rect(px - 1.5f, py - 1.5f, 3f, 3f),
                     _whiteTex,
                     ScaleMode.StretchToFill,
                     false,
@@ -918,21 +1342,71 @@ namespace BuildATower
                     0f);
                 if (i > 0)
                 {
-                    var prev = Mathf.Clamp01(pick(history[i - 1]));
-                    var px0 = chart.x + (i - 1) * step;
-                    var py0 = chart.yMax - 2f - prev * (chart.height - 4f);
-                    // Simple stepped connector (few pixels).
-                    var midY = (py0 + py) * 0.5f;
-                    GUI.DrawTexture(
-                        new Rect(Mathf.Min(px0, px), midY, Mathf.Abs(px - px0) + 1f, 1f),
-                        _whiteTex,
-                        ScaleMode.StretchToFill,
-                        false,
-                        0f,
-                        color,
-                        0f,
-                        0f);
+                    var px0 = X(i - 1);
+                    var py0 = Y(pick(history[i - 1]));
+                    DrawChartSegment(px0, py0, px, py, color);
                 }
+            }
+        }
+
+        void DrawChartSegment(float x0, float y0, float x1, float y1, Color color)
+        {
+            EnsureWhiteTex();
+            var dx = x1 - x0;
+            var dy = y1 - y0;
+            var len = Mathf.Sqrt(dx * dx + dy * dy);
+            if (len < 0.5f) return;
+            var steps = Mathf.Max(1, Mathf.CeilToInt(len / 2f));
+            for (var s = 0; s <= steps; s++)
+            {
+                var t = s / (float)steps;
+                var px = Mathf.Lerp(x0, x1, t);
+                var py = Mathf.Lerp(y0, y1, t);
+                GUI.DrawTexture(
+                    new Rect(px - 1f, py - 1f, 2f, 2f),
+                    _whiteTex,
+                    ScaleMode.StretchToFill,
+                    false,
+                    0f,
+                    color,
+                    0f,
+                    0f);
+            }
+        }
+
+        void DrawStarMarkers(
+            Rect chart,
+            System.Collections.Generic.IReadOnlyList<TowerDaySample> history,
+            System.Collections.Generic.IReadOnlyList<StarEarnEvent> events,
+            GUIStyle wrapLabel)
+        {
+            if (history == null || history.Count == 0 || events == null || events.Count == 0)
+                return;
+
+            var firstDay = history[0].DayIndex;
+            var lastDay = history[history.Count - 1].DayIndex;
+            var span = Mathf.Max(1, lastDay - firstDay);
+            EnsureWhiteTex();
+            var markerColor = new Color(1f, 0.95f, 0.55f, 0.85f);
+
+            foreach (var ev in events)
+            {
+                if (ev.DayIndex < firstDay || ev.DayIndex > lastDay) continue;
+                var t = (ev.DayIndex - firstDay) / (float)span;
+                var px = chart.x + t * chart.width;
+                GUI.DrawTexture(
+                    new Rect(px - 1f, chart.y, 2f, chart.height),
+                    _whiteTex,
+                    ScaleMode.StretchToFill,
+                    false,
+                    0f,
+                    markerColor,
+                    0f,
+                    0f);
+                GUI.Label(
+                    new Rect(px + 2f, chart.y + 2f, 36f, 16f),
+                    $"{ev.Stars}★",
+                    wrapLabel);
             }
         }
 

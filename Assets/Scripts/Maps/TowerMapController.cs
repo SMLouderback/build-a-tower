@@ -57,12 +57,30 @@ namespace BuildATower
             RebuildAndPaint();
         }
 
-        public void NotifyMidnight(int dayIndex, int climateStep, float spendMult, float demandProxy)
+        public void NotifyMidnight(
+            int dayIndex,
+            int climateStep,
+            float spendMult,
+            float demandProxy,
+            int population = 0,
+            int dailyIncome = 0,
+            int dailyExpense = 0,
+            int savings = 0,
+            int stars = 0)
         {
             if (_lastArchivedDay != dayIndex)
             {
                 Analytics.ArchiveTrafficDay();
-                Analytics.RecordClimateSample(climateStep, spendMult, demandProxy);
+                Analytics.RecordDaySample(new TowerDaySample(
+                    dayIndex,
+                    climateStep,
+                    spendMult,
+                    demandProxy,
+                    population,
+                    dailyIncome,
+                    dailyExpense,
+                    savings,
+                    stars));
                 _lastArchivedDay = dayIndex;
             }
         }

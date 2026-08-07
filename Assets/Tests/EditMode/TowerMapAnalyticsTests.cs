@@ -154,5 +154,25 @@ namespace BuildATower.Tests
             Assert.AreEqual(1f, empty, 0.0001f);
             Assert.AreEqual(0f, full, 0.0001f);
         }
+
+        [Test]
+        public void RecordDaySample_stores_economy_and_star_events()
+        {
+            var a = new TowerMapAnalytics();
+            a.RecordDaySample(new TowerDaySample(1, 2, 1f, 0.2f, 10, 100, 40, 5000, 0));
+            a.RecordDaySample(new TowerDaySample(2, 2, 1f, 0.1f, 12, 200, 50, 5200, 1));
+            a.RecordDaySample(new TowerDaySample(3, 3, 1.15f, 0.05f, 15, 250, 60, 5400, 2));
+
+            Assert.AreEqual(3, a.DayHistory.Count);
+            Assert.AreEqual(12, a.DayHistory[1].Population);
+            Assert.AreEqual(200, a.DayHistory[1].DailyIncome);
+            Assert.AreEqual(50, a.DayHistory[1].DailyExpense);
+            Assert.AreEqual(5200, a.DayHistory[1].Savings);
+            Assert.AreEqual(2, a.StarEvents.Count);
+            Assert.AreEqual(1, a.StarEvents[0].Stars);
+            Assert.AreEqual(2, a.StarEvents[0].DayIndex);
+            Assert.AreEqual(2, a.StarEvents[1].Stars);
+            Assert.AreEqual(3, a.StarEvents[1].DayIndex);
+        }
     }
 }

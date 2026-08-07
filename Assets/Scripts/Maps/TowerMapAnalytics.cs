@@ -23,10 +23,18 @@ namespace BuildATower
         readonly Dictionary<Vector2Int, float> _econDemand = new();
         readonly Dictionary<Vector2Int, float> _econBlend = new();
 
-        readonly List<(int climateStep, float spendMult, float demandProxy)> _climateHistory = new();
+        readonly List<TowerDaySample> _dayHistory = new();
+        readonly List<StarEarnEvent> _starEvents = new();
+        int _lastRecordedStars;
 
-        public IReadOnlyList<(int climateStep, float spendMult, float demandProxy)> ClimateHistory =>
-            _climateHistory;
+        /// <summary>Rolling midnight samples (climate, vacancy, pop, income, expense, savings).</summary>
+        public IReadOnlyList<TowerDaySample> DayHistory => _dayHistory;
+
+        /// <summary>Star-earn markers aligned to <see cref="DayHistory"/> day indices.</summary>
+        public IReadOnlyList<StarEarnEvent> StarEvents => _starEvents;
+
+        /// <summary>Backward-compatible alias for climate/vacancy sparklines.</summary>
+        public IReadOnlyList<TowerDaySample> ClimateHistory => _dayHistory;
 
         public static float Clamp01(float v) =>
             v < 0f ? 0f : v > 1f ? 1f : v;
@@ -221,11 +229,37 @@ namespace BuildATower
         public static float ClampSigned01(float v) =>
             v < -1f ? -1f : v > 1f ? 1f : v;
 
-        public void RecordClimateSample(int climateStep, float spendMult, float demandProxy)
+        /// <summary>Legacy climate-only sample (vacancy as demandProxy). Prefer <see cref="RecordDaySample"/>.</summary>
+        public void RecordClimateSample(int climateStep, float spendMult, float demandProxy) =>
+            RecordDaySample(new TowerDaySample(
+                dayIndex: _dayHistory.Count > 0 ? _dayHistory[_dayHistory.Count - 1].DayIndex + 1 : 0,
+                climateStep,
+                spendMult,
+                Clamp01(demandProxy),
+                population: 0,
+                dailyIncome: 0,
+                dailyExpense: 0,
+                savings: 0,
+                stars: _lastRecordedStars));
+
+        public void RecordDaySample(TowerDaySample sample)
         {
-            _climateHistory.Add((climateStep, spendMult, Clamp01(demandProxy)));
-            while (_climateHistory.Count > ClimateHistoryDays)
-                _climateHistory.RemoveAt(0);
+            if (sample.Stars > _lastRecordedStars)
+            {
+                for (var s = _lastRecordedStars + 1; s <= sample.Stars; s++)
+                    _starEvents.Add(new StarEarnEvent(sample.DayIndex, s));
+            }
+
+            _lastRecordedStars = sample.Stars;
+            _dayHistory.Add(sample);
+            while (_dayHistory.Count > ClimateHistoryDays)
+            {
+                var droppedDay = _dayHistory[0].DayIndex;
+                _dayHistory.RemoveAt(0);
+                // Drop star markers that fall before the retained window.
+                while (_starEvents.Count > 0 && _starEvents[0].DayIndex < droppedDay)
+                    _starEvents.RemoveAt(0);
+            }
         }
 
         public static float CrimeScore(float traffic, float criminal, float eventBoost, float patrol)

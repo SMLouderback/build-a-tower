@@ -326,7 +326,12 @@ namespace BuildATower
                     day,
                     _climate?.Step ?? MarketClimate.Normal,
                     climateSpendMult,
-                    DemandProxyFromVacancy(build.Grid, _agents));
+                    DemandProxyFromVacancy(build.Grid, _agents),
+                    _agents.Population,
+                    _economy.LastIncome,
+                    _economy.LastExpense,
+                    build.Wallet.Balance,
+                    _stars.CurrentStars);
             }
 
             _lastDayIndex = _clock.DayIndex;

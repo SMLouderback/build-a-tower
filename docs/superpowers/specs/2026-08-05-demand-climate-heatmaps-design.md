@@ -88,10 +88,10 @@ Rebuild on a short interval and on day roll. Occupied / support / transit / scaf
 ## 5. Graph panel
 
 - Window: **last 90 midnights** (or fewer if early game).  
-- Series: **climate step** + **spend multiplier**; secondary **tower demand proxy** (rolling fill / wealth-acceptance or vacancy pressure).  
-- Simple line chart + current climate name chip.  
-- Readable market pulse — not a full analytics suite.
-
+- Large analytics panel (most of the view right of the build strip), not a tiny sparkline strip.  
+- Series (toggle on/off, shared chart; each series self-normalized): **climate**, **spend multiplier**, **vacancy**, **population**, **daily income**, **daily losses (expense)**, **savings (wallet balance)**.  
+- **Star markers** on the timeline when each star tier is earned.  
+- Footer shows latest sample values; current climate name chip in the header.
 ## 6. Non-goals
 
 - Simultaneous multi-layer overlays  
