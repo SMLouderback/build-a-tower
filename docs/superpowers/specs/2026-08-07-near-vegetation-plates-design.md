@@ -1,7 +1,7 @@
 # Build-A-Tower — Hand-Painted Near Vegetation + Far Skyline Peek
 
 **Date:** 2026-08-07  
-**Status:** Approved  
+**Status:** Implemented  
 **Depends on:** `2026-08-07-parallax-25d-design.md`; `ParallaxBackdrop`  
 **Parent:** Visual polish → parallax depth readable against lobby/skyline  
 **Follow-ups:** Wind sway; alternate grass/tree variants; mid-roof silhouette trim
