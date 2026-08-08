@@ -18,10 +18,12 @@ namespace BuildATower
         [SerializeField] TowerSimulation simulation;
 
         readonly Dictionary<(Color color, byte edges), Tile> _tiles = new();
+        readonly Dictionary<int, SpriteRenderer> _stairsOverlays = new();
         readonly List<Vector3Int> _ghostCells = new();
         readonly List<Vector3Int> _selectionCells = new();
         readonly List<Vector3Int> _handleCells = new();
         readonly List<Vector3Int> _heatmapCells = new();
+        Transform _stairsOverlayRoot;
         int _lastLightingBucket = int.MinValue;
 
         void Awake()
@@ -36,6 +38,23 @@ namespace BuildATower
                 if (simulation == null)
                     simulation = FindAnyObjectByType<TowerSimulation>();
             }
+
+            // Built-in RP: keep Sprites/Default on tilemaps (pink = missing/incompatible shader).
+            EnsureSpritesDefaultMaterial(structureTilemap);
+            EnsureSpritesDefaultMaterial(roomsTilemap);
+            EnsureSpritesDefaultMaterial(ghostTilemap);
+        }
+
+        static void EnsureSpritesDefaultMaterial(Tilemap map)
+        {
+            if (map == null) return;
+            if (!map.TryGetComponent<TilemapRenderer>(out var renderer)) return;
+            var shader = Shader.Find("Sprites/Default");
+            if (shader == null) return;
+            if (renderer.sharedMaterial != null &&
+                renderer.sharedMaterial.shader == shader)
+                return;
+            renderer.sharedMaterial = new Material(shader);
         }
 
         void Update()
@@ -59,22 +78,38 @@ namespace BuildATower
             var occupied = CollectOccupied(room);
             if (IsVisibleTransit(room))
             {
+                if (room.Type.isStairs)
+                {
+                    PaintStairsRoom(room, occupied, color);
+                    return;
+                }
+
+                if (room.Type.isElevatorShaft && TryPaintElevatorArt(room, occupied))
+                    return;
+
                 // Transit draws on the rooms layer so it stays visible over rooms.
                 foreach (var cell in occupied)
                 {
                     var tile = GetTile(color, EdgeMaskFor(cell, occupied));
-                    roomsTilemap.SetTile(ToTileCell(cell), tile);
+                    var tc = ToTileCell(cell);
+                    roomsTilemap.SetTile(tc, tile);
+                    roomsTilemap.SetColor(tc, Color.white);
                 }
 
                 return;
             }
+
+            if (room.Type.isLobby && TryPaintLobbyArt(room, occupied, skipCell))
+                return;
 
             var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
             foreach (var cell in occupied)
             {
                 if (skipCell != null && skipCell(cell)) continue;
                 var tile = GetTile(color, EdgeMaskFor(cell, occupied));
-                map.SetTile(ToTileCell(cell), tile);
+                var tc = ToTileCell(cell);
+                map.SetTile(tc, tile);
+                map.SetColor(tc, Color.white);
             }
         }
 
@@ -82,15 +117,48 @@ namespace BuildATower
         {
             if (room?.Type == null) return;
             var occupied = CollectOccupied(room);
-            var tile = GetTile(RoomPaintColor(room), EdgeMaskFor(cell, occupied));
+            var color = RoomPaintColor(room);
+
             if (IsVisibleTransit(room))
             {
-                roomsTilemap.SetTile(ToTileCell(cell), tile);
+                if (room.Type.isStairs)
+                {
+                    PaintStairsRoom(room, occupied, color);
+                    return;
+                }
+
+                if (room.Type.isElevatorShaft &&
+                    StructureCutawayArt.TryElevatorTile(
+                        cell.y,
+                        room.Origin.y,
+                        room.Origin.y + room.Size.y - 1,
+                        out var elevTile))
+                {
+                    var tc = ToTileCell(cell);
+                    roomsTilemap.SetTile(tc, elevTile);
+                    roomsTilemap.SetColor(tc, Color.white);
+                    return;
+                }
+
+                var transitTc = ToTileCell(cell);
+                roomsTilemap.SetTile(transitTc, GetTile(color, EdgeMaskFor(cell, occupied)));
+                roomsTilemap.SetColor(transitTc, Color.white);
+                return;
+            }
+
+            if (room.Type.isLobby &&
+                StructureCutawayArt.TryLobbyTile(cell.x, out var lobbyTile))
+            {
+                var tc = ToTileCell(cell);
+                structureTilemap.SetTile(tc, lobbyTile);
+                structureTilemap.SetColor(tc, Color.white);
                 return;
             }
 
             var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
-            map.SetTile(ToTileCell(cell), tile);
+            var fallbackTc = ToTileCell(cell);
+            map.SetTile(fallbackTc, GetTile(color, EdgeMaskFor(cell, occupied)));
+            map.SetColor(fallbackTc, Color.white);
         }
 
         /// <summary>Repaint every stairs/elevator room (call after underlay paints).</summary>
@@ -106,6 +174,20 @@ namespace BuildATower
 
         public void ClearRoom(RoomInstance room)
         {
+            if (room?.Type != null && room.Type.isStairs)
+            {
+                ClearStairsOverlay(room.InstanceId);
+                // Art stairs are overlay-only; underlay rooms keep their tiles.
+                // Palette fallback wrote rooms-layer tiles — clear those.
+                if (!StructureCutawayArt.TryStairsSprite(out _))
+                {
+                    foreach (var cell in room.OccupiedCells())
+                        roomsTilemap.SetTile(ToTileCell(cell), null);
+                }
+
+                return;
+            }
+
             if (IsVisibleTransit(room))
             {
                 foreach (var cell in room.OccupiedCells())
@@ -334,6 +416,125 @@ namespace BuildATower
         {
             for (var x = minX; x <= maxX; x++)
                 structureTilemap.SetTile(new Vector3Int(x, floor, 0), null);
+        }
+
+        bool TryPaintLobbyArt(
+            RoomInstance room,
+            HashSet<Vector2Int> occupied,
+            System.Func<Vector2Int, bool> skipCell)
+        {
+            foreach (var cell in occupied)
+            {
+                if (skipCell != null && skipCell(cell)) continue;
+                if (!StructureCutawayArt.TryLobbyTile(cell.x, out _))
+                    return false;
+            }
+
+            var tint = Color.white;
+            foreach (var cell in occupied)
+            {
+                if (skipCell != null && skipCell(cell)) continue;
+                StructureCutawayArt.TryLobbyTile(cell.x, out var tile);
+                var tc = ToTileCell(cell);
+                structureTilemap.SetTile(tc, tile);
+                structureTilemap.SetColor(tc, tint);
+            }
+
+            return true;
+        }
+
+        bool TryPaintElevatorArt(RoomInstance room, HashSet<Vector2Int> occupied)
+        {
+            var minY = room.Origin.y;
+            var maxY = room.Origin.y + room.Size.y - 1;
+            foreach (var cell in occupied)
+            {
+                if (!StructureCutawayArt.TryElevatorTile(cell.y, minY, maxY, out _))
+                    return false;
+            }
+
+            var tint = Color.white;
+            foreach (var cell in occupied)
+            {
+                StructureCutawayArt.TryElevatorTile(cell.y, minY, maxY, out var tile);
+                var tc = ToTileCell(cell);
+                roomsTilemap.SetTile(tc, tile);
+                roomsTilemap.SetColor(tc, tint);
+            }
+
+            return true;
+        }
+
+        void PaintStairsRoom(RoomInstance room, HashSet<Vector2Int> occupied, Color paletteColor)
+        {
+            if (StructureCutawayArt.TryStairsSprite(out var sprite))
+            {
+                // Floating overlay: do not own rooms-layer tiles so underlay rooms show
+                // through transparent UL/LR corners of the continuous BL→TR flight.
+                SetStairsOverlay(room, sprite, Color.white);
+                return;
+            }
+
+            ClearStairsOverlay(room.InstanceId);
+            foreach (var cell in occupied)
+            {
+                var tile = GetTile(paletteColor, EdgeMaskFor(cell, occupied));
+                roomsTilemap.SetTile(ToTileCell(cell), tile);
+            }
+        }
+
+        void SetStairsOverlay(RoomInstance room, Sprite sprite, Color tint)
+        {
+            var root = StairsOverlayRoot();
+            if (!_stairsOverlays.TryGetValue(room.InstanceId, out var sr) || sr == null)
+            {
+                var go = new GameObject($"StairsOverlay_{room.InstanceId}");
+                go.transform.SetParent(root, false);
+                sr = go.AddComponent<SpriteRenderer>();
+                sr.sortingOrder = 20;
+                _stairsOverlays[room.InstanceId] = sr;
+            }
+
+            sr.enabled = true;
+            sr.sprite = sprite;
+            sr.color = tint;
+            // Bottom-left on the lower floor; scale slightly under the 2×2 box so
+            // the upper-right meets the underside of the floor above.
+            const float stairsFit = 0.90f;
+            sr.transform.position = new Vector3(room.Origin.x, room.Origin.y, 0f);
+            var b = sprite.bounds.size;
+            var sx = b.x > 0.01f ? room.Size.x * stairsFit / b.x : 1f;
+            var sy = b.y > 0.01f ? room.Size.y * stairsFit / b.y : 1f;
+            sr.transform.localScale = new Vector3(sx, sy, 1f);
+        }
+
+        /// <summary>Swap stairs overlays after star-tier art changes.</summary>
+        public void RefreshStairsOverlays(IEnumerable<RoomInstance> rooms)
+        {
+            if (rooms == null) return;
+            foreach (var room in rooms)
+            {
+                if (room?.Type == null || !room.Type.isStairs) continue;
+                if (!StructureCutawayArt.TryStairsSprite(out var sprite)) continue;
+                SetStairsOverlay(room, sprite, Color.white);
+            }
+        }
+
+        void ClearStairsOverlay(int instanceId)
+        {
+            if (!_stairsOverlays.TryGetValue(instanceId, out var sr)) return;
+            if (sr != null)
+                Destroy(sr.gameObject);
+            _stairsOverlays.Remove(instanceId);
+        }
+
+        Transform StairsOverlayRoot()
+        {
+            if (_stairsOverlayRoot != null) return _stairsOverlayRoot;
+            var go = new GameObject("StairsOverlays");
+            go.transform.SetParent(transform, false);
+            _stairsOverlayRoot = go.transform;
+            return _stairsOverlayRoot;
         }
 
         Tile GetTile(Color color, byte edges)

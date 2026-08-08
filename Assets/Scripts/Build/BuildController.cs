@@ -56,6 +56,7 @@ namespace BuildATower
             if (GetComponent<TowerMapController>() == null)
                 gameObject.AddComponent<TowerMapController>();
             EnsureDayNightSkyOnMainCamera();
+            ParallaxBackdrop.EnsureInScene();
         }
 
         static void EnsureDayNightSkyOnMainCamera()
@@ -1198,15 +1199,22 @@ namespace BuildATower
                 return;
             }
 
-            // Never write underlay tiles onto cells the grid still attributes to transit.
-            view.PaintRoom(room, IsTransitOwnedCell);
+            // Skip opaque transit (elevators/ramps). Stairs are a floating overlay — underlay paints through.
+            view.PaintRoom(room, IsOpaqueTransitOwnedCell);
             RepaintAllVisibleTransit();
         }
 
-        bool IsTransitOwnedCell(Vector2Int cell) =>
+        bool IsOpaqueTransitOwnedCell(Vector2Int cell) =>
             Grid != null &&
             Grid.TryGetRoomAt(cell, out var at) &&
-            IsVisibleTransit(at);
+            at?.Type != null &&
+            (at.Type.isElevatorShaft || at.Type.isParkingRamp);
+
+        public void RefreshStairsArt()
+        {
+            if (view == null || Grid == null) return;
+            view.RefreshStairsOverlays(Grid.Rooms);
+        }
 
         public void RepaintAllRooms()
         {
@@ -1215,7 +1223,7 @@ namespace BuildATower
             {
                 if (room?.Type == null) continue;
                 if (IsVisibleTransit(room)) continue;
-                view.PaintRoom(room, IsTransitOwnedCell);
+                view.PaintRoom(room, IsOpaqueTransitOwnedCell);
             }
             RepaintAllVisibleTransit();
         }

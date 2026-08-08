@@ -4,8 +4,8 @@ using UnityEngine;
 namespace BuildATower
 {
     /// <summary>
-    /// 2.5D parallax: far/mid city plates + painted grass and transparent tree
-    /// buffers in front of the skyline (behind the tower).
+    /// 2.5D parallax: mid city roofs + painted grass and transparent tree
+    /// buffers (behind the tower).
     /// </summary>
     public sealed class ParallaxBackdrop : MonoBehaviour
     {
@@ -17,36 +17,29 @@ namespace BuildATower
         }
 
         [SerializeField] Camera targetCamera;
-        [SerializeField] float farLag = 0.88f;
         [SerializeField] float midLag = 0.72f;
         [SerializeField] float grassLag = 0.97f;
         [SerializeField] float treeLag = 0.985f;
         [Tooltip("World Y where skyline building feet meet the dirt/lobby ground.")]
         [SerializeField] float groundY = 0f;
-        [SerializeField] float farMaxHeight = 8.0f;
         [SerializeField] float midMaxHeight = 3.8f;
         [SerializeField] float grassMaxHeight = 1.15f;
         [SerializeField] float treeMaxHeight = 2.8f;
-        [SerializeField] float farTargetWidth = 22f;
         [SerializeField] float midTargetWidth = 18f;
         [SerializeField] float vegTargetWidth = 22f;
         [SerializeField] float coverageWidth = 140f;
 
         Transform _rig;
-        Transform _far;
         Transform _mid;
         Transform _grass;
         Transform _trees;
-        SpriteRenderer[] _farRenderers;
         SpriteRenderer[] _midRenderers;
         SpriteRenderer[] _grassRenderers;
         SpriteRenderer[] _treeRenderers;
         float _lastCamX;
-        float _farOff;
         float _midOff;
         float _grassOff;
         float _treeOff;
-        float _farTileW = 40f;
         float _midTileW = 32f;
         float _grassTileW = 24f;
         float _treeTileW = 24f;
@@ -72,19 +65,6 @@ namespace BuildATower
             go.transform.SetParent(transform, false);
             _rig = go.transform;
 
-            _far = SpawnStrip(
-                _rig,
-                "FarSkyline",
-                sortingOrder: -200,
-                resource: "Art/Parallax/far_city",
-                fallback: BuildFarFallback,
-                maxH: farMaxHeight,
-                targetW: farTargetWidth,
-                preferHeight: true,
-                mode: PlateMode.City,
-                out _farRenderers,
-                out _farTileW);
-
             _mid = SpawnStrip(
                 _rig,
                 "MidRoofs",
@@ -93,7 +73,6 @@ namespace BuildATower
                 fallback: BuildMidFallback,
                 maxH: midMaxHeight,
                 targetW: midTargetWidth,
-                preferHeight: false,
                 mode: PlateMode.City,
                 out _midRenderers,
                 out _midTileW);
@@ -106,7 +85,6 @@ namespace BuildATower
                 fallback: BuildGrassFallback,
                 maxH: grassMaxHeight,
                 targetW: vegTargetWidth,
-                preferHeight: false,
                 mode: PlateMode.GrassOpaque,
                 out _grassRenderers,
                 out _grassTileW);
@@ -119,7 +97,6 @@ namespace BuildATower
                 fallback: BuildTreesFallback,
                 maxH: treeMaxHeight,
                 targetW: vegTargetWidth,
-                preferHeight: false,
                 mode: PlateMode.TreesAlpha,
                 out _treeRenderers,
                 out _treeTileW);
@@ -137,16 +114,13 @@ namespace BuildATower
             var dx = cam.x - _lastCamX;
             _lastCamX = cam.x;
 
-            _farOff += -dx * farLag;
             _midOff += -dx * midLag;
             _grassOff += -dx * grassLag;
             _treeOff += -dx * treeLag;
-            _farOff = WrapOffset(_farOff, _farTileW);
             _midOff = WrapOffset(_midOff, _midTileW);
             _grassOff = WrapOffset(_grassOff, _grassTileW);
             _treeOff = WrapOffset(_treeOff, _treeTileW);
 
-            if (_far != null) _far.position = new Vector3(cam.x + _farOff, groundY + 0.55f, 0f);
             if (_mid != null) _mid.position = new Vector3(cam.x + _midOff, groundY + 0.15f, 0f);
             if (_grass != null) _grass.position = new Vector3(cam.x + _grassOff, groundY, 0f);
             if (_trees != null) _trees.position = new Vector3(cam.x + _treeOff, groundY, 0f);
@@ -161,10 +135,6 @@ namespace BuildATower
             var dayAmt = Mathf.Clamp01(
                 Vector3.Dot(new Vector3(sky.r, sky.g, sky.b), new Vector3(0.3f, 0.5f, 0.2f)) /
                 0.75f);
-            var farTint = Color.Lerp(
-                new Color(0.45f, 0.50f, 0.62f, 1f),
-                new Color(1.05f, 1.02f, 0.96f, 1f),
-                dayAmt);
             var midTint = Color.Lerp(
                 new Color(0.40f, 0.38f, 0.36f, 1f),
                 new Color(1.08f, 1.04f, 0.98f, 1f),
@@ -174,7 +144,6 @@ namespace BuildATower
                 new Color(0.55f, 0.72f, 0.38f, 1f),
                 dayAmt);
 
-            SetTint(_farRenderers, farTint);
             SetTint(_midRenderers, midTint);
             SetTint(_grassRenderers, vegTint);
             SetTint(_treeRenderers, vegTint);
@@ -204,7 +173,6 @@ namespace BuildATower
             System.Func<Sprite> fallback,
             float maxH,
             float targetW,
-            bool preferHeight,
             PlateMode mode,
             out SpriteRenderer[] renderers,
             out float tileWorldW)
@@ -219,11 +187,7 @@ namespace BuildATower
 
             var bw = Mathf.Max(0.01f, sprite.bounds.size.x);
             var bh = Mathf.Max(0.01f, sprite.bounds.size.y);
-            float scale;
-            if (preferHeight)
-                scale = Mathf.Min(maxH / bh, (targetW * 1.35f) / bw);
-            else
-                scale = Mathf.Min(maxH / bh, targetW / bw);
+            var scale = Mathf.Min(maxH / bh, targetW / bw);
             tileWorldW = bw * scale;
 
             var tiles = Mathf.Max(3, Mathf.CeilToInt(coverageWidth / tileWorldW) + 2);
@@ -539,27 +503,6 @@ namespace BuildATower
                     px[i] = c;
                 }
             }
-        }
-
-        static Sprite BuildFarFallback()
-        {
-            const int w = 512;
-            const int h = 96;
-            var px = new Color[w * h];
-            for (var i = 0; i < px.Length; i++) px[i] = Color.clear;
-            var rng = new System.Random(7);
-            for (var b = 0; b < 40; b++)
-            {
-                var bx = rng.Next(0, w - 30);
-                var bw = rng.Next(12, 36);
-                var bh = rng.Next(28, 90);
-                var c = new Color(0.42f, 0.50f, 0.60f, 1f);
-                for (var y = 0; y < bh; y++)
-                for (var x = bx; x < bx + bw && x < w; x++)
-                    px[y * w + x] = Color.Lerp(c, Color.white, y / (float)bh * 0.25f);
-            }
-
-            return FromPixels(px, w, h, "far_fb");
         }
 
         static Sprite BuildMidFallback()

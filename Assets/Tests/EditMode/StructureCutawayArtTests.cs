@@ -13,7 +13,7 @@ namespace BuildATower.Tests
             Assert.AreEqual(1, StructureCutawayArt.LobbyPanIndex(5));
             Assert.AreEqual(1, StructureCutawayArt.LobbyPanIndex(9));
             Assert.AreEqual(2, StructureCutawayArt.LobbyPanIndex(10));
-            Assert.AreEqual(0, StructureCutawayArt.LobbyPanIndex(30));
+            Assert.AreEqual(0, StructureCutawayArt.LobbyPanIndex(25)); // 5 pans * 5 cells
         }
 
         [Test]
@@ -28,9 +28,9 @@ namespace BuildATower.Tests
         [Test]
         public void LobbyPanIndex_HandlesNegativeX()
         {
-            Assert.AreEqual(5, StructureCutawayArt.LobbyPanIndex(-1));
-            Assert.AreEqual(5, StructureCutawayArt.LobbyPanIndex(-5));
-            Assert.AreEqual(4, StructureCutawayArt.LobbyPanIndex(-6));
+            Assert.AreEqual(4, StructureCutawayArt.LobbyPanIndex(-1));
+            Assert.AreEqual(4, StructureCutawayArt.LobbyPanIndex(-5));
+            Assert.AreEqual(3, StructureCutawayArt.LobbyPanIndex(-6));
         }
 
         [Test]

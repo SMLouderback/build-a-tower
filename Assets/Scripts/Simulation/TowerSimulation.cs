@@ -123,6 +123,7 @@ namespace BuildATower
                 build = GetComponent<BuildController>() ?? FindAnyObjectByType<BuildController>();
 
             EnsureDayNightSkyController();
+            ParallaxBackdrop.EnsureInScene();
 
             _clock = new GameClock(minutesPerRealSecond, startMinuteOfDay);
             _elevators = new ElevatorSystem();
@@ -139,6 +140,7 @@ namespace BuildATower
             _lastDayIndex = _clock.DayIndex;
             _clock.DayRolled += OnDayRolled;
             _clock.MonthRolled += OnMonthRolled;
+            SyncStructureArtToStars();
 
             if (agentView == null)
             {
@@ -269,6 +271,14 @@ namespace BuildATower
                 _climate?.ComfortTierOffset ?? 0,
                 _crime?.AverageCrime ?? 0f);
             _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
+            SyncStructureArtToStars();
+        }
+
+        void SyncStructureArtToStars()
+        {
+            var stars = _stars?.CurrentStars ?? 0;
+            if (!StructureCutawayArt.SetStarRating(stars)) return;
+            build?.RefreshStairsArt();
         }
 
         void OnMonthRolled()
@@ -323,6 +333,7 @@ namespace BuildATower
                     _stars.EvaluateQuarterly(build.Grid, _agents.AverageStress, _agents.Population);
                 else
                     _stars.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
+                SyncStructureArtToStars();
 
                 EnsureMapController()?.NotifyMidnight(
                     day,

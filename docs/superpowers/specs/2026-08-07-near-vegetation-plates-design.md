@@ -1,4 +1,4 @@
-# Build-A-Tower — Hand-Painted Near Vegetation + Far Skyline Peek
+# Build-A-Tower — Hand-Painted Near Vegetation Plates
 
 **Date:** 2026-08-07  
 **Status:** Implemented  
@@ -10,8 +10,8 @@
 
 1. Replace procedural blob grass/trees with **hand-painted AI plates** that match lobby and city style.  
 2. Split vegetation into **two layers** (opaque grass + transparent trees) for real depth.  
-3. Make the **far city** readable **above/behind mid roofs** (today it is effectively hidden).  
-4. Keep procedural vegetation as **fallback** if plates fail to load.
+3. Keep procedural vegetation as **fallback** if plates fail to load.  
+4. Drop the far skyline plate (mismatched castles); mid roofs + near veg only.
 
 ## 2. Locked decisions
 
@@ -22,12 +22,12 @@
 | Tree gaps | Transparent so city and grass show through |
 | Grass plate | Opaque |
 | Runtime | Two Resources strips (`near_grass`, `near_trees`) |
-| Far city | Raise visual height so tops peek above mid roofs |
+| Far city | **Removed** (asset + layer deleted) |
 | Out of scope | Multiple veg variants; wind; regenerating mid roofs |
 
 ## 3. Runtime — vegetation
 
-**Stack (back → front):** far city → mid roofs → **near_grass** → **near_trees** → tower/dirt
+**Stack (back → front):** mid roofs → **near_grass** → **near_trees** → tower/dirt
 
 | Layer | Resource | Sorting | Lag | Seat |
 |-------|----------|---------|-----|------|
@@ -49,18 +49,9 @@
 
 **Pipeline:** generate → key white/black/sky plates on trees → edge-fade for tiling → `.png` + `.bytes` under `Assets/Resources/Art/Parallax/`.
 
-## 5. Runtime — far city peek
+## 5. Far city layer — removed
 
-Far skyline is currently scale-capped (`farMaxHeight` + `farTargetWidth`) and sits only slightly above mid, so mid roofs cover it.
-
-**Changes (presentation only — keep existing `far_city` art):**
-
-1. Raise **`farMaxHeight`** enough that building tops clearly clear mid roofs (start ~**7.5–8.5** world units; tune in Play Mode).  
-2. Prefer height over width when conflicting: allow a slightly larger far footprint, or bias scale toward `maxH` so the plate is not crushed short by `targetW`.  
-3. Optional: nudge far Y (`groundY + ~0.5–0.7`) so the silhouette sits farther “back/up” without floating off the ground line.  
-4. Keep mid roofs as-is; far must remain **behind** mid (sorting −200 vs −180).
-
-Success: with mid roofs present, far towers/water towers still read above the mid silhouette.
+The far skyline plate (`far_city`) was dropped; it read as mismatched “castle” silhouettes behind mid roofs. Parallax city depth is **mid roofs only**, plus near grass/trees.
 
 ## 6. Code — `ParallaxBackdrop`
 
@@ -71,12 +62,11 @@ Success: with mid roofs present, far towers/water towers still read above the mi
   - **Grass:** opaque; edge fade; no sky flood that eats blades.  
   - **Trees:** key plates; **preserve alpha**; edge fade; do **not** force opaque on foliage.  
 - Split procedural `BuildVegetationStrip` into grass-only / trees-only fallbacks (or draw one and mask).  
-- Far height/scale/Y adjustments per §5.
 
 ## 7. Success criteria
 
 - Grass reads as painted turf, not a flat green bar.  
 - Trees read as painted canopies with city visible through gaps.  
-- Far city silhouettes visible above mid roofs while scrolling.  
+- No far-city / castle silhouettes behind mid roofs.  
 - Missing veg assets → procedural fallback, no pink/errors.  
 - Play Mode after cache/domain reload shows new plates.

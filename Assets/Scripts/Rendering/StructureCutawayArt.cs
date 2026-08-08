@@ -15,7 +15,7 @@ namespace BuildATower
         public const int CellPixels = 128;
         public const int StairsPixels = 256;
         public const int LobbyMidCount = 6;
-        public const int LobbyPanCount = 6;
+        public const int LobbyPanCount = 5;
         public const int LobbyPanCells = 5;
         public const int LobbyPanWidthPixels = CellPixels * LobbyPanCells; // 640
 
@@ -233,7 +233,9 @@ namespace BuildATower
                 for (var s = 0; s < LobbyPanCells; s++)
                 {
                     var cell = ExtractCellFromPan(panPx, s);
-                    LockLobbyStructure(cell);
+                    // Panoramas are already continuous — do NOT LockLobbyStructure.
+                    // That stamps shared L/R edge columns (pillars) onto every cell
+                    // and clips paintings / windows / furniture mid-image.
                     FillLobbyWhiteEdgeBars(cell);
                     ForceOpaque(cell);
                     _lobbyPanTiles[p][s] = MakeTile($"{name}_s{s}", cell, FilterMode.Bilinear);
@@ -251,7 +253,6 @@ namespace BuildATower
                     for (var s = 0; s < LobbyPanCells; s++)
                     {
                         var cell = ExtractCellFromPan(firstPanPx, s);
-                        LockLobbyStructure(cell);
                         FillLobbyWhiteEdgeBars(cell);
                         ForceOpaque(cell);
                         _lobbyPanTiles[p][s] = MakeTile($"lobby_pan_fill_s{s}", cell, FilterMode.Bilinear);

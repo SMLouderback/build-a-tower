@@ -12,7 +12,6 @@
 ## Layers
 | Layer | Resource | Parallax factor |
 |-------|----------|-----------------|
-| Far city | `Art/Parallax/far_city` | ~0.15 lag pair; taller peek above mid |
 | Mid roofs | `Art/Parallax/mid_roofs` | mid lag |
 | Near grass | `Art/Parallax/near_grass` | ~0.97 |
 | Near trees | `Art/Parallax/near_trees` (alpha) | ~0.985 |
@@ -25,5 +24,5 @@
 - Skyline sky/ground-bar cleared by **border flood-fill** only (no hole-punching mid-tone keys).
 - Small disconnected blobs (floating specks) removed; L/R edges faded so tiled half-buildings disappear.
 - **Near grass / trees** painted plates (`near_grass`, `near_trees`); trees keep alpha so the city shows through.
+- Far skyline layer removed (mid roofs + near veg only).
 - Prefer `.bytes` TextAssets under `Resources`.
-- Far skyline uses taller max height so tops peek above mid roofs.

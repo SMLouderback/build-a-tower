@@ -20,11 +20,11 @@
 | Art source | **Generate new** wide images (classic cutaway reference look) |
 | Block width | **Always 5 cells** |
 | Block height | **1 cell** (current lobby grid) |
-| Panorama count | **6** distinct pans, then cycle |
+| Panorama count | **5** distinct pans (pillar hall removed), then cycle |
 | Runtime approach | **Slice into tiles** from each wide texture (keep tilemap path) |
 | Segment index | World X: `floor_div(cellX, 5)` then `% 6` |
 | Slice index | `positive_mod(cellX, 5)` → columns `0..4` |
-| Primary assets | `lobby_pan_01` … `lobby_pan_06` |
+| Primary assets | `lobby_pan_01` … `lobby_pan_05` |
 | Fallback | Existing `lobby_mid_*` / procedural shell if a pan fails to load |
 | Out of scope | Double-height lobby; stairs/elevator; sprite-overlay masking; baking 30 separate cell files as source of truth |
 
@@ -46,10 +46,10 @@ Negative `cellX` uses the same floor-division / positive-modulo rules so strips 
 
 | Asset | Size | Notes |
 |-------|------|--------|
-| `lobby_pan_01` … `lobby_pan_06` | **640×128** | Opaque; no white/grey generator plate |
+| `lobby_pan_01` … `lobby_pan_05` | **640×128** | Opaque; no white/grey generator plate |
 | Delivery | `.bytes` + optional `.png` | `Assets/Resources/Art/Structure/` |
 
-**Shared language (all six):** cream/marble walls, dark walnut floor band, white crown molding, columns/pilasters. Prompt-lock **identical floor/crown band heights** so shell locking works.
+**Shared language (all five):** cream/marble walls, dark walnut floor band, white crown molding, columns/pilasters. Prompt-lock **identical floor/crown band heights** so shell locking works.
 
 **Scene beats (distinct, not crops of one photo):**
 
@@ -57,8 +57,9 @@ Negative `cellX` uses the same floor-division / positive-modulo rules so strips 
 2. Reception desk + concierge  
 3. Revolving / main doors  
 4. Seating lounge + lamps  
-5. Grand columns / chandelier hint  
-6. Side corridor / elevator-lobby mouth  
+5. Side corridor / elevator-lobby mouth  
+
+(Former six-pillar “grand columns” pan removed — over-cropped.)
 
 Within each pan, left→right must read as **one continuous room** (no full room reset every 128px).
 
@@ -68,7 +69,7 @@ Within each pan, left→right must read as **one continuous room** (no full room
 
 **`StructureCutawayArt`**
 
-- Constants: `LobbyPanCount = 6`, `LobbyPanCells = 5`, pan pixels `640×128`, cell `128×128`.  
+- Constants: `LobbyPanCount = 5`, `LobbyPanCells = 5`, pan pixels `640×128`, cell `128×128`.  
 - Cache: `Tile[LobbyPanCount][LobbyPanCells]` (or flat equivalent).  
 - `LobbySegmentIndex` / `LobbySliceIndex` (or fold into `TryLobbyTile`).  
 - Replace per-cell `LobbyVariantIndex` mid hashing as the **primary** lobby path.  
