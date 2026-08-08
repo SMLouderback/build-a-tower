@@ -17,6 +17,8 @@ namespace BuildATower
         public const int LobbyMidCount = 6;
         public const int LobbyPanCount = 5;
         public const int LobbyPanCells = 5;
+        /// <summary>One lobby panorama set per star rating, 0★ through 5★.</summary>
+        public const int LobbyStarSets = 6;
         public const int LobbyPanWidthPixels = CellPixels * LobbyPanCells; // 640
 
         static readonly Color Wall = new(0.878f, 0.820f, 0.722f, 1f);
@@ -57,21 +59,43 @@ namespace BuildATower
         static Sprite _stairsSprite;
         static Color[] _lobbyShell;
         static int _stairsStarTier = -1;
+        static int _lobbyStar = -1;
 
         /// <summary>
-        /// Map tower stars to stairs art: 0–1 basic, 2–3 mid, 4–5 luxury.
+        /// Map tower stars to art. Stairs bucket into three tiers (0–1 basic, 2–3 mid,
+        /// 4–5 luxury); the lobby gets one panorama set per exact star rating.
         /// Call when <see cref="StarSystem.CurrentStars"/> changes so overlays refresh.
         /// </summary>
         public static bool SetStarRating(int stars)
         {
             var tier = StarTierIndex(stars);
-            if (_attempted && tier == _stairsStarTier && _stairsSprite != null)
-                return false;
-            _stairsStarTier = tier;
-            if (_attempted)
-                _stairsSprite = LoadOrBuildStairs();
-            return true;
+            var lobbyStar = LobbyStarIndex(stars);
+            var changed = false;
+
+            if (tier != _stairsStarTier)
+            {
+                _stairsStarTier = tier;
+                changed = true;
+                if (_attempted)
+                    _stairsSprite = LoadOrBuildStairs();
+            }
+
+            if (lobbyStar != _lobbyStar)
+            {
+                _lobbyStar = lobbyStar;
+                changed = true;
+                if (_attempted)
+                    BuildLobbyPanTiles();
+            }
+
+            return changed || !_attempted;
         }
+
+        /// <summary>Exact star rating clamped to the shipped panorama sets.</summary>
+        public static int LobbyStarIndex(int stars) => Mathf.Clamp(stars, 0, LobbyStarSets - 1);
+
+        public static string LobbyPanResource(int star, int pan) =>
+            $"lobby_s{star:00}_pan_{pan + 1:00}";
 
         static int StarTierIndex(int stars)
         {
@@ -197,6 +221,7 @@ namespace BuildATower
             _stairsSprite = null;
             _lobbyShell = null;
             _stairsStarTier = -1;
+            _lobbyStar = -1;
         }
 
         static void EnsureLoaded()
@@ -206,59 +231,10 @@ namespace BuildATower
 
             if (_stairsStarTier < 0)
                 _stairsStarTier = 1;
+            if (_lobbyStar < 0)
+                _lobbyStar = LobbyStarSets - 1;
 
-            _lobbyShell = null;
-            _lobbyPanTiles = new Tile[LobbyPanCount][];
-            var anyPan = false;
-            Color[] firstPanPx = null;
-            for (var p = 0; p < LobbyPanCount; p++)
-            {
-                var name = $"lobby_pan_{p + 1:00}";
-                var panPx = TryLoadLobbyPanPixels(name);
-                if (panPx == null)
-                {
-                    _lobbyPanTiles[p] = null;
-                    continue;
-                }
-
-                anyPan = true;
-                firstPanPx ??= panPx;
-                if (_lobbyShell == null)
-                {
-                    _lobbyShell = ExtractCellFromPan(panPx, 0);
-                    FillLobbyWhiteEdgeBars(_lobbyShell);
-                }
-
-                _lobbyPanTiles[p] = new Tile[LobbyPanCells];
-                for (var s = 0; s < LobbyPanCells; s++)
-                {
-                    var cell = ExtractCellFromPan(panPx, s);
-                    // Panoramas are already continuous — do NOT LockLobbyStructure.
-                    // That stamps shared L/R edge columns (pillars) onto every cell
-                    // and clips paintings / windows / furniture mid-image.
-                    FillLobbyWhiteEdgeBars(cell);
-                    ForceOpaque(cell);
-                    _lobbyPanTiles[p][s] = MakeTile($"{name}_s{s}", cell, FilterMode.Bilinear);
-                }
-            }
-
-            // Fill any missing pan slots from the first successful pan so segment
-            // indices never paint empty when other pans loaded.
-            if (anyPan && firstPanPx != null)
-            {
-                for (var p = 0; p < LobbyPanCount; p++)
-                {
-                    if (_lobbyPanTiles[p] != null) continue;
-                    _lobbyPanTiles[p] = new Tile[LobbyPanCells];
-                    for (var s = 0; s < LobbyPanCells; s++)
-                    {
-                        var cell = ExtractCellFromPan(firstPanPx, s);
-                        FillLobbyWhiteEdgeBars(cell);
-                        ForceOpaque(cell);
-                        _lobbyPanTiles[p][s] = MakeTile($"lobby_pan_fill_s{s}", cell, FilterMode.Bilinear);
-                    }
-                }
-            }
+            var anyPan = BuildLobbyPanTiles();
 
             _lobbyMids = null;
             if (!anyPan)
@@ -302,6 +278,86 @@ namespace BuildATower
             _elevatorTop = MakeElevatorTile("elevator_top", PaintElevatorTop, true);
             _elevatorBottom = MakeElevatorTile("elevator_bottom", PaintElevatorBottom, true);
             _stairsSprite = LoadOrBuildStairs();
+        }
+
+        /// <summary>
+        /// Rebuild the panorama tile cache for <see cref="_lobbyStar"/> only.
+        /// Returns whether any panorama resolved.
+        /// </summary>
+        static bool BuildLobbyPanTiles()
+        {
+            // Keep the previous shell if this star's art can't supply one.
+            var prevShell = _lobbyShell;
+            _lobbyShell = null;
+            _lobbyPanTiles = new Tile[LobbyPanCount][];
+            var anyPan = false;
+            Color[] firstPanPx = null;
+            for (var p = 0; p < LobbyPanCount; p++)
+            {
+                var panPx = LoadLobbyPanForStar(_lobbyStar, p);
+                if (panPx == null)
+                {
+                    _lobbyPanTiles[p] = null;
+                    continue;
+                }
+
+                anyPan = true;
+                firstPanPx ??= panPx;
+                if (_lobbyShell == null)
+                {
+                    _lobbyShell = ExtractCellFromPan(panPx, 0);
+                    FillLobbyWhiteEdgeBars(_lobbyShell);
+                }
+
+                var name = LobbyPanResource(_lobbyStar, p);
+                _lobbyPanTiles[p] = new Tile[LobbyPanCells];
+                for (var s = 0; s < LobbyPanCells; s++)
+                {
+                    var cell = ExtractCellFromPan(panPx, s);
+                    // Panoramas are already continuous — do NOT LockLobbyStructure.
+                    // That stamps shared L/R edge columns (pillars) onto every cell
+                    // and clips paintings / windows / furniture mid-image.
+                    FillLobbyWhiteEdgeBars(cell);
+                    ForceOpaque(cell);
+                    _lobbyPanTiles[p][s] = MakeTile($"{name}_s{s}", cell, FilterMode.Bilinear);
+                }
+            }
+
+            // Fill any missing pan slots from the first successful pan so segment
+            // indices never paint empty when other pans loaded.
+            if (anyPan && firstPanPx != null)
+            {
+                for (var p = 0; p < LobbyPanCount; p++)
+                {
+                    if (_lobbyPanTiles[p] != null) continue;
+                    _lobbyPanTiles[p] = new Tile[LobbyPanCells];
+                    for (var s = 0; s < LobbyPanCells; s++)
+                    {
+                        var cell = ExtractCellFromPan(firstPanPx, s);
+                        FillLobbyWhiteEdgeBars(cell);
+                        ForceOpaque(cell);
+                        _lobbyPanTiles[p][s] = MakeTile($"lobby_pan_fill_s{s}", cell, FilterMode.Bilinear);
+                    }
+                }
+            }
+
+            _lobbyShell ??= prevShell;
+            return anyPan;
+        }
+
+        /// <summary>
+        /// Active star's panorama, else the nearest lower star, else the nearest higher
+        /// star, else the legacy un-tiered art.
+        /// </summary>
+        static Color[] LoadLobbyPanForStar(int star, int pan)
+        {
+            var px = TryLoadLobbyPanPixels(LobbyPanResource(star, pan));
+            if (px != null) return px;
+            for (var s = star - 1; s >= 0 && px == null; s--)
+                px = TryLoadLobbyPanPixels(LobbyPanResource(s, pan));
+            for (var s = star + 1; s < LobbyStarSets && px == null; s++)
+                px = TryLoadLobbyPanPixels(LobbyPanResource(s, pan));
+            return px ?? TryLoadLobbyPanPixels($"lobby_pan_{pan + 1:00}");
         }
 
         static Tile MakeElevatorTile(string name, System.Action<Color[]> fallback, bool forceOpaque)
