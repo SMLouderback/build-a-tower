@@ -278,7 +278,7 @@ namespace BuildATower
         {
             var stars = _stars?.CurrentStars ?? 0;
             if (!StructureCutawayArt.SetStarRating(stars)) return;
-            build?.RefreshStairsArt();
+            build?.RefreshStarStructureArt();
         }
 
         void OnMonthRolled()

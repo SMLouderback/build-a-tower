@@ -1210,10 +1210,20 @@ namespace BuildATower
             at?.Type != null &&
             (at.Type.isElevatorShaft || at.Type.isParkingRamp);
 
-        public void RefreshStairsArt()
+        /// <summary>
+        /// Reapply the art that depends on the tower's star rating: stairs overlays and the
+        /// lobby panorama tiles. Other room types are left alone.
+        /// </summary>
+        public void RefreshStarStructureArt()
         {
             if (view == null || Grid == null) return;
             view.RefreshStairsOverlays(Grid.Rooms);
+            foreach (var room in Grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                if (!room.Type.isLobby) continue;
+                view.PaintRoom(room, IsOpaqueTransitOwnedCell);
+            }
         }
 
         public void RepaintAllRooms()
