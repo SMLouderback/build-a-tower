@@ -139,6 +139,53 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void TryPromote_cascades_enqueue_one_event_per_star()
+        {
+            var stars = new StarSystem();
+            Assert.IsTrue(stars.TryPromote(GridReadyForTwoStars(), averageStress: 10f, population: 30));
+            Assert.AreEqual(2, stars.CurrentStars);
+            Assert.AreEqual(2, stars.PendingChanges.Count);
+            Assert.AreEqual(StarChangeKind.Promoted, stars.PendingChanges[0].Kind);
+            Assert.AreEqual(1, stars.PendingChanges[0].Stars);
+            Assert.AreEqual(StarChangeKind.Promoted, stars.PendingChanges[1].Kind);
+            Assert.AreEqual(2, stars.PendingChanges[1].Stars);
+        }
+
+        [Test]
+        public void EvaluateQuarterly_demote_enqueues_demoted_event()
+        {
+            var stars = new StarSystem();
+            stars.ForceStars(1);
+            stars.ClearPendingChanges();
+            // Lobby-only grid fails 1★ population/stress — use stress/pop that fail MeetsCriteria(1)
+            stars.EvaluateQuarterly(GridWithLobby(), averageStress: 90f, population: 1);
+            Assert.AreEqual(0, stars.CurrentStars);
+            Assert.AreEqual(1, stars.PendingChanges.Count);
+            Assert.AreEqual(StarChangeKind.Demoted, stars.PendingChanges[0].Kind);
+            Assert.AreEqual(0, stars.PendingChanges[0].Stars);
+        }
+
+        [Test]
+        public void ForceStars_does_not_enqueue_and_clears_pending()
+        {
+            var stars = new StarSystem();
+            stars.TryPromote(GridReadyForTwoStars(), averageStress: 10f, population: 30);
+            Assert.IsTrue(stars.PendingChanges.Count > 0);
+            stars.ForceStars(5);
+            Assert.AreEqual(0, stars.PendingChanges.Count);
+            Assert.AreEqual(5, stars.CurrentStars);
+        }
+
+        [Test]
+        public void ClearPendingChanges_empties_list()
+        {
+            var stars = new StarSystem();
+            stars.TryPromote(GridWithLobby(), averageStress: 10f, population: 10);
+            stars.ClearPendingChanges();
+            Assert.AreEqual(0, stars.PendingChanges.Count);
+        }
+
+        [Test]
         public void TryPromote_does_not_skip_to_two_without_elevator()
         {
             var stars = new StarSystem();

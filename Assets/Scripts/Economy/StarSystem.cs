@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace BuildATower
 {
     public sealed class StarSystem
@@ -21,8 +23,13 @@ namespace BuildATower
         const string HousekeepingId = "service_housekeeping";
         const string MaintenanceId = "service_maintenance";
 
+        readonly List<StarChangeEvent> _pendingChanges = new();
+
         public int CurrentStars { get; private set; }
         public string LastResult { get; private set; }
+        public IReadOnlyList<StarChangeEvent> PendingChanges => _pendingChanges;
+
+        public void ClearPendingChanges() => _pendingChanges.Clear();
 
         /// <summary>
         /// Grants every consecutive star whose criteria are currently met. Never demotes.
@@ -37,6 +44,7 @@ namespace BuildATower
                    MeetsCriteria(CurrentStars + 1, grid, averageStress, population))
             {
                 CurrentStars++;
+                _pendingChanges.Add(new StarChangeEvent(StarChangeKind.Promoted, CurrentStars));
                 promoted = true;
                 LastResult = $"Earned {CurrentStars}★.";
             }
@@ -52,6 +60,7 @@ namespace BuildATower
             if (CurrentStars > 0 && !MeetsCriteria(CurrentStars, grid, averageStress, population))
             {
                 CurrentStars--;
+                _pendingChanges.Add(new StarChangeEvent(StarChangeKind.Demoted, CurrentStars));
                 LastResult = $"Quarterly review: demoted to {CurrentStars}★.";
                 return;
             }
@@ -68,6 +77,7 @@ namespace BuildATower
         public void ForceStars(int stars)
         {
             CurrentStars = System.Math.Clamp(stars, 0, MaxStars);
+            ClearPendingChanges();
         }
 
         /// <summary>
