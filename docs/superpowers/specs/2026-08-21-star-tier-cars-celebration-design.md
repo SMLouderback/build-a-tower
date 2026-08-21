@@ -1,7 +1,7 @@
 # Build-A-Tower — Star-Tier Elevator Cars + Star Celebration
 
 **Date:** 2026-08-21  
-**Status:** Approved  
+**Status:** Implemented  
 **Depends on:** `StarSystem`; `ElevatorView`; `TowerHudController` pause/speed restore; `StructureCutawayArt.SetStarRating` / `SyncStructureArtToStars`; day-night sky  
 **Parent:** Visual polish → star progression readable on cars + a “wow” on tier change  
 **Follow-ups:** Star-tier elevator shaft tiles; celebration SFX; room cutaway kits
