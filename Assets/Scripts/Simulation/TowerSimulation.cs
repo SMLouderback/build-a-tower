@@ -70,6 +70,7 @@ namespace BuildATower
         [SerializeField] BuildController build;
         [SerializeField] AgentView agentView;
         [SerializeField] ElevatorView elevatorView;
+        [SerializeField] StarCelebrationController celebration;
         [SerializeField] float minutesPerRealSecond = 1f;
         [SerializeField] int startMinuteOfDay = 6 * 60;
 
@@ -156,6 +157,7 @@ namespace BuildATower
                 elevatorView = viewGo.AddComponent<ElevatorView>();
             }
             elevatorView.Bind(_elevators);
+            EnsureCelebrationController();
         }
 
         void OnEnable() => TrySubscribe();
@@ -271,7 +273,7 @@ namespace BuildATower
                 _climate?.ComfortTierOffset ?? 0,
                 _crime?.AverageCrime ?? 0f);
             _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
-            SyncStructureArtToStars();
+            DrainStarCelebrationsAndSyncArt();
         }
 
         void SyncStructureArtToStars()
@@ -281,6 +283,30 @@ namespace BuildATower
             elevatorView?.SetStarRating(stars);
             if (structureChanged)
                 build?.RefreshStarStructureArt();
+        }
+
+        void DrainStarCelebrationsAndSyncArt()
+        {
+            EnsureCelebrationController();
+            if (_stars != null && _stars.PendingChanges.Count > 0 && celebration != null)
+            {
+                celebration.Enqueue(new List<StarChangeEvent>(_stars.PendingChanges));
+                _stars.ClearPendingChanges();
+            }
+
+            SyncStructureArtToStars();
+        }
+
+        void EnsureCelebrationController()
+        {
+            if (celebration == null)
+                celebration = GetComponent<StarCelebrationController>() ??
+                              FindAnyObjectByType<StarCelebrationController>();
+            if (celebration == null)
+                celebration = gameObject.AddComponent<StarCelebrationController>();
+
+            var hud = FindAnyObjectByType<TowerHudController>();
+            celebration.Bind(this, hud, build);
         }
 
         void OnMonthRolled()
@@ -335,7 +361,7 @@ namespace BuildATower
                     _stars.EvaluateQuarterly(build.Grid, _agents.AverageStress, _agents.Population);
                 else
                     _stars.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
-                SyncStructureArtToStars();
+                DrainStarCelebrationsAndSyncArt();
 
                 EnsureMapController()?.NotifyMidnight(
                     day,

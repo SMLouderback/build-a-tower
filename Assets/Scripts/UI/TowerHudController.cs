@@ -11,6 +11,7 @@ namespace BuildATower
     {
         [SerializeField] BuildController build;
         [SerializeField] TowerSimulation simulation;
+        [SerializeField] StarCelebrationController celebration;
         [SerializeField] List<RoomTypeSO> placeableRooms = new();
         [SerializeField] RoomTypeSO stairsRoom;
         [SerializeField] RoomTypeSO elevatorRoom;
@@ -81,8 +82,12 @@ namespace BuildATower
         public Rect PanelScreenRect => _panelRect;
         public Rect TopBarScreenRect => _topBarRect;
 
+        /// <summary>True when the Esc pause / quit confirm overlay is open.</summary>
+        public bool IsEscPauseOpen => _pauseUi != PauseUiState.Playing;
+
         /// <summary>When true, world build input should be ignored.</summary>
-        public bool BlocksWorldInput => _pauseUi != PauseUiState.Playing;
+        public bool BlocksWorldInput =>
+            IsEscPauseOpen || (celebration != null && celebration.IsActive);
 
         /// <summary>True when the GUI point (IMGUI / flipped Y) is over the top bar, info/goals/maps dropdown, graph, or side panel.</summary>
         public bool ContainsGuiPoint(Vector2 guiPoint) =>
@@ -99,6 +104,8 @@ namespace BuildATower
         {
             if (simulation == null && build != null)
                 simulation = build.GetComponent<TowerSimulation>();
+            if (celebration == null)
+                celebration = FindAnyObjectByType<StarCelebrationController>();
             EnsureElevatorAndCatalog();
             GameSession.EnsureDefault();
         }
@@ -107,6 +114,11 @@ namespace BuildATower
         {
             if (build == null) return;
             if (!Input.GetKeyDown(KeyCode.Escape)) return;
+
+            // Continue-only while celebration modal is showing; still allow Esc to close a
+            // pre-existing pause menu when celebrations are only queued and waiting.
+            if (celebration != null && celebration.IsModalOpen)
+                return;
 
             if (_pauseUi == PauseUiState.ConfirmQuit)
             {
