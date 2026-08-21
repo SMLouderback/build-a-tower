@@ -444,6 +444,8 @@ namespace BuildATower
         void EnterPause()
         {
             if (_pauseUi != PauseUiState.Playing) return;
+            // Continue-only while celebration modal owns pause; skip Esc pause overlay.
+            if (ResolveCelebration()?.IsModalOpen == true) return;
             if (simulation?.Clock != null)
             {
                 _speedBeforePause = simulation.Clock.MinutesPerRealSecond;
@@ -681,7 +683,9 @@ namespace BuildATower
             cursor -= menuW;
             if (GUI.Button(new Rect(cursor, y, menuW, lineH), "Menu", barButton))
             {
-                if (_pauseUi == PauseUiState.Playing)
+                // Celebration modal is Continue-only — do not open Esc pause/quit overlay.
+                if (_pauseUi == PauseUiState.Playing &&
+                    ResolveCelebration()?.IsModalOpen != true)
                     EnterPause();
             }
             cursor -= btnGap;
@@ -2438,6 +2442,8 @@ namespace BuildATower
         {
             if (simulation?.Clock == null) return;
             if (_pauseUi != PauseUiState.Playing) return;
+            // Celebration pause snapshot must stay intact until Continue.
+            if (ResolveCelebration()?.IsModalOpen == true) return;
 
             var labels = new[] { "||", "1x", "2x", "5x", "10x", "60x" };
             var speeds = new[] { 0f, 1f, 2f, 5f, 10f, 60f };
