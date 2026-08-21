@@ -232,7 +232,7 @@ namespace BuildATower
             if (_stairsStarTier < 0)
                 _stairsStarTier = 1;
             if (_lobbyStar < 0)
-                _lobbyStar = LobbyStarSets - 1;
+                _lobbyStar = 0;
 
             var anyPan = BuildLobbyPanTiles();
 
@@ -346,8 +346,8 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Active star's panorama, else the nearest lower star, else the nearest higher
-        /// star, else the legacy un-tiered art.
+        /// Active star's panorama, else the nearest lower star, else the nearest higher star.
+        /// Missing pans fall through to <c>lobby_mid_*</c> / procedural in <see cref="EnsureLoaded"/>.
         /// </summary>
         static Color[] LoadLobbyPanForStar(int star, int pan)
         {
@@ -357,7 +357,7 @@ namespace BuildATower
                 px = TryLoadLobbyPanPixels(LobbyPanResource(s, pan));
             for (var s = star + 1; s < LobbyStarSets && px == null; s++)
                 px = TryLoadLobbyPanPixels(LobbyPanResource(s, pan));
-            return px ?? TryLoadLobbyPanPixels($"lobby_pan_{pan + 1:00}");
+            return px;
         }
 
         static Tile MakeElevatorTile(string name, System.Action<Color[]> fallback, bool forceOpaque)

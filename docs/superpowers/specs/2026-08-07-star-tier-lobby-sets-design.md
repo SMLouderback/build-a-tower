@@ -1,7 +1,7 @@
 # Build-A-Tower — Star-Tier Lobby Panorama Sets (0★–5★)
 
 **Date:** 2026-08-07  
-**Status:** Approved  
+**Status:** Implemented  
 **Depends on:** `2026-08-07-lobby-panorama-segments-design.md`; `StructureCutawayArt`; `StarSystem`; `TilemapTowerView`  
 **Parent:** Visual polish → lobby progression readable at a glance  
 **Follow-ups:** Star-tier elevator/corridor art; double-height lobby; tier-flavored room kits
@@ -24,7 +24,7 @@
 | Naming | `lobby_s{SS}_pan_{PP}` (e.g. `lobby_s00_pan_01`, `lobby_s05_pan_05`) |
 | Selection | Exact `CurrentStars` (clamped 0–5) — **not** the stairs 3-bucket map |
 | Cache | Active star only; rebuilt on star change |
-| Fallback | Nearest lower star → nearest higher star → legacy `lobby_pan_*` → `lobby_mid_*` / procedural |
+| Fallback | Nearest lower star → nearest higher star → `lobby_mid_*` / procedural |
 | Out of scope | Stairs tier remap; double-height lobby; regenerating 5★ art |
 
 ## 3. Runtime
@@ -69,12 +69,13 @@ Within a tier, keep floor/crown palette consistent so 5-cell strips read continu
 - `static int _lobbyStar = -1;` distinct from `_stairsStarTier`.
 - `public static int LobbyStarIndex(int stars) => Mathf.Clamp(stars, 0, 5);`
 - `static string LobbyPanResource(int star, int pan) => $"lobby_s{star:00}_pan_{pan + 1:00}";`
-- Pan load tries the active star, then nearest lower, then nearest higher, then `lobby_pan_{PP}`.
+- Pan load tries the active star, then nearest lower, then nearest higher (then `lobby_mid_*` / procedural if no pan resolves).
+- Unset `_lobbyStar` defaults to **0★** in `EnsureLoaded`.
 - `SetStarRating(int stars)`: update `_lobbyStar` and `_stairsStarTier`; when loaded, reload whichever changed; return `true` if anything changed.
 - Slicing / shell handling unchanged (no `LockLobbyStructure` on pan slices).
 
 **Call sites**
-- `BuildController.RefreshStairsArt` → also repaint lobby rooms (rename to `RefreshStarStructureArt`, keep behavior for stairs).
+- `BuildController.RefreshStarStructureArt` refreshes stairs overlays and repaints lobby rooms.
 - `TowerSimulation` star-change path calls that refresh.
 
 **Tests (`StructureCutawayArtTests`)**

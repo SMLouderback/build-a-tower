@@ -4,7 +4,7 @@
 **Status:** Implemented  
 **Depends on:** Structure cutaway art (`2026-08-07-structure-cutaway-art-design.md`); `StructureCutawayArt` / `TilemapTowerView` lobby paint path  
 **Parent:** Visual polish → cohesive hotel lobby  
-**Follow-ups:** Double-height lobby; soft pan-boundary lighting; retire `lobby_mid_*` entirely once pans prove out
+**Follow-ups:** Double-height lobby; soft pan-boundary lighting; retire `lobby_mid_*` entirely once pans prove out; star-tier lobby sets (`2026-08-07-star-tier-lobby-sets-design.md`) — implemented
 
 ## 1. Goals
 
