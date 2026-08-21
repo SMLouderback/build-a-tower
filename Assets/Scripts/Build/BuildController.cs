@@ -683,6 +683,11 @@ namespace BuildATower
             if (refundDelta > 0) Wallet.Add(refundDelta);
             else if (refundDelta < 0) Wallet.Subtract(-refundDelta);
 
+            // Stairs (and other transit) may use SpriteRenderer overlays that ClearCell
+            // does not touch — drop those before repainting underlays.
+            if (view != null)
+                view.ClearRoom(removed);
+
             // Always clear vacated cells first. Scaffolding paints on the structure
             // layer; leaving the old rooms-layer tile made demolished rooms look present.
             foreach (var c in removed.OccupiedCells())
