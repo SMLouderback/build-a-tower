@@ -277,8 +277,10 @@ namespace BuildATower
         void SyncStructureArtToStars()
         {
             var stars = _stars?.CurrentStars ?? 0;
-            if (!StructureCutawayArt.SetStarRating(stars)) return;
-            build?.RefreshStarStructureArt();
+            var structureChanged = StructureCutawayArt.SetStarRating(stars);
+            elevatorView?.SetStarRating(stars);
+            if (structureChanged)
+                build?.RefreshStarStructureArt();
         }
 
         void OnMonthRolled()

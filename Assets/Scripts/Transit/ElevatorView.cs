@@ -9,8 +9,24 @@ namespace BuildATower
         readonly List<SpriteRenderer> _renderers = new();
         ElevatorSystem _elevators;
         Sprite _carSprite;
+        int _starRating = -1;
 
         public void Bind(ElevatorSystem elevators) => _elevators = elevators;
+
+        public static string ElevatorCarResource(int star) =>
+            $"elevator_car_s{Mathf.Clamp(star, 0, 5):00}";
+
+        /// <summary>Reload car art for the given star (0–5). Applies to all car renderers.</summary>
+        public void SetStarRating(int stars)
+        {
+            var clamped = Mathf.Clamp(stars, 0, 5);
+            if (clamped == _starRating && _carSprite != null) return;
+            _starRating = clamped;
+            _carSprite = null;
+            EnsureSprite();
+            for (var i = 0; i < _renderers.Count; i++)
+                _renderers[i].sprite = _carSprite;
+        }
 
         void LateUpdate()
         {
@@ -54,12 +70,39 @@ namespace BuildATower
         void EnsureSprite()
         {
             if (_carSprite != null) return;
-            _carSprite = LoadCarSprite() ?? BuildFallbackCar();
+            if (_starRating < 0) _starRating = 0;
+            _carSprite = LoadCarSpriteForStar(_starRating) ?? BuildFallbackCar();
         }
 
-        static Sprite LoadCarSprite()
+        static Sprite LoadCarSpriteForStar(int star)
         {
-            const string path = "Art/Structure/elevator_car";
+            var clamped = Mathf.Clamp(star, 0, 5);
+            var sprite = TryLoadCarResource(ElevatorCarResource(clamped));
+            if (sprite != null) return sprite;
+
+            for (var s = clamped - 1; s >= 0; s--)
+            {
+                sprite = TryLoadCarResource(ElevatorCarResource(s));
+                if (sprite != null) return sprite;
+            }
+
+            for (var s = clamped + 1; s <= 5; s++)
+            {
+                sprite = TryLoadCarResource(ElevatorCarResource(s));
+                if (sprite != null) return sprite;
+            }
+
+            return TryLoadCarResource("elevator_car");
+        }
+
+        static Sprite TryLoadCarResource(string resourceName)
+        {
+            var path = "Art/Structure/" + resourceName;
+            return LoadCarSpriteFromPath(path);
+        }
+
+        static Sprite LoadCarSpriteFromPath(string path)
+        {
             byte[] png = null;
             var ta = Resources.Load<TextAsset>(path);
             if (ta != null) png = ta.bytes;
