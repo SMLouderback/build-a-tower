@@ -307,6 +307,7 @@ namespace BuildATower
 
             var hud = FindAnyObjectByType<TowerHudController>();
             celebration.Bind(this, hud, build);
+            hud?.BindCelebration(celebration);
         }
 
         void OnMonthRolled()

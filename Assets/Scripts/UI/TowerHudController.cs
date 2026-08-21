@@ -86,8 +86,21 @@ namespace BuildATower
         public bool IsEscPauseOpen => _pauseUi != PauseUiState.Playing;
 
         /// <summary>When true, world build input should be ignored.</summary>
-        public bool BlocksWorldInput =>
-            IsEscPauseOpen || (celebration != null && celebration.IsActive);
+        public bool BlocksWorldInput
+        {
+            get
+            {
+                var celeb = ResolveCelebration();
+                return IsEscPauseOpen || (celeb != null && celeb.IsActive);
+            }
+        }
+
+        /// <summary>Wired by <see cref="TowerSimulation"/> when it creates the controller at runtime.</summary>
+        public void BindCelebration(StarCelebrationController controller)
+        {
+            if (controller != null)
+                celebration = controller;
+        }
 
         /// <summary>True when the GUI point (IMGUI / flipped Y) is over the top bar, info/goals/maps dropdown, graph, or side panel.</summary>
         public bool ContainsGuiPoint(Vector2 guiPoint) =>
@@ -104,8 +117,7 @@ namespace BuildATower
         {
             if (simulation == null && build != null)
                 simulation = build.GetComponent<TowerSimulation>();
-            if (celebration == null)
-                celebration = FindAnyObjectByType<StarCelebrationController>();
+            ResolveCelebration();
             EnsureElevatorAndCatalog();
             GameSession.EnsureDefault();
         }
@@ -117,7 +129,8 @@ namespace BuildATower
 
             // Continue-only while celebration modal is showing; still allow Esc to close a
             // pre-existing pause menu when celebrations are only queued and waiting.
-            if (celebration != null && celebration.IsModalOpen)
+            var celeb = ResolveCelebration();
+            if (celeb != null && celeb.IsModalOpen)
                 return;
 
             if (_pauseUi == PauseUiState.ConfirmQuit)
@@ -481,6 +494,23 @@ namespace BuildATower
             if (_mapController == null)
                 _mapController = FindAnyObjectByType<TowerMapController>();
             return _mapController;
+        }
+
+        /// <summary>
+        /// Lazy-resolve so a controller added after HUD Awake (e.g. sibling/child via
+        /// <c>EnsureCelebrationController</c>) is still found for Esc gating / BlocksWorldInput.
+        /// </summary>
+        StarCelebrationController ResolveCelebration()
+        {
+            if (celebration != null) return celebration;
+            if (simulation != null)
+                celebration = simulation.GetComponent<StarCelebrationController>();
+            if (celebration == null && build != null)
+                celebration = build.GetComponent<StarCelebrationController>();
+            if (celebration == null)
+                celebration = GetComponent<StarCelebrationController>() ??
+                              FindAnyObjectByType<StarCelebrationController>();
+            return celebration;
         }
 
         void DrawPauseOverlay(GUIStyle title, GUIStyle label)
