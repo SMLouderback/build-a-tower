@@ -105,6 +105,9 @@ namespace BuildATower
             if (room.Type.isLobby && TryPaintLobbyArt(room, occupied, skipCell))
                 return;
 
+            if (OfficeCutawayArt.IsOffice(room.Type) && TryPaintOfficeArt(room, occupied, skipCell))
+                return;
+
             var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
             foreach (var cell in occupied)
             {
@@ -155,6 +158,15 @@ namespace BuildATower
                 var tc = ToTileCell(cell);
                 structureTilemap.SetTile(tc, lobbyTile);
                 structureTilemap.SetColor(tc, Color.white);
+                return;
+            }
+
+            if (OfficeCutawayArt.IsOffice(room.Type) &&
+                OfficeCutawayArt.TryOfficeTile(room, cell.x, out var officeTile))
+            {
+                var tc = ToTileCell(cell);
+                roomsTilemap.SetTile(tc, officeTile);
+                roomsTilemap.SetColor(tc, Color.white);
                 return;
             }
 
@@ -417,6 +429,30 @@ namespace BuildATower
         {
             for (var x = minX; x <= maxX; x++)
                 structureTilemap.SetTile(new Vector3Int(x, floor, 0), null);
+        }
+
+        bool TryPaintOfficeArt(
+            RoomInstance room,
+            HashSet<Vector2Int> occupied,
+            System.Func<Vector2Int, bool> skipCell)
+        {
+            foreach (var cell in occupied)
+            {
+                if (skipCell != null && skipCell(cell)) continue;
+                if (!OfficeCutawayArt.TryOfficeTile(room, cell.x, out _))
+                    return false;
+            }
+
+            foreach (var cell in occupied)
+            {
+                if (skipCell != null && skipCell(cell)) continue;
+                OfficeCutawayArt.TryOfficeTile(room, cell.x, out var tile);
+                var tc = ToTileCell(cell);
+                roomsTilemap.SetTile(tc, tile);
+                roomsTilemap.SetColor(tc, Color.white);
+            }
+
+            return true;
         }
 
         bool TryPaintLobbyArt(
