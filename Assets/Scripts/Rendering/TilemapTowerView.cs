@@ -22,11 +22,13 @@ namespace BuildATower
         readonly Dictionary<string, Tile> _dirtArtTiles = new();
         Tile _dirtColorFallback;
         readonly Dictionary<int, SpriteRenderer> _stairsOverlays = new();
+        readonly Dictionary<int, SpriteRenderer> _condemnedOverlays = new();
         readonly List<Vector3Int> _ghostCells = new();
         readonly List<Vector3Int> _selectionCells = new();
         readonly List<Vector3Int> _handleCells = new();
         readonly List<Vector3Int> _heatmapCells = new();
         Transform _stairsOverlayRoot;
+        Transform _condemnedOverlayRoot;
         int _lastLightingBucket = int.MinValue;
 
         void Awake()
@@ -106,7 +108,10 @@ namespace BuildATower
                 return;
 
             if (OfficeCutawayArt.IsOffice(room.Type) && TryPaintOfficeArt(room, occupied, skipCell))
+            {
+                FinishOfficeBrokenVisuals(room, occupied, skipCell, artTilesPainted: true);
                 return;
+            }
 
             var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
             foreach (var cell in occupied)
@@ -117,6 +122,9 @@ namespace BuildATower
                 map.SetTile(tc, tile);
                 map.SetColor(tc, Color.white);
             }
+
+            if (OfficeCutawayArt.IsOffice(room.Type))
+                FinishOfficeBrokenVisuals(room, occupied, skipCell, artTilesPainted: false);
         }
 
         public void PaintCell(Vector2Int cell, RoomInstance room)
@@ -166,7 +174,10 @@ namespace BuildATower
             {
                 var tc = ToTileCell(cell);
                 roomsTilemap.SetTile(tc, officeTile);
-                roomsTilemap.SetColor(tc, Color.white);
+                roomsTilemap.SetColor(
+                    tc,
+                    room.IsBroken ? OfficeCondemnedOverlay.BrokenTileTint : Color.white);
+                SyncOfficeCondemnedOverlay(room);
                 return;
             }
 
@@ -174,6 +185,8 @@ namespace BuildATower
             var fallbackTc = ToTileCell(cell);
             map.SetTile(fallbackTc, GetTile(color, EdgeMaskFor(cell, occupied)));
             map.SetColor(fallbackTc, Color.white);
+            if (OfficeCutawayArt.IsOffice(room.Type))
+                SyncOfficeCondemnedOverlay(room);
         }
 
         /// <summary>Repaint every stairs/elevator room (call after underlay paints).</summary>
@@ -189,6 +202,9 @@ namespace BuildATower
 
         public void ClearRoom(RoomInstance room)
         {
+            if (room != null)
+                ClearCondemnedOverlay(room.InstanceId);
+
             if (room?.Type != null && room.Type.isStairs)
             {
                 ClearStairsOverlay(room.InstanceId);
@@ -563,6 +579,99 @@ namespace BuildATower
             if (sr != null)
                 Destroy(sr.gameObject);
             _stairsOverlays.Remove(instanceId);
+        }
+
+        void FinishOfficeBrokenVisuals(
+            RoomInstance room,
+            HashSet<Vector2Int> occupied,
+            System.Func<Vector2Int, bool> skipCell,
+            bool artTilesPainted)
+        {
+            if (!OfficeCutawayArt.IsOffice(room.Type)) return;
+
+            if (room.IsBroken)
+            {
+                if (artTilesPainted)
+                    ApplyOfficeBrokenWash(occupied, skipCell);
+                SetCondemnedOverlay(room);
+                return;
+            }
+
+            ClearCondemnedOverlay(room.InstanceId);
+            if (artTilesPainted)
+                ResetOfficeTileColors(occupied, skipCell);
+        }
+
+        void SyncOfficeCondemnedOverlay(RoomInstance room)
+        {
+            if (room == null || !OfficeCutawayArt.IsOffice(room.Type)) return;
+            if (room.IsBroken)
+                SetCondemnedOverlay(room);
+            else
+                ClearCondemnedOverlay(room.InstanceId);
+        }
+
+        void ApplyOfficeBrokenWash(
+            HashSet<Vector2Int> occupied,
+            System.Func<Vector2Int, bool> skipCell)
+        {
+            var tint = OfficeCondemnedOverlay.BrokenTileTint;
+            foreach (var cell in occupied)
+            {
+                if (skipCell != null && skipCell(cell)) continue;
+                roomsTilemap.SetColor(ToTileCell(cell), tint);
+            }
+        }
+
+        void ResetOfficeTileColors(
+            HashSet<Vector2Int> occupied,
+            System.Func<Vector2Int, bool> skipCell)
+        {
+            foreach (var cell in occupied)
+            {
+                if (skipCell != null && skipCell(cell)) continue;
+                roomsTilemap.SetColor(ToTileCell(cell), Color.white);
+            }
+        }
+
+        void SetCondemnedOverlay(RoomInstance room)
+        {
+            var root = CondemnedOverlayRoot();
+            if (!_condemnedOverlays.TryGetValue(room.InstanceId, out var sr) || sr == null)
+            {
+                var go = new GameObject($"CondemnedOverlay_{room.InstanceId}");
+                go.transform.SetParent(root, false);
+                sr = go.AddComponent<SpriteRenderer>();
+                sr.sortingOrder = OfficeCondemnedOverlay.SortingOrder;
+                _condemnedOverlays[room.InstanceId] = sr;
+            }
+
+            var sprite = OfficeCondemnedOverlay.GetSprite(room.Size.x, room.Size.y);
+            sr.enabled = true;
+            sr.sprite = sprite;
+            sr.color = Color.white;
+            sr.transform.position = new Vector3(
+                room.Origin.x + room.Size.x * 0.5f,
+                room.Origin.y + room.Size.y * 0.5f,
+                0f);
+            sr.transform.localScale = Vector3.one;
+        }
+
+        void ClearCondemnedOverlay(int instanceId)
+        {
+            if (!_condemnedOverlays.TryGetValue(instanceId, out var sr)) return;
+            if (sr != null)
+                Destroy(sr.gameObject);
+            _condemnedOverlays.Remove(instanceId);
+        }
+
+        Transform CondemnedOverlayRoot()
+        {
+            if (_condemnedOverlayRoot != null) return _condemnedOverlayRoot;
+            var go = new GameObject("CondemnedOverlays");
+            go.transform.SetParent(transform, false);
+            _condemnedOverlayRoot = go.transform;
+            return _condemnedOverlayRoot;
         }
 
         Transform StairsOverlayRoot()
