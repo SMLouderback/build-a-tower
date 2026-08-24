@@ -65,6 +65,61 @@ namespace BuildATower.Tests
             Assert.AreEqual(0, room.ArtVariant);
         }
 
+        [Test]
+        public void CellPixels_is_128() => Assert.AreEqual(128, OfficeCutawayArt.CellPixels);
+
+        [Test]
+        public void IsOffice_true_for_office_category()
+        {
+            Assert.IsTrue(OfficeCutawayArt.IsOffice(Office()));
+            Assert.IsFalse(OfficeCutawayArt.IsOffice(null));
+            Assert.IsFalse(OfficeCutawayArt.IsOffice(Lobby()));
+            Assert.IsFalse(OfficeCutawayArt.IsOffice(Retail()));
+        }
+
+        [Test]
+        public void ResourceLeaf_uses_clamped_variant_suffix()
+        {
+            Assert.AreEqual("office_micro_v01", OfficeCutawayArt.ResourceLeaf("office_micro", 1));
+            Assert.AreEqual("office_micro_v02", OfficeCutawayArt.ResourceLeaf("office_micro", 2));
+            Assert.AreEqual("office_micro_v01", OfficeCutawayArt.ResourceLeaf("office_micro", 0));
+            Assert.AreEqual("office_micro_v01", OfficeCutawayArt.ResourceLeaf("office_micro", 99));
+        }
+
+        [Test]
+        public void ResourcePath_prefixes_art_offices()
+        {
+            Assert.AreEqual("Art/Offices/office_micro_v01", OfficeCutawayArt.ResourcePath("office_micro", 1));
+            Assert.AreEqual("Art/Offices/office_custom_v02", OfficeCutawayArt.ResourcePath("office_custom", 2));
+        }
+
+        [Test]
+        public void Catalog_ids_have_expected_pixel_sizes_and_paths()
+        {
+            foreach (var (id, width) in CatalogOffices)
+            {
+                Assert.AreEqual($"{id}_v01", OfficeCutawayArt.ResourceLeaf(id, 1));
+                Assert.AreEqual($"{id}_v02", OfficeCutawayArt.ResourceLeaf(id, 2));
+                Assert.AreEqual($"Art/Offices/{id}_v01", OfficeCutawayArt.ResourcePath(id, 1));
+                Assert.AreEqual(
+                    new Vector2Int(width * OfficeCutawayArt.CellPixels, OfficeCutawayArt.CellPixels),
+                    OfficeCutawayArt.ExpectedPixelSize(new Vector2Int(width, 1)));
+            }
+        }
+
+        static readonly (string id, int width)[] CatalogOffices =
+        {
+            ("office_micro", 3),
+            ("office_studio", 4),
+            ("office_base", 6),
+            ("office_mid_standard", 9),
+            ("office_mid_clinic", 10),
+            ("office_mid_team", 12),
+            ("office_upper_standard", 12),
+            ("office_upper_corner", 14),
+            ("office_upper_floor", 18),
+        };
+
         static TowerGrid GridWithLobby()
         {
             var grid = new TowerGrid();

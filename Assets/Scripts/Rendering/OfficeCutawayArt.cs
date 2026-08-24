@@ -5,7 +5,21 @@ namespace BuildATower
 {
     public static class OfficeCutawayArt
     {
+        public const int CellPixels = 128;
+
         public static Func<int> RollArtVariantForTests;
+
+        public static bool IsOffice(RoomTypeSO type) =>
+            type != null && type.category == RoomCategory.Office;
+
+        public static string ResourceLeaf(string typeId, int variant) =>
+            $"{typeId}_v{ClampArtVariant(variant):D2}";
+
+        public static string ResourcePath(string typeId, int variant) =>
+            "Art/Offices/" + ResourceLeaf(typeId, variant);
+
+        public static Vector2Int ExpectedPixelSize(Vector2Int cellSize) =>
+            new Vector2Int(cellSize.x * CellPixels, CellPixels);
 
         public static int ClampArtVariant(int v) => v == 2 ? 2 : 1;
 
