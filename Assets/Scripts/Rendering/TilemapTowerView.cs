@@ -9,6 +9,7 @@ namespace BuildATower
         const int TilePixels = 16;
         const int BorderThickness = 2;
         const int LightingBucketMinutes = 15;
+        const string DirtArtRoot = "Art/Dirt/";
 
         [SerializeField] Tilemap structureTilemap;
         [SerializeField] Tilemap roomsTilemap;
@@ -18,6 +19,8 @@ namespace BuildATower
         [SerializeField] TowerSimulation simulation;
 
         readonly Dictionary<(Color color, byte edges), Tile> _tiles = new();
+        readonly Dictionary<string, Tile> _dirtArtTiles = new();
+        Tile _dirtColorFallback;
         readonly Dictionary<int, SpriteRenderer> _stairsOverlays = new();
         readonly List<Vector3Int> _ghostCells = new();
         readonly List<Vector3Int> _selectionCells = new();
@@ -390,7 +393,6 @@ namespace BuildATower
             int dirtMaxX,
             int dirtDepth = 10)
         {
-            var dirt = GetTile(DirtBand.Color, EdgeMask.None);
             var lobbyGuide = GetTile(new Color(0.95f, 0.82f, 0.28f, 1f), EdgeMask.None);
 
             for (var x = lobbyMinX; x <= lobbyMaxX; x++)
@@ -400,7 +402,7 @@ namespace BuildATower
             for (var x = dirtMinX; x <= dirtMaxX; x++)
             {
                 for (var y = -1; y >= -depth; y--)
-                    structureTilemap.SetTile(new Vector3Int(x, y, 0), dirt);
+                    structureTilemap.SetTile(new Vector3Int(x, y, 0), GetDirtTile(y, x));
             }
         }
 
@@ -408,8 +410,7 @@ namespace BuildATower
         public void PaintDirtCell(Vector2Int cell)
         {
             if (structureTilemap == null) return;
-            var dirt = GetTile(DirtBand.Color, EdgeMask.None);
-            structureTilemap.SetTile(ToTileCell(cell), dirt);
+            structureTilemap.SetTile(ToTileCell(cell), GetDirtTile(cell.y, cell.x));
         }
 
         public void ClearStructureRow(int floor, int minX, int maxX)
@@ -535,6 +536,60 @@ namespace BuildATower
             go.transform.SetParent(transform, false);
             _stairsOverlayRoot = go.transform;
             return _stairsOverlayRoot;
+        }
+
+        Tile GetDirtTile(int cellY, int cellX)
+        {
+            var leaf = DirtBand.DirtTileResource(cellY, cellX);
+            if (_dirtArtTiles.TryGetValue(leaf, out var cached))
+                return cached;
+
+            var tile = TryLoadDirtArtTile(leaf) ?? GetDirtColorFallback();
+            _dirtArtTiles[leaf] = tile;
+            return tile;
+        }
+
+        Tile GetDirtColorFallback()
+        {
+            if (_dirtColorFallback == null)
+                _dirtColorFallback = GetTile(DirtBand.Color, EdgeMask.None);
+            return _dirtColorFallback;
+        }
+
+        static Tile TryLoadDirtArtTile(string leafName)
+        {
+            var path = DirtArtRoot + leafName;
+            byte[] png = null;
+            var ta = Resources.Load<TextAsset>(path);
+            if (ta != null) png = ta.bytes;
+            if (png == null || png.Length < 32)
+            {
+                var srcTex = Resources.Load<Texture2D>(path);
+                if (srcTex == null) return null;
+                try { png = srcTex.EncodeToPNG(); }
+                catch (UnityException) { return null; }
+            }
+
+            if (png == null || png.Length < 32) return null;
+
+            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                name = leafName
+            };
+            if (!tex.LoadImage(png, false)) return null;
+
+            var tile = ScriptableObject.CreateInstance<Tile>();
+            var ppu = tex.width > 0 ? (float)tex.width : TilePixels;
+            tile.sprite = Sprite.Create(
+                tex,
+                new Rect(0, 0, tex.width, tex.height),
+                new Vector2(0.5f, 0.5f),
+                ppu);
+            tile.color = Color.white;
+            tile.name = leafName;
+            return tile;
         }
 
         Tile GetTile(Color color, byte edges)
