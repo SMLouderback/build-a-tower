@@ -246,6 +246,7 @@ namespace BuildATower
             }
 
             room = new RoomInstance(_nextId++, type, origin, type.size);
+            OfficeCutawayArt.AssignArtVariantIfUnset(room);
             RegisterBehindTransit(room, footprint);
             return true;
         }

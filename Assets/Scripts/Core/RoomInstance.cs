@@ -30,6 +30,8 @@ namespace BuildATower
         public bool CondoSold { get; set; }
         /// <summary>0=Low, 1=Normal, 2=High, 3=Max. Default Normal.</summary>
         public int PriceTier { get; set; } = PricePricing.TierNormal;
+        /// <summary>Office cutaway kit variant (1 or 2). 0 = unset; paint treats as 1.</summary>
+        public int ArtVariant { get; set; }
 
         public float PlacedAtRealtime { get; private set; } = -1f;
         public int ConstructionSpent { get; private set; }
