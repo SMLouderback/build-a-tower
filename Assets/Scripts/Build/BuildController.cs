@@ -76,12 +76,21 @@ namespace BuildATower
             fill.Bind(cam);
         }
 
+        void EnsureLandEdgeMarkers()
+        {
+            var markers = GetComponent<LandEdgeMarkers>();
+            if (markers == null)
+                markers = gameObject.AddComponent<LandEdgeMarkers>();
+            markers.EnsureSigns();
+        }
+
         void Start()
         {
             if (view != null)
                 view.PaintStarterGuides(GuideMinX, GuideMaxX, DirtMinX, DirtMaxX, DirtDepth);
 
             EnsureUndergroundVoidFill();
+            EnsureLandEdgeMarkers();
 
             if (worldCamera != null)
             {
