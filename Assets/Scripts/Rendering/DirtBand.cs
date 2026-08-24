@@ -19,6 +19,20 @@ namespace BuildATower
             cell.x >= MinX &&
             cell.x <= MaxX;
 
+        public static bool IsCrownRow(int cellY) => cellY == -1;
+
+        public static bool IsFillRow(int cellY) => cellY <= -2 && cellY >= -Depth;
+
+        /// <summary>
+        /// Resource leaf name for parcel dirt paint (crown under Floor G; fill below).
+        /// </summary>
+        public static string DirtTileResource(int cellY, int cellX) =>
+            IsCrownRow(cellY) ? "dirt_crown" :
+            (HashFillVariant(cellX, cellY) == 0 ? "dirt_fill" : "dirt_fill");
+
+        static int HashFillVariant(int cellX, int cellY) =>
+            (cellX * 73856093) ^ (cellY * 19349663);
+
         /// <summary>
         /// True when a vacated basement cell should show dirt again (no room remains on the grid).
         /// </summary>
