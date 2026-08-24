@@ -1,7 +1,7 @@
 # Build-A-Tower — Painted Dirt Parcel, Void Fill & For-Sale Edges
 
 **Date:** 2026-08-23  
-**Status:** Approved  
+**Status:** Implemented — plan `docs/superpowers/plans/2026-08-23-dirt-parcel-forsale-edges.md`; art commit `7b757f1`  
 **Depends on:** `DirtBand`; `TilemapTowerView.PaintStarterGuides` / `PaintDirtCell`; `BuildController` starter guides; parallax ground line  
 **Parent:** Visual polish → underground reads as owned land, not flat brown  
 **Follow-ups:** Land purchase / expand parcel; move signs; optional dirt variants by biome
@@ -73,3 +73,8 @@ Delivery: `.png` + `.bytes` (+ metas) under `Assets/Resources/Art/…`.
 - For Sale signs sit at −80 and 100 ground line.  
 - Demolish basement room → painted dirt returns.  
 - Missing dirt art → flat brown fallback.
+
+## Implementation notes
+
+- Tasks 1–5 on `feature/conference-event-halls`: `DirtBand` crown/fill helpers, painted tiles in `TilemapTowerView`, `UndergroundVoidFill`, `LandEdgeMarkers`, art under `Assets/Resources/Art/Dirt/`.
+- Play Mode visual verification recommended after domain reload.
