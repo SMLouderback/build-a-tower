@@ -67,10 +67,21 @@ namespace BuildATower
             cam.gameObject.AddComponent<DayNightSkyController>();
         }
 
+        void EnsureUndergroundVoidFill()
+        {
+            var fill = GetComponent<UndergroundVoidFill>();
+            if (fill == null)
+                fill = gameObject.AddComponent<UndergroundVoidFill>();
+            var cam = worldCamera != null ? worldCamera : Camera.main;
+            fill.Bind(cam);
+        }
+
         void Start()
         {
             if (view != null)
                 view.PaintStarterGuides(GuideMinX, GuideMaxX, DirtMinX, DirtMaxX, DirtDepth);
+
+            EnsureUndergroundVoidFill();
 
             if (worldCamera != null)
             {
