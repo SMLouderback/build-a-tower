@@ -1,7 +1,7 @@
 # Build-A-Tower — Office Cutaway Panorama Kits
 
 **Date:** 2026-08-24  
-**Status:** Approved  
+**Status:** Implemented — plan `docs/superpowers/plans/2026-08-24-office-cutaway-panorama-kits.md`; art commit `099b128`  
 **Depends on:** Office luxury catalog (`luxuryBand` Base/Mid/Upper); `TilemapTowerView.PaintRoom`; lobby pan slice pipeline (`StructureCutawayArt` / 128×128 cells); `RoomInstance` / `TowerGrid.TryPlace`  
 **Parent:** Visual polish → room cutaway kits (offices first)  
 **Follow-ups:** Hotel / condo / commercial panoramas; soft day-night multiply on room sprites; star-tier elevator shafts
@@ -90,3 +90,8 @@ Legacy `office` / `office_premium` are migrated catalog ids — if still placeab
 - Elevator shaft star tiers  
 - Separate damaged interior art sets  
 - Modular shared mid tiles across different office widths
+
+## Implementation notes
+
+- Tasks 1–5 on `feature/conference-event-halls`: `RoomInstance.ArtVariant`, `TowerGrid` place assignment, `OfficeCutawayArt`, `TilemapTowerView` paint path, `OfficeCondemnedOverlay`, 18 panoramas under `Assets/Resources/Art/Offices/`.
+- Play Mode visual verification recommended after domain reload.
