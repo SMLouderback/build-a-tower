@@ -114,7 +114,10 @@ namespace BuildATower
             }
 
             if (HotelCutawayArt.IsHotel(room.Type) && TryPaintHotelArt(room, occupied, skipCell))
+            {
+                FinishHotelConditionVisuals(room, occupied, skipCell, artTilesPainted: true);
                 return;
+            }
 
             var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
             foreach (var cell in occupied)
@@ -128,6 +131,8 @@ namespace BuildATower
 
             if (OfficeCutawayArt.IsOffice(room.Type))
                 FinishOfficeBrokenVisuals(room, occupied, skipCell, artTilesPainted: false);
+            else if (HotelCutawayArt.IsHotel(room.Type))
+                FinishHotelConditionVisuals(room, occupied, skipCell, artTilesPainted: false);
         }
 
         public void PaintCell(Vector2Int cell, RoomInstance room)
@@ -189,7 +194,8 @@ namespace BuildATower
             {
                 var tc = ToTileCell(cell);
                 roomsTilemap.SetTile(tc, hotelTile);
-                roomsTilemap.SetColor(tc, Color.white);
+                roomsTilemap.SetColor(tc, HotelRoomOverlays.CutawayTileTint(room));
+                SyncHotelCautionOverlay(room);
                 return;
             }
 
@@ -199,6 +205,8 @@ namespace BuildATower
             map.SetColor(fallbackTc, Color.white);
             if (OfficeCutawayArt.IsOffice(room.Type))
                 SyncOfficeCondemnedOverlay(room);
+            else if (HotelCutawayArt.IsHotel(room.Type))
+                SyncHotelCautionOverlay(room);
         }
 
         /// <summary>Repaint every stairs/elevator room (call after underlay paints).</summary>
@@ -638,6 +646,23 @@ namespace BuildATower
                 ResetOfficeTileColors(occupied, skipCell);
         }
 
+        void FinishHotelConditionVisuals(
+            RoomInstance room,
+            HashSet<Vector2Int> occupied,
+            System.Func<Vector2Int, bool> skipCell,
+            bool artTilesPainted)
+        {
+            if (!HotelCutawayArt.IsHotel(room.Type)) return;
+
+            if (artTilesPainted)
+                ApplyHotelCutawayTints(room, occupied, skipCell);
+
+            if (room.IsBroken)
+                SetCondemnedOverlay(room);
+            else
+                ClearCondemnedOverlay(room.InstanceId);
+        }
+
         void SyncOfficeCondemnedOverlay(RoomInstance room)
         {
             if (room == null || !OfficeCutawayArt.IsOffice(room.Type)) return;
@@ -645,6 +670,28 @@ namespace BuildATower
                 SetCondemnedOverlay(room);
             else
                 ClearCondemnedOverlay(room.InstanceId);
+        }
+
+        void SyncHotelCautionOverlay(RoomInstance room)
+        {
+            if (room == null || !HotelCutawayArt.IsHotel(room.Type)) return;
+            if (room.IsBroken)
+                SetCondemnedOverlay(room);
+            else
+                ClearCondemnedOverlay(room.InstanceId);
+        }
+
+        void ApplyHotelCutawayTints(
+            RoomInstance room,
+            HashSet<Vector2Int> occupied,
+            System.Func<Vector2Int, bool> skipCell)
+        {
+            var tint = HotelRoomOverlays.CutawayTileTint(room);
+            foreach (var cell in occupied)
+            {
+                if (skipCell != null && skipCell(cell)) continue;
+                roomsTilemap.SetColor(ToTileCell(cell), tint);
+            }
         }
 
         void ApplyOfficeBrokenWash(
