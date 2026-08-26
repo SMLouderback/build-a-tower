@@ -1,7 +1,7 @@
 # Build-A-Tower — Hotel Cutaway Panorama Kits
 
 **Date:** 2026-08-26  
-**Status:** Spec approved (brainstorm) — plan next  
+**Status:** Implemented — plan `docs/superpowers/plans/2026-08-26-hotel-cutaway-panorama-kits.md`; art commit `f70f2c2`  
 **Depends on:** Hotel luxury catalog (`luxuryBand` Base/Mid/Upper); `TilemapTowerView.PaintRoom`; office cutaway pipeline (`OfficeCutawayArt` / 128×128 cells); `RoomInstance.Dirty` / `IsBroken`; office condemned overlay pattern  
 **Parent:** Visual polish → room cutaway kits (hotels after offices)  
 **Follow-ups:** Second art variants; condo / commercial panoramas; soft day-night multiply on room sprites
