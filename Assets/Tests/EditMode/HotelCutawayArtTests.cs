@@ -1,6 +1,7 @@
 using BuildATower;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.Tilemaps;
 
 namespace BuildATower.Tests
 {
@@ -72,6 +73,75 @@ namespace BuildATower.Tests
             Assert.AreEqual(Vector2Int.zero, HotelCutawayArt.ExpectedPixelSize(string.Empty));
             Assert.AreEqual(Vector2Int.zero, HotelCutawayArt.ExpectedPixelSize("hotel_unknown"));
         }
+
+        [Test]
+        public void TryHotelTile_missing_art_returns_false_without_poisoning_later_success()
+        {
+            var room = HotelRoom("hotel_base", 3, LuxuryBand.Base, originX: 10);
+            var builds = 0;
+            HotelCutawayArt.BuildTilesForTests = (artKey, widthCells) =>
+            {
+                builds++;
+                Assert.AreEqual("hotel_3_base", artKey);
+                Assert.AreEqual(3, widthCells);
+                return builds == 1 ? null : FakeTiles(widthCells);
+            };
+
+            Assert.IsFalse(HotelCutawayArt.TryHotelTile(room, 10, out _));
+            Assert.IsTrue(HotelCutawayArt.TryHotelTile(room, 10, out var tile));
+            Assert.IsNotNull(tile);
+            Assert.AreEqual(2, builds);
+        }
+
+        [Test]
+        public void TryHotelTile_wrong_width_cache_entry_does_not_block_correct_width()
+        {
+            var room = HotelRoom("hotel_base", 3, LuxuryBand.Base, originX: 0);
+            HotelCutawayArt.SeedCacheForTests("hotel_3_base", FakeTiles(4));
+
+            var builds = 0;
+            HotelCutawayArt.BuildTilesForTests = (artKey, widthCells) =>
+            {
+                builds++;
+                Assert.AreEqual("hotel_3_base", artKey);
+                Assert.AreEqual(3, widthCells);
+                return FakeTiles(widthCells);
+            };
+
+            Assert.IsTrue(HotelCutawayArt.TryHotelTile(room, 0, out var tile));
+            Assert.IsNotNull(tile);
+            Assert.AreEqual(1, builds);
+            Assert.AreEqual(3, HotelCutawayArt.CachedTileCountForTests("hotel_3_base"));
+        }
+
+        [Test]
+        public void TryHotelTile_out_of_footprint_or_non_hotel_returns_false()
+        {
+            var hotel = HotelRoom("hotel_base", 3, LuxuryBand.Base, originX: 5);
+            HotelCutawayArt.BuildTilesForTests = (_, width) => FakeTiles(width);
+
+            Assert.IsFalse(HotelCutawayArt.TryHotelTile(null, 5, out _));
+            Assert.IsFalse(HotelCutawayArt.TryHotelTile(
+                new RoomInstance(1, Office(), new Vector2Int(0, 1), new Vector2Int(9, 1)), 0, out _));
+            Assert.IsFalse(HotelCutawayArt.TryHotelTile(hotel, 4, out _));
+            Assert.IsFalse(HotelCutawayArt.TryHotelTile(hotel, 8, out _));
+            Assert.IsTrue(HotelCutawayArt.TryHotelTile(hotel, 7, out _));
+        }
+
+        static Tile[] FakeTiles(int widthCells)
+        {
+            var tiles = new Tile[widthCells];
+            for (var i = 0; i < widthCells; i++)
+            {
+                tiles[i] = ScriptableObject.CreateInstance<Tile>();
+                tiles[i].name = $"fake_{i}";
+            }
+
+            return tiles;
+        }
+
+        static RoomInstance HotelRoom(string id, int width, LuxuryBand band, int originX) =>
+            new RoomInstance(1, Hotel(id, width, band), new Vector2Int(originX, 2), new Vector2Int(width, 1));
 
         static RoomTypeSO Hotel(string id, int width, LuxuryBand band)
         {

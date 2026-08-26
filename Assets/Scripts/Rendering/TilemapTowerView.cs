@@ -113,6 +113,9 @@ namespace BuildATower
                 return;
             }
 
+            if (HotelCutawayArt.IsHotel(room.Type) && TryPaintHotelArt(room, occupied, skipCell))
+                return;
+
             var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
             foreach (var cell in occupied)
             {
@@ -178,6 +181,15 @@ namespace BuildATower
                     tc,
                     room.IsBroken ? OfficeCondemnedOverlay.BrokenTileTint : Color.white);
                 SyncOfficeCondemnedOverlay(room);
+                return;
+            }
+
+            if (HotelCutawayArt.IsHotel(room.Type) &&
+                HotelCutawayArt.TryHotelTile(room, cell.x, out var hotelTile))
+            {
+                var tc = ToTileCell(cell);
+                roomsTilemap.SetTile(tc, hotelTile);
+                roomsTilemap.SetColor(tc, Color.white);
                 return;
             }
 
@@ -463,6 +475,30 @@ namespace BuildATower
             {
                 if (skipCell != null && skipCell(cell)) continue;
                 OfficeCutawayArt.TryOfficeTile(room, cell.x, out var tile);
+                var tc = ToTileCell(cell);
+                roomsTilemap.SetTile(tc, tile);
+                roomsTilemap.SetColor(tc, Color.white);
+            }
+
+            return true;
+        }
+
+        bool TryPaintHotelArt(
+            RoomInstance room,
+            HashSet<Vector2Int> occupied,
+            System.Func<Vector2Int, bool> skipCell)
+        {
+            foreach (var cell in occupied)
+            {
+                if (skipCell != null && skipCell(cell)) continue;
+                if (!HotelCutawayArt.TryHotelTile(room, cell.x, out _))
+                    return false;
+            }
+
+            foreach (var cell in occupied)
+            {
+                if (skipCell != null && skipCell(cell)) continue;
+                HotelCutawayArt.TryHotelTile(room, cell.x, out var tile);
                 var tc = ToTileCell(cell);
                 roomsTilemap.SetTile(tc, tile);
                 roomsTilemap.SetColor(tc, Color.white);
