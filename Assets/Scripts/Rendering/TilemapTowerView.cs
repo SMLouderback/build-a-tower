@@ -22,12 +22,14 @@ namespace BuildATower
         readonly Dictionary<string, Tile> _dirtArtTiles = new();
         Tile _dirtColorFallback;
         readonly Dictionary<int, SpriteRenderer> _stairsOverlays = new();
+        readonly Dictionary<int, SpriteRenderer> _dollhouseOverlays = new();
         readonly Dictionary<int, SpriteRenderer> _condemnedOverlays = new();
         readonly List<Vector3Int> _ghostCells = new();
         readonly List<Vector3Int> _selectionCells = new();
         readonly List<Vector3Int> _handleCells = new();
         readonly List<Vector3Int> _heatmapCells = new();
         Transform _stairsOverlayRoot;
+        Transform _dollhouseOverlayRoot;
         Transform _condemnedOverlayRoot;
         int _lastLightingBucket = int.MinValue;
 
@@ -92,6 +94,9 @@ namespace BuildATower
                 if (room.Type.isElevatorShaft && TryPaintElevatorArt(room, occupied))
                     return;
 
+                if (TryPaintDollhouseArt(room, occupied, skipCell: null))
+                    return;
+
                 // Transit draws on the rooms layer so it stays visible over rooms.
                 foreach (var cell in occupied)
                 {
@@ -106,6 +111,15 @@ namespace BuildATower
 
             if (room.Type.isLobby && TryPaintLobbyArt(room, occupied, skipCell))
                 return;
+
+            if (TryPaintDollhouseArt(room, occupied, skipCell))
+            {
+                if (OfficeCutawayArt.IsOffice(room.Type))
+                    FinishOfficeBrokenVisuals(room, occupied, skipCell, artTilesPainted: false);
+                else if (HotelCutawayArt.IsHotel(room.Type))
+                    FinishHotelConditionVisuals(room, occupied, skipCell, artTilesPainted: false);
+                return;
+            }
 
             if (OfficeCutawayArt.IsOffice(room.Type) && TryPaintOfficeArt(room, occupied, skipCell))
             {
@@ -162,6 +176,9 @@ namespace BuildATower
                     return;
                 }
 
+                if (TryPaintDollhouseArt(room, occupied, skipCell: null))
+                    return;
+
                 var transitTc = ToTileCell(cell);
                 roomsTilemap.SetTile(transitTc, GetTile(color, EdgeMaskFor(cell, occupied)));
                 roomsTilemap.SetColor(transitTc, Color.white);
@@ -174,6 +191,15 @@ namespace BuildATower
                 var tc = ToTileCell(cell);
                 structureTilemap.SetTile(tc, lobbyTile);
                 structureTilemap.SetColor(tc, Color.white);
+                return;
+            }
+
+            if (TryPaintDollhouseArt(room, occupied, skipCell: null))
+            {
+                if (OfficeCutawayArt.IsOffice(room.Type))
+                    SyncOfficeCondemnedOverlay(room);
+                else if (HotelCutawayArt.IsHotel(room.Type))
+                    SyncHotelCautionOverlay(room);
                 return;
             }
 
@@ -223,7 +249,10 @@ namespace BuildATower
         public void ClearRoom(RoomInstance room)
         {
             if (room != null)
+            {
                 ClearCondemnedOverlay(room.InstanceId);
+                ClearDollhouseOverlay(room.InstanceId);
+            }
 
             if (room?.Type != null && room.Type.isStairs)
             {
@@ -625,6 +654,77 @@ namespace BuildATower
             _stairsOverlays.Remove(instanceId);
         }
 
+        bool TryPaintDollhouseArt(
+            RoomInstance room,
+            HashSet<Vector2Int> occupied,
+            System.Func<Vector2Int, bool> skipCell)
+        {
+            if (!RoomDollhouseArt.TrySprite(room, out var sprite))
+                return false;
+
+            // Overlay-only: leave rooms-layer tiles empty so transparent edges
+            // show the sky/dirt, and stairs/elevator keep their own paint.
+            if (roomsTilemap != null)
+            {
+                foreach (var cell in occupied)
+                {
+                    if (skipCell != null && skipCell(cell)) continue;
+                    roomsTilemap.SetTile(ToTileCell(cell), null);
+                }
+            }
+
+            SetDollhouseOverlay(room, sprite, DollhouseTint(room));
+            return true;
+        }
+
+        void SetDollhouseOverlay(RoomInstance room, Sprite sprite, Color tint)
+        {
+            var root = DollhouseOverlayRoot();
+            if (!_dollhouseOverlays.TryGetValue(room.InstanceId, out var sr) || sr == null)
+            {
+                var go = new GameObject($"DollhouseOverlay_{room.InstanceId}");
+                go.transform.SetParent(root, false);
+                sr = go.AddComponent<SpriteRenderer>();
+                sr.sortingOrder = RoomDollhouseArt.SortingOrder;
+                _dollhouseOverlays[room.InstanceId] = sr;
+            }
+
+            sr.enabled = true;
+            sr.sprite = sprite;
+            sr.color = tint;
+            sr.transform.position = new Vector3(room.Origin.x, room.Origin.y, 0f);
+            var b = sprite.bounds.size;
+            sr.transform.localScale = RoomDollhouseArt.OverlayScale(
+                new Vector2(b.x, b.y),
+                room.Size);
+        }
+
+        Color DollhouseTint(RoomInstance room)
+        {
+            Color tint;
+            if (HotelCutawayArt.IsHotel(room?.Type))
+                tint = HotelRoomOverlays.CutawayTileTint(room);
+            else if (room != null && room.IsBroken)
+                tint = OfficeCondemnedOverlay.BrokenTileTint;
+            else if (room != null && room.Dirty)
+                tint = HotelRoomOverlays.DirtyOnlyTint;
+            else
+                tint = Color.white;
+
+            return InteriorLighting.Apply(
+                tint,
+                CurrentMinuteOfDay(),
+                IsSubterranean(room));
+        }
+
+        void ClearDollhouseOverlay(int instanceId)
+        {
+            if (!_dollhouseOverlays.TryGetValue(instanceId, out var sr)) return;
+            if (sr != null)
+                Destroy(sr.gameObject);
+            _dollhouseOverlays.Remove(instanceId);
+        }
+
         void FinishOfficeBrokenVisuals(
             RoomInstance room,
             HashSet<Vector2Int> occupied,
@@ -764,6 +864,15 @@ namespace BuildATower
             go.transform.SetParent(transform, false);
             _stairsOverlayRoot = go.transform;
             return _stairsOverlayRoot;
+        }
+
+        Transform DollhouseOverlayRoot()
+        {
+            if (_dollhouseOverlayRoot != null) return _dollhouseOverlayRoot;
+            var go = new GameObject("DollhouseOverlays");
+            go.transform.SetParent(transform, false);
+            _dollhouseOverlayRoot = go.transform;
+            return _dollhouseOverlayRoot;
         }
 
         Tile GetDirtTile(int cellY, int cellX)
