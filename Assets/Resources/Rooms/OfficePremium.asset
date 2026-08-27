@@ -31,5 +31,12 @@ MonoBehaviour:
   isLobby: 0
   isScaffolding: 0
   isStairs: 0
+  isElevatorShaft: 0
+  isParkingRamp: 0
+  luxuryBand: 2
+  cleanMinutes: 0
   requiredStars: 2
   maxOccupants: 4
+  eventCapacity: 0
+  buildFamily: 1
+  buildSubgroup: 0

@@ -2043,6 +2043,8 @@ namespace BuildATower
                 if (room.id == "office_micro") return "Om";
                 if (room.id == "office_studio") return "Os";
                 if (room.id == "office_base") return "Ob";
+                if (room.id == "office") return "Of";
+                if (room.id == "office_premium") return "Op";
                 if (room.id == "office_mid_standard") return "Mo";
                 if (room.id == "office_mid_clinic") return "Cl";
                 if (room.id == "office_mid_team") return "Tb";

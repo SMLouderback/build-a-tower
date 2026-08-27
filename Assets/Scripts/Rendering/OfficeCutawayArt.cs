@@ -69,9 +69,12 @@ namespace BuildATower
             _tileCache.Clear();
         }
 
+        // Legacy placeable ids → catalog art of matching footprint width.
+        // "office" is 9×1 (same as mid_standard); must NOT map to 6-wide office_base
+        // or BuildTiles fails and can poison the shared cache for Small Office.
         static string ResolveArtTypeId(string typeId) => typeId switch
         {
-            "office" => "office_base",
+            "office" => "office_mid_standard",
             "office_premium" => "office_mid_standard",
             _ => typeId
         };
@@ -80,10 +83,17 @@ namespace BuildATower
         {
             var key = (typeId, variant);
             if (_tileCache.TryGetValue(key, out var cached))
-                return cached != null && cached.Length == widthCells ? cached : null;
+            {
+                if (cached != null && cached.Length == widthCells)
+                    return cached;
+                // Width mismatch or prior failed build — do not keep a poisoned entry.
+                _tileCache.Remove(key);
+            }
 
             var built = BuildTiles(typeId, variant, widthCells);
-            _tileCache[key] = built;
+            // Only cache successful builds so a bad width never blocks later correct loads.
+            if (built != null)
+                _tileCache[key] = built;
             return built;
         }
 
