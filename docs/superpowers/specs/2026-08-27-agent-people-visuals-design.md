@@ -1,7 +1,7 @@
 # Build-A-Tower — Agent People Visuals
 
 **Date:** 2026-08-27  
-**Status:** Approved — ready for implementation plan  
+**Status:** Implemented (2026-08-28)  
 **Depends on:** `AgentView`, `Agent` / `AgentSystem`, `AgentWealth` (`WealthBand`), painterly room cutaway art (128 px/cell)  
 **Parent:** Visual polish → make tower occupants read as people, not map dots
 

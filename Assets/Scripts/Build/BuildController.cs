@@ -10,6 +10,7 @@ namespace BuildATower
         [SerializeField] Camera worldCamera;
         [SerializeField] TowerHudController hud;
         [SerializeField] RoomTypeSO lobbyType;
+        [SerializeField] RoomTypeSO skyLobbyType;
         [SerializeField] int startingFunds = 2_000_000;
 
         public TowerGrid Grid { get; private set; }
@@ -20,6 +21,7 @@ namespace BuildATower
         public Vector2Int? HoverCell { get; private set; }
         public string HelpText { get; private set; }
         public RoomTypeSO LobbyType => lobbyType;
+        public RoomTypeSO SkyLobbyType => ResolveSkyLobbyType();
         public ElevatorCorrectionWindow ActiveCorrectionWindow { get; private set; }
         public event Action StateChanged;
         public event Action GridChanged;
@@ -32,6 +34,8 @@ namespace BuildATower
         const int DirtDepth = DirtBand.Depth;
 
         bool _draggingLobby;
+        bool _draggingSkyLobby;
+        int _dragSkyFloor;
         int _dragStartX;
         bool _draggingElevator;
         int _dragStartY;
@@ -57,6 +61,7 @@ namespace BuildATower
                 gameObject.AddComponent<TowerMapController>();
             EnsureDayNightSkyOnMainCamera();
             ParallaxBackdrop.EnsureInScene();
+            GridChanged += RefreshBuildingShell;
         }
 
         static void EnsureDayNightSkyOnMainCamera()
@@ -109,14 +114,14 @@ namespace BuildATower
             if (worldCamera == null) return;
             if (hud != null && hud.BlocksWorldInput)
             {
-                if (!_draggingLobby && !_draggingElevator && !_draggingElevatorEdge && !_draggingScaffold)
+                if (!_draggingLobby && !_draggingSkyLobby && !_draggingElevator && !_draggingElevatorEdge && !_draggingScaffold)
                     view.ClearGhost();
                 HoverCell = null;
                 return;
             }
             if (IsPointerOverHud(Input.mousePosition))
             {
-                if (!_draggingLobby && !_draggingElevator && !_draggingElevatorEdge && !_draggingScaffold)
+                if (!_draggingLobby && !_draggingSkyLobby && !_draggingElevator && !_draggingElevatorEdge && !_draggingScaffold)
                     view.ClearGhost();
                 HoverCell = null;
                 return;
@@ -125,6 +130,7 @@ namespace BuildATower
             var cell = ScreenToCell(Input.mousePosition);
             HoverCell = cell;
             HandleLobbyDrag(cell);
+            HandleSkyLobbyDrag(cell);
             HandleElevatorDrag(cell);
             HandleElevatorEdgeDrag(cell);
             HandleScaffoldDrag(cell);
@@ -172,6 +178,16 @@ namespace BuildATower
         {
             if (lobbyType == null) return;
             SelectedRoomType = lobbyType;
+            CurrentTool = BuildTool.PlaceRoom;
+            ClearSelection();
+            RefreshHelpText();
+            StateChanged?.Invoke();
+        }
+
+        public void SelectSkyLobbyTool()
+        {
+            if (ResolveSkyLobbyType() == null) return;
+            SelectedRoomType = ResolveSkyLobbyType();
             CurrentTool = BuildTool.PlaceRoom;
             ClearSelection();
             RefreshHelpText();
@@ -443,12 +459,79 @@ namespace BuildATower
             return true;
         }
 
+        RoomTypeSO ResolveSkyLobbyType()
+        {
+            if (skyLobbyType != null) return skyLobbyType;
+            skyLobbyType = ScriptableObject.CreateInstance<RoomTypeSO>();
+            skyLobbyType.id = "sky_lobby";
+            skyLobbyType.displayName = "Sky Lobby";
+            skyLobbyType.category = RoomCategory.Structure;
+            skyLobbyType.isSkyLobby = true;
+            skyLobbyType.allowAboveGround = true;
+            skyLobbyType.buildCost = 2500;
+            skyLobbyType.requiredStars = 2;
+            skyLobbyType.size = Vector2Int.one;
+            skyLobbyType.placeholderColor = new Color(0.72f, 0.78f, 0.92f, 1f);
+            return skyLobbyType;
+        }
+
+        public bool TryPlaceSkyLobby(int minX, int maxX, int floor)
+        {
+            var type = ResolveSkyLobbyType();
+            if (type == null || maxX < minX) return false;
+
+            var cost = (maxX - minX + 1) * type.buildCost;
+            if (!Grid.CanPlaceSkyLobby(minX, maxX, floor) ||
+                !BuildEconomy.TrySpendForBuild(Wallet, cost))
+                return false;
+            if (!Grid.TryPlaceSkyLobby(type, minX, maxX, floor, out var room))
+            {
+                BuildEconomy.RefundBuild(Wallet, cost);
+                return false;
+            }
+
+            view.PaintRoom(room);
+            SelectedRoomType = null;
+            RefreshHelpText();
+            NotifyGridChanged();
+            StateChanged?.Invoke();
+            return true;
+        }
+
+        public bool TryExtendSkyLobby(int floor, int newMinX, int newMaxX)
+        {
+            var type = ResolveSkyLobbyType();
+            if (type == null || newMaxX < newMinX) return false;
+            if (!Grid.CanExtendSkyLobby(floor, newMinX, newMaxX)) return false;
+
+            if (!Grid.TryGetSkyLobbyOnFloor(floor, out var oldSkyLobby))
+                return false;
+
+            var added = (newMaxX - newMinX + 1) - oldSkyLobby.Size.x;
+            var cost = added * type.buildCost;
+            if (!BuildEconomy.TrySpendForBuild(Wallet, cost)) return false;
+
+            if (!Grid.TryExtendSkyLobby(type, floor, newMinX, newMaxX, out var skyLobby, out _))
+            {
+                BuildEconomy.RefundBuild(Wallet, cost);
+                return false;
+            }
+
+            view.ClearRoom(oldSkyLobby);
+            view.PaintRoom(skyLobby);
+            RefreshHelpText();
+            NotifyGridChanged();
+            StateChanged?.Invoke();
+            return true;
+        }
+
         public bool TryPlaceSelected(Vector2Int cell)
         {
             if (!Grid.HasLobby ||
                 CurrentTool != BuildTool.PlaceRoom ||
                 SelectedRoomType == null ||
-                SelectedRoomType.isLobby)
+                SelectedRoomType.isLobby ||
+                SelectedRoomType.isSkyLobby)
             {
                 return false;
             }
@@ -835,6 +918,74 @@ namespace BuildATower
             }
         }
 
+        bool IsSkyLobbyToolActive() =>
+            CurrentTool == BuildTool.PlaceRoom &&
+            SelectedRoomType != null &&
+            SelectedRoomType.isSkyLobby;
+
+        void HandleSkyLobbyDrag(Vector2Int cell)
+        {
+            if (!IsSkyLobbyToolActive()) return;
+            var type = ResolveSkyLobbyType();
+            if (type == null || cell.y < TowerGrid.MinSkyLobbyHeight) return;
+
+            if (Input.GetMouseButtonDown(0))
+            {
+                _draggingSkyLobby = true;
+                _dragStartX = cell.x;
+                _dragSkyFloor = cell.y;
+            }
+
+            if (!_draggingSkyLobby) return;
+
+            if (!Grid.TryGetSkyLobbyOnFloor(_dragSkyFloor, out var existing))
+            {
+                var minX = Mathf.Min(_dragStartX, cell.x);
+                var maxX = Mathf.Max(_dragStartX, cell.x);
+                var width = maxX - minX + 1;
+                var cost = width * type.buildCost;
+                var valid = Grid.CanPlaceSkyLobby(minX, maxX, _dragSkyFloor) &&
+                            BuildEconomy.CanAffordBuild(Wallet, cost);
+                view.SetGhost(
+                    new Vector2Int(minX, _dragSkyFloor),
+                    new Vector2Int(width, 1),
+                    TowerLookPalette.ForRoom(type),
+                    valid);
+
+                if (Input.GetMouseButtonUp(0))
+                {
+                    _draggingSkyLobby = false;
+                    if (valid) TryPlaceSkyLobby(minX, maxX, _dragSkyFloor);
+                    view.ClearGhost();
+                }
+
+                return;
+            }
+
+            var dragMin = Mathf.Min(_dragStartX, cell.x);
+            var dragMax = Mathf.Max(_dragStartX, cell.x);
+            var newMin = Mathf.Min(existing.Origin.x, dragMin);
+            var newMax = Mathf.Max(existing.Origin.x + existing.Size.x - 1, dragMax);
+            var added = (newMax - newMin + 1) - existing.Size.x;
+            var extendCost = added * type.buildCost;
+            var extendValid = added > 0 &&
+                              Grid.CanExtendSkyLobby(_dragSkyFloor, newMin, newMax) &&
+                              BuildEconomy.CanAffordBuild(Wallet, extendCost);
+
+            view.SetGhost(
+                new Vector2Int(newMin, _dragSkyFloor),
+                new Vector2Int(newMax - newMin + 1, 1),
+                TowerLookPalette.ForRoom(type),
+                extendValid);
+
+            if (Input.GetMouseButtonUp(0))
+            {
+                _draggingSkyLobby = false;
+                if (extendValid) TryExtendSkyLobby(_dragSkyFloor, newMin, newMax);
+                view.ClearGhost();
+            }
+        }
+
         void HandleElevatorDrag(Vector2Int cell)
         {
             if (!IsElevatorToolActive()) return;
@@ -865,7 +1016,7 @@ namespace BuildATower
 
             view.SetGhost(
                 new Vector2Int(_elevatorToExtend.Origin.x, newMin),
-                new Vector2Int(1, newMax - newMin + 1),
+                new Vector2Int(_elevatorToExtend.Size.x, newMax - newMin + 1),
                 TowerLookPalette.ForRoom(_elevatorToExtend.Type),
                 valid);
 
@@ -890,7 +1041,8 @@ namespace BuildATower
             var oldMax = oldMin + shaft.Size.y - 1;
             var x = shaft.Origin.x;
 
-            if (Input.GetMouseButtonDown(0) && cell.x == x)
+            if (Input.GetMouseButtonDown(0) &&
+                (cell.x == x || cell.x == x + shaft.Size.x - 1))
             {
                 if (cell.y == oldMax)
                 {
@@ -934,7 +1086,7 @@ namespace BuildATower
 
             view.SetGhost(
                 new Vector2Int(x, newMin),
-                new Vector2Int(1, newMax - newMin + 1),
+                new Vector2Int(shaft.Size.x, newMax - newMin + 1),
                 TowerLookPalette.ForRoom(shaft.Type),
                 valid);
 
@@ -1037,7 +1189,8 @@ namespace BuildATower
 
             if (CurrentTool != BuildTool.PlaceRoom ||
                 SelectedRoomType == null ||
-                SelectedRoomType.isLobby)
+                SelectedRoomType.isLobby ||
+                SelectedRoomType.isSkyLobby)
             {
                 view.ClearGhost();
                 return;
@@ -1096,6 +1249,13 @@ namespace BuildATower
                 return;
             }
 
+            if (IsSkyLobbyToolActive())
+            {
+                HelpText =
+                    "Sky Lobby: drag on an upper floor (≥15, ≥15 floors from any lobby) to place or extend a transfer floor.";
+                return;
+            }
+
             if (IsLobbyToolActive())
             {
                 HelpText = "Lobby tool: drag on Floor G past the lobby ends to extend it.";
@@ -1110,7 +1270,7 @@ namespace BuildATower
                         : SelectedRoomType.isParkingRamp
                             ? "Parking Ramp (3×2): connects Lobby/B1 to deeper parking. Stack flights; place B2+ lots touching the ramp or contiguous parking."
                             : SelectedRoomType.isElevatorShaft
-                                ? "Elevator (1×2): click to place. Or use Selector and drag shaft edges to resize (30 floors max)."
+                                ? ElevatorHelpText(SelectedRoomType)
                                 : $"Selected: {SelectedRoomType.displayName}. Build only on top of the floor below (no overhangs).";
         }
 
@@ -1118,6 +1278,7 @@ namespace BuildATower
         {
             if (!Input.GetMouseButtonDown(0) ||
                 _draggingLobby ||
+                _draggingSkyLobby ||
                 _draggingElevator ||
                 _draggingElevatorEdge ||
                 _draggingScaffold)
@@ -1167,7 +1328,16 @@ namespace BuildATower
             return new Vector2Int(Mathf.FloorToInt(world.x), Mathf.FloorToInt(world.y));
         }
 
-        void NotifyGridChanged() => GridChanged?.Invoke();
+        void NotifyGridChanged()
+        {
+            GridChanged?.Invoke();
+        }
+
+        void RefreshBuildingShell()
+        {
+            if (view == null || Grid == null || !Grid.HasLobby) return;
+            view.RepaintBuildingShell(Grid);
+        }
 
         void SyncConditionVisuals()
         {
@@ -1206,6 +1376,20 @@ namespace BuildATower
             SelectedRoomType != null &&
             SelectedRoomType.isElevatorShaft;
 
+        static string ElevatorHelpText(RoomTypeSO type)
+        {
+            if (type == null) return "Elevator: click to place.";
+            return type.ResolvedElevatorKind() switch
+            {
+                ElevatorShaftKind.Express =>
+                    $"Express elevator (2×2): click to place, drag to extend up to {TowerGrid.MaxExpressElevatorSpan} floors (lobby stops only).",
+                ElevatorShaftKind.Service =>
+                    $"Service elevator (1×2): click to place, drag to extend up to {TowerGrid.MaxNormalElevatorSpan} floors (basement allowed).",
+                _ =>
+                    $"Elevator (1×2): click to place, drag to extend up to {TowerGrid.MaxNormalElevatorSpan} floors."
+            };
+        }
+
         static bool IsVisibleTransit(RoomInstance room) =>
             room?.Type != null &&
             (room.Type.isStairs || room.Type.isElevatorShaft || room.Type.isParkingRamp);
@@ -1224,7 +1408,8 @@ namespace BuildATower
                 return;
             }
 
-            // Skip opaque transit (elevators/ramps). Stairs are a floating overlay — underlay paints through.
+            // Skip stacked transit cells (stairs/elevator/ramp). Dollhouse is a full-room
+            // overlay; transit is repainted on top so it stays visible over underlay rooms.
             view.PaintRoom(room, IsOpaqueTransitOwnedCell);
             RepaintAllVisibleTransit();
         }
@@ -1233,7 +1418,10 @@ namespace BuildATower
             Grid != null &&
             Grid.TryGetRoomAt(cell, out var at) &&
             at?.Type != null &&
-            (at.Type.isElevatorShaft || at.Type.isParkingRamp);
+            (at.Type.isElevatorShaft || at.Type.isParkingRamp || at.Type.isStairs);
+
+        /// <summary>Re-stacks stairs/elevator art above dollhouse room overlays.</summary>
+        public void RepaintTransitOnTop() => RepaintAllVisibleTransit();
 
         /// <summary>
         /// Reapply the art that depends on the tower's star rating: stairs overlays and the

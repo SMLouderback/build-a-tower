@@ -12,7 +12,8 @@ namespace BuildATower
     {
         public const string ResourceRoot = "Art/Dollhouse/";
         public const float PixelsPerUnit = 128f;
-        public const int SortingOrder = 10;
+        /// <summary>Below rooms tilemap transit (15) and stairs overlay (20).</summary>
+        public const int SortingOrder = 5;
 
         /// <summary>Test seam: replaces Resources-backed PNG decode when set.</summary>
         public static Func<string, Sprite> LoadSpriteForTests;
@@ -58,7 +59,6 @@ namespace BuildATower
             ["service_event_hall"] = "event_hall_12x2",
             ["parking_underground"] = "underground_parking_6x1",
             ["service_valet"] = "valet_3x1",
-            ["parking_ramp"] = "parking_ramp_3x2",
         };
 
         static readonly Dictionary<string, Sprite> SpriteCache = new();
@@ -77,7 +77,8 @@ namespace BuildATower
 
         public static bool IsMapped(RoomTypeSO type)
         {
-            if (type == null || type.isStairs || type.isElevatorShaft || type.isLobby)
+            if (type == null || type.isStairs || type.isElevatorShaft || type.isLobby ||
+                type.isParkingRamp)
                 return false;
             return ResourceLeaf(type.id) != null;
         }

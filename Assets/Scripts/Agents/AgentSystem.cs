@@ -78,6 +78,9 @@ namespace BuildATower
         readonly StairCapacity _stairCapacity;
         readonly HashSet<int> _stairWaitIds = new();
         readonly System.Random _rng = new(42);
+
+        public static AgentGender RollGender(System.Random rng) =>
+            rng.Next(2) == 0 ? AgentGender.Male : AgentGender.Female;
         readonly HashSet<int> _condoMoveInsNotified = new();
         readonly HashSet<int> _patrolFloorScratch = new();
         readonly HashSet<int> _criminalFloorScratch = new();
@@ -226,7 +229,8 @@ namespace BuildATower
                     var homeCell = HomeCell(room, existing);
                     var agent = new Agent(_nextId++, role, room, homeCell)
                     {
-                        HomeSlot = existing
+                        HomeSlot = existing,
+                        Gender = RollGender(_rng)
                     };
                     ConfigureSchedule(agent);
                     _agents.Add(agent);
@@ -286,7 +290,8 @@ namespace BuildATower
                 var agent = new Agent(_nextId++, AgentRole.OfficeWorker, room, homeCell)
                 {
                     HomeSlot = slot,
-                    Wealth = wealth
+                    Wealth = wealth,
+                    Gender = RollGender(_rng)
                 };
                 ConfigureSchedule(agent);
                 _agents.Add(agent);
@@ -408,7 +413,8 @@ namespace BuildATower
                 var agent = new Agent(_nextId++, AgentRole.HotelGuest, room, homeCell)
                 {
                     HomeSlot = slot,
-                    Wealth = wealth
+                    Wealth = wealth,
+                    Gender = RollGender(_rng)
                 };
                 ConfigureSchedule(agent);
                 _agents.Add(agent);
@@ -515,7 +521,8 @@ namespace BuildATower
                     var agent = new Agent(_nextId++, AgentRole.CondoResident, room, homeCell)
                     {
                         HomeSlot = slot,
-                        Wealth = wealth
+                        Wealth = wealth,
+                        Gender = RollGender(_rng)
                     };
                     ConfigureSchedule(agent);
                     _agents.Add(agent);
@@ -860,7 +867,8 @@ namespace BuildATower
                     {
                         HomeSlot = existing,
                         Phase = AgentPhase.AtHome,
-                        Visible = true
+                        Visible = true,
+                        Gender = RollGender(_rng)
                     };
                     _agents.Add(agent);
                     existing++;
@@ -1909,7 +1917,8 @@ namespace BuildATower
                 ReturnCell = lobby,
                 VisitDwellRemaining = ShopVisitRules.PickDwellMinutes(shop.Type, _rng),
                 DisposableRemaining = remaining,
-                DisposableDayIndex = clock.DayIndex
+                DisposableDayIndex = clock.DayIndex,
+                Gender = RollGender(_rng)
             };
             _agents.Add(agent);
             var spawn = ArrivalSpawnCell(agent, grid, lobby);
@@ -2043,7 +2052,9 @@ namespace BuildATower
                 VisitDwellRemaining = dwell,
                 PhaseAfterVisit = AgentPhase.Outside,
                 ReturnCell = exitCell,
-                DisposableDayIndex = -1
+                DisposableDayIndex = -1,
+                Wealth = WealthBand.Mid,
+                Gender = RollGender(_rng)
             };
             EnsureDisposable(agent, clock.DayIndex);
             _agents.Add(agent);
@@ -2083,7 +2094,8 @@ namespace BuildATower
                 CheckoutMinute = RollHotelCheckoutMinute(_rng),
                 CheckInDay = -1,
                 CheckedOutToday = false,
-                DisposableDayIndex = -1
+                DisposableDayIndex = -1,
+                Gender = RollGender(_rng)
             };
             EnsureDisposable(agent, clock.DayIndex);
             _agents.Add(agent);
@@ -2294,7 +2306,8 @@ namespace BuildATower
             {
                 CriminalDwellRemaining = CriminalLifeMinutes,
                 Phase = AgentPhase.Outside,
-                Visible = false
+                Visible = false,
+                Gender = RollGender(_rng)
             };
             _agents.Add(agent);
 
@@ -2488,7 +2501,7 @@ namespace BuildATower
                 agent.Visible = true;
             }
 
-            if (_router.TryPlanTrip(agent.Cell, to, agent.Stress, out var legs) && legs.Count > 0)
+            if (_router.TryPlanTrip(agent.Cell, to, agent.Stress, agent.Role, out var legs) && legs.Count > 0)
             {
                 agent.TripLegs = legs;
                 agent.TripLegIndex = 0;
@@ -3114,7 +3127,7 @@ namespace BuildATower
                 return;
             }
 
-            if (_router.TryPlanTrip(agent.Cell, agent.GoalCell.Value, agent.Stress, out var legs) &&
+            if (_router.TryPlanTrip(agent.Cell, agent.GoalCell.Value, agent.Stress, agent.Role, out var legs) &&
                 legs.Count > 0)
             {
                 agent.TripLegs = legs;

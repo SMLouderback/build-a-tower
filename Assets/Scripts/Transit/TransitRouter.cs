@@ -23,6 +23,7 @@ namespace BuildATower
     {
         readonly StairsPathfinder _stairs;
         readonly ElevatorSystem _elevators;
+        TowerGrid _grid;
         float _waitWeightScale = 1f;
 
         public ElevatorSystem Elevators => _elevators;
@@ -38,6 +39,7 @@ namespace BuildATower
 
         public void Rebuild(TowerGrid grid)
         {
+            _grid = grid;
             _stairs.Rebuild(grid);
             _elevators.SyncFromGrid(grid);
         }
@@ -71,12 +73,20 @@ namespace BuildATower
             Vector2Int start,
             Vector2Int goal,
             out List<TransitLeg> legs) =>
-            TryPlanTrip(start, goal, agentStress: 0f, out legs);
+            TryPlanTrip(start, goal, agentStress: 0f, agentRole: AgentRole.StreetVisitor, out legs);
 
         public bool TryPlanTrip(
             Vector2Int start,
             Vector2Int goal,
             float agentStress,
+            out List<TransitLeg> legs) =>
+            TryPlanTrip(start, goal, agentStress, AgentRole.StreetVisitor, out legs);
+
+        public bool TryPlanTrip(
+            Vector2Int start,
+            Vector2Int goal,
+            float agentStress,
+            AgentRole agentRole,
             out List<TransitLeg> legs)
         {
             legs = new List<TransitLeg>();
@@ -135,7 +145,8 @@ namespace BuildATower
                 var direction = goal.y >= start.y ? ElevatorDirection.Up : ElevatorDirection.Down;
                 var wait = _elevators.EstimateWaitMinutes(shaft, start.y, direction);
                 var score = ElevatorRouting.Score(walkCost, wait, _waitWeightScale) +
-                            ElevatorRouting.StairsOverCapPenalty(0);
+                            ElevatorRouting.StairsOverCapPenalty(0) +
+                            ShaftRoleScoreAdjust(shaft, agentRole);
 
                 if (!IsBetterCandidate(
                         score, fromShaft.Count, toShaft.Count, shaft.X,
@@ -152,7 +163,7 @@ namespace BuildATower
             // Hybrid: start on shaft, exit closest to goal, then stairs.
             foreach (var shaft in _elevators.GetShaftsServingFloor(start.y))
             {
-                var exitFloor = ElevatorSystem.ClosestFloorOnShaft(shaft, goal.y);
+                var exitFloor = ElevatorSystem.ClosestServedFloorOnShaft(shaft, goal.y);
                 if (exitFloor == goal.y)
                     continue; // covered by full elevator
 
@@ -177,7 +188,8 @@ namespace BuildATower
                 var direction = exitFloor >= entryFloor ? ElevatorDirection.Up : ElevatorDirection.Down;
                 var wait = _elevators.EstimateWaitMinutes(shaft, entryFloor, direction);
                 var score = ElevatorRouting.Score(walkCost, wait, _waitWeightScale) +
-                            ElevatorRouting.StairsOverCapPenalty(stairSpan);
+                            ElevatorRouting.StairsOverCapPenalty(stairSpan) +
+                            ShaftRoleScoreAdjust(shaft, agentRole);
 
                 if (!IsBetterCandidate(
                         score, stairsAfter.Count, toShaft.Count, shaft.X,
@@ -203,11 +215,11 @@ namespace BuildATower
                 if (shaft.InMaintenance)
                     continue;
 
-                var entryFloor = ElevatorSystem.ClosestFloorOnShaft(shaft, start.y);
+                var entryFloor = ElevatorSystem.ClosestServedFloorOnShaft(shaft, start.y);
                 if (entryFloor == start.y)
                     continue; // start-on-shaft hybrids / full elevator cover this
 
-                var exitFloor = ElevatorSystem.ClosestFloorOnShaft(shaft, goal.y);
+                var exitFloor = ElevatorSystem.ClosestServedFloorOnShaft(shaft, goal.y);
                 if (entryFloor == exitFloor)
                     continue;
 
@@ -240,7 +252,8 @@ namespace BuildATower
                 var direction = exitFloor >= entryFloor ? ElevatorDirection.Up : ElevatorDirection.Down;
                 var wait = _elevators.EstimateWaitMinutes(shaft, entryFloor, direction);
                 var score = ElevatorRouting.Score(walkCost, wait, _waitWeightScale) +
-                            ElevatorRouting.StairsOverCapPenalty(stairSpan);
+                            ElevatorRouting.StairsOverCapPenalty(stairSpan) +
+                            ShaftRoleScoreAdjust(shaft, agentRole);
 
                 if (!IsBetterCandidate(
                         score, afterExit.Count, toEntry.Count, shaft.X,
@@ -291,6 +304,17 @@ namespace BuildATower
                 }
             }
 
+            TryAddTransferItineraries(
+                start,
+                goal,
+                agentStress,
+                agentRole,
+                ref bestScore,
+                ref bestExitWalk,
+                ref bestEntryWalk,
+                ref bestShaftX,
+                ref bestLegs);
+
             if (bestLegs == null)
                 return false;
 
@@ -323,6 +347,139 @@ namespace BuildATower
                  entryWalk == bestEntryWalk &&
                  shaftX < bestShaftX));
             return betterScore || betterTieBreak;
+        }
+
+        static float ShaftRoleScoreAdjust(ElevatorShaftRuntime shaft, AgentRole role)
+        {
+            if (shaft == null || shaft.Kind != ElevatorShaftKind.Service)
+                return 0f;
+
+            var staff = role is AgentRole.Maid or AgentRole.Handyman;
+            return staff ? -20f : 80f;
+        }
+
+        void TryAddTransferItineraries(
+            Vector2Int start,
+            Vector2Int goal,
+            float agentStress,
+            AgentRole agentRole,
+            ref float bestScore,
+            ref int bestExitWalk,
+            ref int bestEntryWalk,
+            ref int bestShaftX,
+            ref List<TransitLeg> bestLegs)
+        {
+            if (_grid == null) return;
+
+            foreach (var transferFloor in TransferFloorProvider.TransferFloorsBetween(start.y, goal.y, _grid))
+            {
+                if (!_grid.IsTransferLobbyFloor(transferFloor)) continue;
+
+                foreach (var shaftA in _elevators.GetServingShafts(start.y, transferFloor))
+                {
+                    foreach (var shaftB in _elevators.GetServingShafts(transferFloor, goal.y))
+                    {
+                        if (ReferenceEquals(shaftA, shaftB)) continue;
+
+                        var lobbyGoal = new Vector2Int(shaftB.X, transferFloor);
+                        if (!TryShaftWalkPaths(start, lobbyGoal, shaftA, out var toShaftA, out var lobbyWalk))
+                            continue;
+
+                        var transferStart = new Vector2Int(shaftB.X, transferFloor);
+                        if (!TryShaftWalkPaths(transferStart, goal, shaftB, out _, out var fromShaftB))
+                            continue;
+
+                        var walkCost = toShaftA.Count + lobbyWalk.Count + fromShaftB.Count;
+                        var dirA = transferFloor >= start.y ? ElevatorDirection.Up : ElevatorDirection.Down;
+                        var dirB = goal.y >= transferFloor ? ElevatorDirection.Up : ElevatorDirection.Down;
+                        var wait = _elevators.EstimateWaitMinutes(shaftA, start.y, dirA) +
+                                   _elevators.EstimateWaitMinutes(shaftB, transferFloor, dirB);
+                        var score = ElevatorRouting.Score(walkCost, wait, _waitWeightScale) +
+                                    ElevatorRouting.StairsOverCapPenalty(0) +
+                                    ShaftRoleScoreAdjust(shaftA, agentRole) +
+                                    ShaftRoleScoreAdjust(shaftB, agentRole);
+
+                        if (!IsBetterCandidate(
+                                score, fromShaftB.Count, toShaftA.Count, shaftA.X,
+                                bestScore, bestExitWalk, bestEntryWalk, bestShaftX))
+                            continue;
+
+                        bestScore = score;
+                        bestExitWalk = fromShaftB.Count;
+                        bestEntryWalk = toShaftA.Count;
+                        bestShaftX = shaftA.X;
+                        bestLegs = BuildTransferLegs(
+                            shaftA,
+                            start.y,
+                            transferFloor,
+                            toShaftA,
+                            lobbyWalk,
+                            shaftB,
+                            goal.y,
+                            fromShaftB);
+                    }
+                }
+            }
+        }
+
+        static List<TransitLeg> BuildTransferLegs(
+            ElevatorShaftRuntime shaftA,
+            int entryFloorA,
+            int exitFloorA,
+            List<Vector2Int> toShaftA,
+            List<Vector2Int> lobbyWalk,
+            ElevatorShaftRuntime shaftB,
+            int exitFloorB,
+            List<Vector2Int> fromShaftB)
+        {
+            var legs = new List<TransitLeg>
+            {
+                new TransitLeg
+                {
+                    Kind = TransitLegKind.Walk,
+                    Cells = toShaftA
+                },
+                new TransitLeg
+                {
+                    Kind = TransitLegKind.Elevator,
+                    ElevatorX = shaftA.X,
+                    EntryFloor = entryFloorA,
+                    ExitFloor = exitFloorA,
+                    Cells = new List<Vector2Int>
+                    {
+                        new Vector2Int(shaftA.X, entryFloorA),
+                        new Vector2Int(shaftA.X, exitFloorA)
+                    }
+                }
+            };
+
+            if (lobbyWalk != null && lobbyWalk.Count > 0)
+            {
+                legs.Add(new TransitLeg
+                {
+                    Kind = TransitLegKind.Walk,
+                    Cells = lobbyWalk
+                });
+            }
+
+            legs.Add(new TransitLeg
+            {
+                Kind = TransitLegKind.Elevator,
+                ElevatorX = shaftB.X,
+                EntryFloor = exitFloorA,
+                ExitFloor = exitFloorB,
+                Cells = new List<Vector2Int>
+                {
+                    new Vector2Int(shaftB.X, exitFloorA),
+                    new Vector2Int(shaftB.X, exitFloorB)
+                }
+            });
+            legs.Add(new TransitLeg
+            {
+                Kind = TransitLegKind.Walk,
+                Cells = fromShaftB
+            });
+            return legs;
         }
 
         static List<TransitLeg> BuildFullElevatorLegs(

@@ -7,6 +7,7 @@ namespace BuildATower
     {
         public int Id { get; }
         public AgentRole Role { get; }
+        public AgentGender Gender { get; set; }
         public RoomInstance HomeRoom { get; }
         public Vector2Int Cell { get; set; }
         public Vector2 WorldPosition { get; set; }

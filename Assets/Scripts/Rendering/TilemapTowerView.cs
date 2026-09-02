@@ -10,9 +10,16 @@ namespace BuildATower
         const int BorderThickness = 2;
         const int LightingBucketMinutes = 15;
         const string DirtArtRoot = "Art/Dirt/";
+        const int RoomsTilemapSort = 15;
+        const int StairsOverlaySort = 20;
+        /// <summary>Opaque elevator shaft front — hides agents/rooms behind the shaft column.</summary>
+        const int TransitOcclusionSort = 22;
+        /// <summary>Ghost preview, selection wash, and elevator edge handles.</summary>
+        const int GhostOverlaySort = 25;
 
         [SerializeField] Tilemap structureTilemap;
         [SerializeField] Tilemap roomsTilemap;
+        [SerializeField] Tilemap transitForegroundTilemap;
         [SerializeField] Tilemap ghostTilemap;
         [SerializeField] Tilemap heatmapTilemap;
         [SerializeField] BuildController build;
@@ -28,6 +35,8 @@ namespace BuildATower
         readonly List<Vector3Int> _selectionCells = new();
         readonly List<Vector3Int> _handleCells = new();
         readonly List<Vector3Int> _heatmapCells = new();
+        readonly List<Vector3Int> _shellCells = new();
+        Tile _buildingShellTile;
         Transform _stairsOverlayRoot;
         Transform _dollhouseOverlayRoot;
         Transform _condemnedOverlayRoot;
@@ -49,7 +58,41 @@ namespace BuildATower
             // Built-in RP: keep Sprites/Default on tilemaps (pink = missing/incompatible shader).
             EnsureSpritesDefaultMaterial(structureTilemap);
             EnsureSpritesDefaultMaterial(roomsTilemap);
+            EnsureTransitForegroundTilemap();
+            EnsureSpritesDefaultMaterial(transitForegroundTilemap);
             EnsureSpritesDefaultMaterial(ghostTilemap);
+            // Rooms layer only — structure keeps default order so basement dirt stays
+            // below dollhouse overlays (5) while transit tiles on rooms stay above them.
+            ApplyTilemapSortOrder(roomsTilemap, RoomsTilemapSort);
+            ApplyTilemapSortOrder(transitForegroundTilemap, TransitOcclusionSort);
+            ApplyTilemapSortOrder(ghostTilemap, GhostOverlaySort);
+        }
+
+        void EnsureTransitForegroundTilemap()
+        {
+            if (transitForegroundTilemap != null) return;
+            if (roomsTilemap == null) return;
+
+            var parentTransform = roomsTilemap.GetComponentInParent<Grid>()?.transform
+                                  ?? roomsTilemap.transform.parent
+                                  ?? roomsTilemap.transform;
+            var go = new GameObject("TransitForeground");
+            go.transform.SetParent(parentTransform, false);
+            transitForegroundTilemap = go.AddComponent<Tilemap>();
+
+            if (roomsTilemap.TryGetComponent<TilemapRenderer>(out var roomsRenderer) &&
+                go.TryGetComponent<TilemapRenderer>(out var fgRenderer))
+            {
+                fgRenderer.sortingLayerID = roomsRenderer.sortingLayerID;
+                fgRenderer.sortingOrder = TransitOcclusionSort;
+            }
+        }
+
+        static void ApplyTilemapSortOrder(Tilemap map, int order)
+        {
+            if (map == null) return;
+            if (!map.TryGetComponent<TilemapRenderer>(out var renderer)) return;
+            renderer.sortingOrder = order;
         }
 
         static void EnsureSpritesDefaultMaterial(Tilemap map)
@@ -94,9 +137,6 @@ namespace BuildATower
                 if (room.Type.isElevatorShaft && TryPaintElevatorArt(room, occupied))
                     return;
 
-                if (TryPaintDollhouseArt(room, occupied, skipCell: null))
-                    return;
-
                 // Transit draws on the rooms layer so it stays visible over rooms.
                 foreach (var cell in occupied)
                 {
@@ -110,6 +150,9 @@ namespace BuildATower
             }
 
             if (room.Type.isLobby && TryPaintLobbyArt(room, occupied, skipCell))
+                return;
+
+            if (room.Type.isSkyLobby && TryPaintLobbyArt(room, occupied, skipCell, new Color(0.88f, 0.92f, 1f, 1f)))
                 return;
 
             if (TryPaintDollhouseArt(room, occupied, skipCell))
@@ -163,21 +206,32 @@ namespace BuildATower
                     return;
                 }
 
-                if (room.Type.isElevatorShaft &&
-                    StructureCutawayArt.TryElevatorTile(
-                        cell.y,
-                        room.Origin.y,
-                        room.Origin.y + room.Size.y - 1,
-                        out var elevTile))
+                if (room.Type.isElevatorShaft)
                 {
-                    var tc = ToTileCell(cell);
-                    roomsTilemap.SetTile(tc, elevTile);
-                    roomsTilemap.SetColor(tc, Color.white);
-                    return;
+                    var kind = room.Type.ResolvedElevatorKind();
+                    if (StructureCutawayArt.TryElevatorTile(
+                            cell.y,
+                            room.Origin.y,
+                            room.Origin.y + room.Size.y - 1,
+                            kind,
+                            out var elevTile))
+                    {
+                        var tc = ToTileCell(cell);
+                        roomsTilemap.SetTile(tc, elevTile);
+                        var tint = kind == ElevatorShaftKind.Express
+                            ? new Color(0.82f, 0.9f, 1f)
+                            : Color.white;
+                        roomsTilemap.SetColor(tc, tint);
+                        PaintElevatorOcclusion(
+                            cell,
+                            room.Origin.y,
+                            room.Origin.y + room.Size.y - 1,
+                            kind,
+                            elevTile,
+                            tint);
+                        return;
+                    }
                 }
-
-                if (TryPaintDollhouseArt(room, occupied, skipCell: null))
-                    return;
 
                 var transitTc = ToTileCell(cell);
                 roomsTilemap.SetTile(transitTc, GetTile(color, EdgeMaskFor(cell, occupied)));
@@ -185,12 +239,14 @@ namespace BuildATower
                 return;
             }
 
-            if (room.Type.isLobby &&
+            if ((room.Type.isLobby || room.Type.isSkyLobby) &&
                 StructureCutawayArt.TryLobbyTile(cell.x, out var lobbyTile))
             {
                 var tc = ToTileCell(cell);
                 structureTilemap.SetTile(tc, lobbyTile);
-                structureTilemap.SetColor(tc, Color.white);
+                structureTilemap.SetColor(
+                    tc,
+                    room.Type.isSkyLobby ? new Color(0.88f, 0.92f, 1f, 1f) : Color.white);
                 return;
             }
 
@@ -200,6 +256,7 @@ namespace BuildATower
                     SyncOfficeCondemnedOverlay(room);
                 else if (HotelCutawayArt.IsHotel(room.Type))
                     SyncHotelCautionOverlay(room);
+                build?.RepaintTransitOnTop();
                 return;
             }
 
@@ -271,7 +328,13 @@ namespace BuildATower
             if (IsVisibleTransit(room))
             {
                 foreach (var cell in room.OccupiedCells())
-                    roomsTilemap.SetTile(ToTileCell(cell), null);
+                {
+                    var tc = ToTileCell(cell);
+                    roomsTilemap.SetTile(tc, null);
+                    if (room.Type.isElevatorShaft)
+                        transitForegroundTilemap?.SetTile(tc, null);
+                }
+
                 return;
             }
 
@@ -368,9 +431,9 @@ namespace BuildATower
             if (ghostTilemap != null &&
                 ghostTilemap.TryGetComponent<TilemapRenderer>(out var ghostRenderer))
             {
-                // Keep ghosts/selection above heatmap (rooms < heatmap < ghost).
+                // Keep ghosts/selection/handles above heatmap and room art.
                 if (ghostRenderer.sortingOrder <= order)
-                    ghostRenderer.sortingOrder = order + 1;
+                    ghostRenderer.sortingOrder = Mathf.Max(order + 1, GhostOverlaySort);
                 order = Mathf.Min(order, ghostRenderer.sortingOrder - 1);
             }
 
@@ -437,13 +500,17 @@ namespace BuildATower
             var tile = GetTile(color, EdgeMask.All);
             var minY = shaft.Origin.y;
             var maxY = minY + shaft.Size.y - 1;
-            var top = ToTileCell(new Vector2Int(shaft.Origin.x, maxY));
-            var bottom = ToTileCell(new Vector2Int(shaft.Origin.x, minY));
-            ghostTilemap.SetTile(top, tile);
-            ghostTilemap.SetTile(bottom, tile);
-            _handleCells.Add(top);
-            if (top != bottom)
-                _handleCells.Add(bottom);
+            for (var dx = 0; dx < shaft.Size.x; dx++)
+            {
+                var col = shaft.Origin.x + dx;
+                var top = ToTileCell(new Vector2Int(col, maxY));
+                var bottom = ToTileCell(new Vector2Int(col, minY));
+                ghostTilemap.SetTile(top, tile);
+                ghostTilemap.SetTile(bottom, tile);
+                _handleCells.Add(top);
+                if (top != bottom)
+                    _handleCells.Add(bottom);
+            }
         }
 
         public void ClearEdgeHandles()
@@ -488,6 +555,46 @@ namespace BuildATower
         {
             if (structureTilemap == null) return;
             structureTilemap.SetTile(ToTileCell(cell), GetDirtTile(cell.y, cell.x));
+        }
+
+        /// <summary>
+        /// Paints grey/dirt structure filler behind dollhouse rooms so sky does not leak
+        /// through frame gaps, floor seams, or stepped floor profiles.
+        /// </summary>
+        public void RepaintBuildingShell(TowerGrid grid)
+        {
+            if (structureTilemap == null || grid == null) return;
+
+            ClearBuildingShell();
+
+            foreach (var cell in BuildingShellEnvelope.ComputeCells(grid.Rooms))
+            {
+                if (BuildingShellEnvelope.ShouldSkipShellCell(cell, grid)) continue;
+
+                var tc = ToTileCell(cell);
+                if (cell.y < TowerGrid.LobbyFloor)
+                    structureTilemap.SetTile(tc, GetDirtTile(cell.y, cell.x));
+                else
+                    structureTilemap.SetTile(tc, GetBuildingShellTile());
+
+                structureTilemap.SetColor(tc, Color.white);
+                _shellCells.Add(tc);
+            }
+        }
+
+        void ClearBuildingShell()
+        {
+            if (structureTilemap == null) return;
+            foreach (var cell in _shellCells)
+                structureTilemap.SetTile(cell, null);
+            _shellCells.Clear();
+        }
+
+        Tile GetBuildingShellTile()
+        {
+            if (_buildingShellTile == null)
+                _buildingShellTile = GetTile(TowerLookPalette.BuildingShell, EdgeMask.None);
+            return _buildingShellTile;
         }
 
         public void ClearStructureRow(int floor, int minX, int maxX)
@@ -547,7 +654,8 @@ namespace BuildATower
         bool TryPaintLobbyArt(
             RoomInstance room,
             HashSet<Vector2Int> occupied,
-            System.Func<Vector2Int, bool> skipCell)
+            System.Func<Vector2Int, bool> skipCell,
+            Color? tintOverride = null)
         {
             foreach (var cell in occupied)
             {
@@ -556,7 +664,7 @@ namespace BuildATower
                     return false;
             }
 
-            var tint = Color.white;
+            var tint = tintOverride ?? Color.white;
             foreach (var cell in occupied)
             {
                 if (skipCell != null && skipCell(cell)) continue;
@@ -573,23 +681,57 @@ namespace BuildATower
         {
             var minY = room.Origin.y;
             var maxY = room.Origin.y + room.Size.y - 1;
+            var kind = room.Type.ResolvedElevatorKind();
             foreach (var cell in occupied)
             {
-                if (!StructureCutawayArt.TryElevatorTile(cell.y, minY, maxY, out _))
+                if (!StructureCutawayArt.TryElevatorTile(cell.y, minY, maxY, kind, out _))
                     return false;
             }
 
-            var tint = Color.white;
+            var tint = kind switch
+            {
+                ElevatorShaftKind.Express => new Color(0.82f, 0.9f, 1f),
+                ElevatorShaftKind.Service => Color.white,
+                _ => Color.white
+            };
             foreach (var cell in occupied)
             {
-                StructureCutawayArt.TryElevatorTile(cell.y, minY, maxY, out var tile);
+                StructureCutawayArt.TryElevatorTile(cell.y, minY, maxY, kind, out var tile);
                 var tc = ToTileCell(cell);
                 roomsTilemap.SetTile(tc, tile);
                 roomsTilemap.SetColor(tc, tint);
+                PaintElevatorOcclusion(cell, minY, maxY, kind, tile, tint);
             }
 
             return true;
         }
+
+        void PaintElevatorOcclusion(
+            Vector2Int cell,
+            int minY,
+            int maxY,
+            ElevatorShaftKind kind,
+            Tile tile,
+            Color tint)
+        {
+            EnsureTransitForegroundTilemap();
+            if (transitForegroundTilemap == null) return;
+
+            var occluder = StructureCutawayArt.ElevatorOccluderTile();
+            if (occluder == null) return;
+
+            var tc = ToTileCell(cell);
+            transitForegroundTilemap.SetTile(tc, occluder);
+            transitForegroundTilemap.SetColor(tc, Color.white);
+        }
+
+        void RepaintAllElevatorOcclusion()
+        {
+            if (build?.Grid == null) return;
+            PaintTransitRooms(build.Grid.Rooms);
+        }
+
+        void Start() => RepaintAllElevatorOcclusion();
 
         void PaintStairsRoom(RoomInstance room, HashSet<Vector2Int> occupied, Color paletteColor)
         {
@@ -617,7 +759,7 @@ namespace BuildATower
                 var go = new GameObject($"StairsOverlay_{room.InstanceId}");
                 go.transform.SetParent(root, false);
                 sr = go.AddComponent<SpriteRenderer>();
-                sr.sortingOrder = 20;
+                sr.sortingOrder = StairsOverlaySort;
                 _stairsOverlays[room.InstanceId] = sr;
             }
 

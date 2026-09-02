@@ -1,5 +1,11 @@
 namespace BuildATower
 {
+    public enum AgentGender
+    {
+        Male,
+        Female
+    }
+
     public enum AgentRole
     {
         OfficeWorker,

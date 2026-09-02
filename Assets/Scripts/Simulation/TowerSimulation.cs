@@ -219,7 +219,7 @@ namespace BuildATower
                 EconomySystem.CountResearcherPool(build.Grid));
             SampleAgentsForMaps(_clock.LastTickGameMinutes);
             if (agentView != null)
-                agentView.Sync(_agents.Agents);
+                agentView.Sync(_agents.Agents, build?.Grid);
         }
 
         void SampleAgentsForMaps(float gameMinutes)

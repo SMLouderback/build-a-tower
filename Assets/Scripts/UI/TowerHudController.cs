@@ -15,6 +15,8 @@ namespace BuildATower
         [SerializeField] List<RoomTypeSO> placeableRooms = new();
         [SerializeField] RoomTypeSO stairsRoom;
         [SerializeField] RoomTypeSO elevatorRoom;
+        [SerializeField] RoomTypeSO expressElevatorRoom;
+        [SerializeField] RoomTypeSO serviceElevatorRoom;
 
         [SerializeField] float panelWidth = 280f;
         [SerializeField] float edgeGapPixels = 12f;
@@ -154,6 +156,16 @@ namespace BuildATower
                 stairsRoom = Resources.Load<RoomTypeSO>("Rooms/Stairs");
             if (elevatorRoom == null)
                 elevatorRoom = Resources.Load<RoomTypeSO>("Rooms/ElevatorNormal");
+            if (expressElevatorRoom == null)
+                expressElevatorRoom = Resources.Load<RoomTypeSO>("Rooms/ElevatorExpress");
+            if (serviceElevatorRoom == null)
+                serviceElevatorRoom = Resources.Load<RoomTypeSO>("Rooms/ElevatorService");
+            expressElevatorRoom ??= RoomTypeSO.CreateRuntimeElevator(
+                "elevator_express", "Express Elevator", ElevatorShaftKind.Express, requiredStars: 3, buildCost: 12000);
+            serviceElevatorRoom ??= RoomTypeSO.CreateRuntimeElevator(
+                "elevator_service", "Service Elevator", ElevatorShaftKind.Service, requiredStars: 4, buildCost: 9000);
+            if (serviceElevatorRoom != null)
+                serviceElevatorRoom.allowBasement = true;
 
             _roomButtons.Clear();
             foreach (var room in placeableRooms)
@@ -169,6 +181,18 @@ namespace BuildATower
             {
                 _roomButtons.RemoveAll(r => r != null && r.id == "elevator_normal");
                 _roomButtons.Add(elevatorRoom);
+            }
+
+            if (expressElevatorRoom != null && !_roomButtons.Contains(expressElevatorRoom))
+            {
+                _roomButtons.RemoveAll(r => r != null && r.id == "elevator_express");
+                _roomButtons.Add(expressElevatorRoom);
+            }
+
+            if (serviceElevatorRoom != null && !_roomButtons.Contains(serviceElevatorRoom))
+            {
+                _roomButtons.RemoveAll(r => r != null && r.id == "elevator_service");
+                _roomButtons.Add(serviceElevatorRoom);
             }
 
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoStudio"));
@@ -1864,6 +1888,12 @@ namespace BuildATower
                     build.SelectedRoomType != null &&
                     build.SelectedRoomType.isLobby,
                     new Color(0.75f, 0.65f, 0.35f)),
+                ("Sky", "Sky Lobby\nTransfer floor: ≥15 up, ≥15 apart from other lobbies.",
+                    () => build.SelectSkyLobbyTool(),
+                    build.CurrentTool == BuildTool.PlaceRoom &&
+                    build.SelectedRoomType != null &&
+                    build.SelectedRoomType.isSkyLobby,
+                    new Color(0.72f, 0.78f, 0.92f)),
                 ("Sc", "Scaffold ($750)\nClick or drag to place walkable structural fill.",
                     () => build.SelectScaffoldTool(),
                     build.CurrentTool == BuildTool.Scaffold,
@@ -2025,7 +2055,15 @@ namespace BuildATower
         static string RoomGlyph(RoomTypeSO room)
         {
             if (room == null) return "?";
-            if (room.isElevatorShaft) return "El";
+            if (room.isElevatorShaft)
+            {
+                return room.id switch
+                {
+                    "elevator_express" => "Ex",
+                    "elevator_service" => "Sv",
+                    _ => "El"
+                };
+            }
             if (room.isStairs) return "St";
             if (room.isParkingRamp) return "Rm";
             if (!string.IsNullOrEmpty(room.id))

@@ -57,11 +57,15 @@ namespace BuildATower
                 var shaft = shafts[i];
                 renderer.enabled = true;
                 renderer.sprite = _carSprite;
+                var carCenterX = shaft.Width > 1
+                    ? shaft.X + shaft.Width * 0.5f
+                    : shaft.X + 0.5f;
                 renderer.transform.position =
-                    new Vector3(shaft.X + 0.5f, shaft.Car.Floor + 0.5f, 0f);
+                    new Vector3(carCenterX, shaft.Car.Floor + 0.5f, 0f);
                 // Real cars run inches from the shaft walls — fill nearly the full cell.
                 var b = _carSprite != null ? _carSprite.bounds.size : Vector3.one;
-                var sx = b.x > 0.01f ? 0.98f / b.x : 1f;
+                var cellWidth = shaft.Width > 1 ? shaft.Width * 0.98f : 0.98f;
+                var sx = b.x > 0.01f ? cellWidth / b.x : 1f;
                 var sy = b.y > 0.01f ? 0.94f / b.y : 1f;
                 renderer.transform.localScale = new Vector3(sx, sy, 1f);
             }

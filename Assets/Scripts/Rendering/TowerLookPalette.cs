@@ -11,6 +11,8 @@ namespace BuildATower
     {
         public static readonly Color Lobby = new(0.88f, 0.82f, 0.70f, 1f);
         public static readonly Color Scaffold = new(0.70f, 0.58f, 0.32f, 1f);
+        /// <summary>Structure filler behind dollhouse overlays (frames / floor seams).</summary>
+        public static readonly Color BuildingShell = new(0.42f, 0.42f, 0.45f, 1f);
 
         public static Color ForRoom(RoomTypeSO type)
         {

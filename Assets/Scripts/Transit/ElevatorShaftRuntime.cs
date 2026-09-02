@@ -4,10 +4,16 @@ namespace BuildATower
 {
     public sealed class ElevatorShaftRuntime
     {
+        public const float ExpressSpeedMultiplier = 2.5f;
+
         public int RoomInstanceId;
         public int X;
+        public int Width = 1;
         public int MinFloor;
         public int MaxFloor;
+        public ElevatorShaftKind Kind = ElevatorShaftKind.Normal;
+        /// <summary>When set (express), car stops only on these floors within the shaft span.</summary>
+        public HashSet<int> StopFloors;
         public ElevatorCar Car;
         public Dictionary<int, Queue<int>> UpQueues;
         public Dictionary<int, Queue<int>> DownQueues;
@@ -44,7 +50,16 @@ namespace BuildATower
             }
         }
 
-        public bool Serves(int floor) => floor >= MinFloor && floor <= MaxFloor;
+        public bool Serves(int floor)
+        {
+            if (floor < MinFloor || floor > MaxFloor)
+                return false;
+            if (Kind != ElevatorShaftKind.Express || StopFloors == null)
+                return true;
+            return StopFloors.Contains(floor);
+        }
+
+        public bool MatchesColumn(int x) => x == X || (Width > 1 && x == X + 1);
 
         public void RecordBoarding(float waitMinutes)
         {

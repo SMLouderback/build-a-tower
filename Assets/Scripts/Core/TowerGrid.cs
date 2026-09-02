@@ -10,7 +10,12 @@ namespace BuildATower
         /// Floors above are 1, 2, …; basements are -1, -2, ….
         /// </summary>
         public const int LobbyFloor = 0;
-        public const int MaxElevatorSpan = 30;
+        public const int MaxNormalElevatorSpan = 32;
+        public const int MaxExpressElevatorSpan = 100;
+        /// <summary>Alias for normal/service shafts (express uses <see cref="MaxExpressElevatorSpan"/>).</summary>
+        public const int MaxElevatorSpan = MaxNormalElevatorSpan;
+        public const int MinSkyLobbySpacing = 15;
+        public const int MinSkyLobbyHeight = 15;
 
         readonly Dictionary<Vector2Int, RoomInstance> _cells = new();
         readonly List<RoomInstance> _rooms = new();
@@ -31,6 +36,30 @@ namespace BuildATower
 
         public bool TryGetRoomAt(Vector2Int cell, out RoomInstance room) =>
             _cells.TryGetValue(cell, out room);
+
+        public bool IsElevatorCoveringCell(Vector2Int cell) => IsElevatorColumnAt(cell);
+
+        public bool IsElevatorColumnAt(Vector2Int cell) => IsElevatorColumnAt(cell.x, cell.y);
+
+        public bool IsElevatorColumnAt(int x, int floor)
+        {
+            foreach (var room in _rooms)
+            {
+                if (!IsElevator(room)) continue;
+                var minY = room.Origin.y;
+                var maxY = minY + room.Size.y - 1;
+                if (floor < minY || floor > maxY) continue;
+                if (x >= room.Origin.x && x < room.Origin.x + room.Size.x)
+                    return true;
+            }
+
+            return false;
+        }
+
+        public static int MaxSpanFloors(RoomTypeSO type) =>
+            type != null && type.ResolvedElevatorKind() == ElevatorShaftKind.Express
+                ? MaxExpressElevatorSpan
+                : MaxNormalElevatorSpan;
 
         public bool CanPlaceLobby(int minX, int maxX, int floor)
         {
@@ -150,9 +179,177 @@ namespace BuildATower
             return true;
         }
 
+        public List<int> GetLobbyFloors()
+        {
+            var floors = new List<int>();
+            if (HasLobby)
+                floors.Add(LobbyFloor);
+            foreach (var room in _rooms)
+            {
+                if (room?.Type != null && room.Type.isSkyLobby)
+                    floors.Add(room.Origin.y);
+            }
+
+            floors.Sort();
+            return floors;
+        }
+
+        public bool IsTransferLobbyFloor(int floor)
+        {
+            if (floor == LobbyFloor)
+                return HasLobby;
+            return TryGetSkyLobbyOnFloor(floor, out _);
+        }
+
+        public bool CanPlaceSkyLobby(int minX, int maxX, int floor)
+        {
+            if (!HasLobby || floor < MinSkyLobbyHeight) return false;
+            if (maxX < minX) return false;
+            if (minX < MinX || maxX > MaxX) return false;
+            if (TryGetSkyLobbyOnFloor(floor, out _)) return false;
+            if (!IsSkyLobbySpacingValid(floor)) return false;
+
+            var footprint = BuildSkyLobbyFootprint(minX, maxX, floor);
+            foreach (var cell in footprint)
+            {
+                if (_cells.TryGetValue(cell, out var occupant))
+                {
+                    if (IsLobbyOverlappingTransit(occupant)) continue;
+                    if (IsScaffolding(occupant)) continue;
+                    return false;
+                }
+
+                if (!HasSupportFromAdjacentLevel(cell, footprint)) return false;
+            }
+
+            return true;
+        }
+
+        public bool TryPlaceSkyLobby(
+            RoomTypeSO skyLobbyType,
+            int minX,
+            int maxX,
+            int floor,
+            out RoomInstance room)
+        {
+            room = null;
+            if (skyLobbyType == null || !skyLobbyType.isSkyLobby) return false;
+            if (!CanPlaceSkyLobby(minX, maxX, floor)) return false;
+
+            var footprint = BuildSkyLobbyFootprint(minX, maxX, floor);
+            var transitOnFloor = new List<RoomInstance>();
+            foreach (var existing in _rooms)
+            {
+                if (!IsLobbyOverlappingTransit(existing)) continue;
+                foreach (var c in existing.OccupiedCells())
+                {
+                    if (c.y != floor) continue;
+                    if (!footprint.Contains(c)) continue;
+                    if (!transitOnFloor.Contains(existing))
+                        transitOnFloor.Add(existing);
+                }
+            }
+
+            var seenScaffold = new HashSet<RoomInstance>();
+            foreach (var cell in footprint)
+            {
+                if (!_cells.TryGetValue(cell, out var occupant)) continue;
+                if (!IsScaffolding(occupant)) continue;
+                if (!seenScaffold.Add(occupant)) continue;
+                RemoveRoom(occupant);
+            }
+
+            var width = maxX - minX + 1;
+            room = new RoomInstance(
+                _nextId++,
+                skyLobbyType,
+                new Vector2Int(minX, floor),
+                new Vector2Int(width, 1));
+            RegisterSkyLobby(room, footprint, transitOnFloor);
+            return true;
+        }
+
+        public bool CanExtendSkyLobby(int floor, int newMinX, int newMaxX)
+        {
+            if (!TryGetSkyLobbyOnFloor(floor, out var skyLobby)) return false;
+            if (newMaxX < newMinX) return false;
+            if (newMinX > skyLobby.Origin.x ||
+                newMaxX < skyLobby.Origin.x + skyLobby.Size.x - 1)
+                return false;
+            if (newMinX == skyLobby.Origin.x &&
+                newMaxX == skyLobby.Origin.x + skyLobby.Size.x - 1)
+                return false;
+
+            var footprint = BuildSkyLobbyFootprint(newMinX, newMaxX, floor);
+            foreach (var cell in footprint)
+            {
+                if (!_cells.TryGetValue(cell, out var occupant)) continue;
+                if (IsLobbyOverlappingTransit(occupant)) continue;
+                if (IsSkyLobby(occupant)) continue;
+                return false;
+            }
+
+            foreach (var cell in footprint)
+            {
+                if (_cells.ContainsKey(cell)) continue;
+                if (!HasSupportFromAdjacentLevel(cell, footprint)) return false;
+            }
+
+            return true;
+        }
+
+        public bool TryExtendSkyLobby(
+            RoomTypeSO skyLobbyType,
+            int floor,
+            int newMinX,
+            int newMaxX,
+            out RoomInstance skyLobby,
+            out int addedCells)
+        {
+            skyLobby = null;
+            addedCells = 0;
+            if (skyLobbyType == null || !skyLobbyType.isSkyLobby) return false;
+            if (!CanExtendSkyLobby(floor, newMinX, newMaxX)) return false;
+            if (!TryGetSkyLobbyOnFloor(floor, out var oldSkyLobby)) return false;
+
+            addedCells = (newMaxX - newMinX + 1) - oldSkyLobby.Size.x;
+            if (addedCells <= 0) return false;
+
+            var transitOnFloor = new List<RoomInstance>();
+            foreach (var existing in _rooms)
+            {
+                if (!IsLobbyOverlappingTransit(existing)) continue;
+                foreach (var c in existing.OccupiedCells())
+                {
+                    if (c.y != floor) continue;
+                    if (!transitOnFloor.Contains(existing))
+                        transitOnFloor.Add(existing);
+                }
+            }
+
+            foreach (var c in oldSkyLobby.OccupiedCells())
+            {
+                if (_cells.TryGetValue(c, out var occ) && IsLobbyOverlappingTransit(occ)) continue;
+                _cells.Remove(c);
+            }
+
+            _rooms.Remove(oldSkyLobby);
+
+            skyLobby = new RoomInstance(
+                oldSkyLobby.InstanceId,
+                skyLobbyType,
+                new Vector2Int(newMinX, floor),
+                new Vector2Int(newMaxX - newMinX + 1, 1));
+            RegisterSkyLobby(
+                skyLobby,
+                BuildSkyLobbyFootprint(newMinX, newMaxX, floor),
+                transitOnFloor);
+            return true;
+        }
+
         public bool CanPlace(RoomTypeSO type, Vector2Int origin)
         {
-            if (type == null || type.isLobby || type.isScaffolding) return false;
+            if (type == null || type.isLobby || type.isSkyLobby || type.isScaffolding) return false;
             if (!HasLobby) return false;
             if (type.size.x <= 0 || type.size.y <= 0) return false;
 
@@ -626,10 +823,18 @@ namespace BuildATower
             HashSet<Vector2Int> footprint,
             RoomInstance extendingShaft)
         {
-            if (type.size.x != 1) return false;
-            if (footprint.Count < 2 || footprint.Count > MaxElevatorSpan) return false;
+            var width = type.size.x;
+            if (width < 1 || width > 2) return false;
+
+            var kind = type.ResolvedElevatorKind();
+            if (kind == ElevatorShaftKind.Express && width != 2) return false;
+            if (kind != ElevatorShaftKind.Express && width != 1) return false;
+
+            var floorSpan = footprint.Count / width;
+            var maxSpan = MaxSpanFloors(type);
+            if (floorSpan < 2 || floorSpan > maxSpan) return false;
             if (extendingShaft == null &&
-                (type.size.y != 2 || footprint.Count != 2))
+                (type.size.y != 2 || floorSpan != 2))
                 return false;
 
             foreach (var cell in footprint)
@@ -724,7 +929,8 @@ namespace BuildATower
         {
             if (!IsElevator(shaft) || !_rooms.Contains(shaft)) return false;
             var span = newMaxY - newMinY + 1;
-            if (span < 2 || span > MaxElevatorSpan) return false;
+            var maxSpan = MaxSpanFloors(shaft.Type);
+            if (span < 2 || span > maxSpan) return false;
 
             var oldMin = shaft.Origin.y;
             var oldMax = oldMin + shaft.Size.y - 1;
@@ -737,9 +943,10 @@ namespace BuildATower
             if (shrinking)
                 return newMinY >= oldMin && newMaxY <= oldMax;
 
+            var width = Mathf.Max(1, shaft.Size.x);
             var footprint = BuildFootprint(
                 new Vector2Int(shaft.Origin.x, newMinY),
-                new Vector2Int(1, span));
+                new Vector2Int(width, span));
             return CanPlaceElevator(shaft.Type, footprint, shaft);
         }
 
@@ -768,8 +975,9 @@ namespace BuildATower
             }
 
             var span = newMaxY - newMinY + 1;
+            var width = Mathf.Max(1, type.size.x);
             var origin = new Vector2Int(x, newMinY);
-            var footprint = BuildFootprint(origin, new Vector2Int(1, span));
+            var footprint = BuildFootprint(origin, new Vector2Int(width, span));
             var elevator = PlaceElevator(type, origin, footprint, new List<RoomInstance>(), instanceId);
             elevator.CopyBuildGraceLedgerFrom(previous);
 
@@ -853,9 +1061,85 @@ namespace BuildATower
         static bool IsElevator(RoomInstance room) =>
             room?.Type != null && room.Type.isElevatorShaft;
 
-        /// <summary>Transit that may occupy Lobby floor cells over the lobby underlay.</summary>
+        /// <summary>Transit that may occupy lobby floor cells over the lobby underlay.</summary>
         static bool IsLobbyOverlappingTransit(RoomInstance room) =>
             IsStairs(room) || IsElevator(room) || IsParkingRamp(room);
+
+        static bool IsSkyLobby(RoomInstance room) =>
+            room?.Type != null && room.Type.isSkyLobby;
+
+        public bool TryGetSkyLobbyOnFloor(int floor, out RoomInstance skyLobby)
+        {
+            foreach (var room in _rooms)
+            {
+                if (!IsSkyLobby(room) || room.Origin.y != floor) continue;
+                skyLobby = room;
+                return true;
+            }
+
+            skyLobby = null;
+            return false;
+        }
+
+        bool IsSkyLobbySpacingValid(int floor)
+        {
+            foreach (var lobbyFloor in GetLobbyFloors())
+            {
+                if (Mathf.Abs(floor - lobbyFloor) < MinSkyLobbySpacing)
+                    return false;
+            }
+
+            return true;
+        }
+
+        static HashSet<Vector2Int> BuildSkyLobbyFootprint(int minX, int maxX, int floor)
+        {
+            var footprint = new HashSet<Vector2Int>();
+            for (var x = minX; x <= maxX; x++)
+                footprint.Add(new Vector2Int(x, floor));
+            return footprint;
+        }
+
+        void RegisterSkyLobby(
+            RoomInstance room,
+            HashSet<Vector2Int> footprint,
+            List<RoomInstance> transitOnFloor)
+        {
+            foreach (var cell in footprint)
+            {
+                if (_cells.TryGetValue(cell, out var occupant) && IsLobbyOverlappingTransit(occupant))
+                {
+                    if (IsElevator(occupant))
+                        _underElevator[cell] = room;
+                    else
+                        _underStairs[cell] = room;
+                    continue;
+                }
+
+                _cells[cell] = room;
+            }
+
+            if (!_rooms.Contains(room))
+                _rooms.Add(room);
+
+            foreach (var transit in transitOnFloor)
+            {
+                foreach (var c in transit.OccupiedCells())
+                {
+                    if (c.y != room.Origin.y) continue;
+                    if (!footprint.Contains(c)) continue;
+                    if (_cells.TryGetValue(c, out var under) && !IsLobbyOverlappingTransit(under))
+                    {
+                        if (IsElevator(transit))
+                            _underElevator[c] = under;
+                        else
+                            _underStairs[c] = under;
+                    }
+
+                    _cells[c] = transit;
+                }
+            }
+        }
 
         static bool IsFloorAllowed(RoomTypeSO type, int floor)
         {

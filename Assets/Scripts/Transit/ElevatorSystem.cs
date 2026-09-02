@@ -87,9 +87,11 @@ namespace BuildATower
                     shaft = new ElevatorShaftRuntime
                     {
                         RoomInstanceId = room.InstanceId,
+                        Kind = room.Type.ResolvedElevatorKind(),
+                        Width = room.Size.x,
                         Car = new ElevatorCar
                         {
-                            Floor = Clamp(TowerGrid.LobbyFloor, minFloor, maxFloor),
+                            Floor = InitialCarFloor(room.Type, minFloor, maxFloor, grid),
                             Direction = ElevatorDirection.None,
                             State = ElevatorCarState.Idle
                         },
@@ -98,10 +100,27 @@ namespace BuildATower
                     };
                 }
 
+                shaft.Kind = room.Type.ResolvedElevatorKind();
+                shaft.Width = room.Size.x;
                 shaft.X = room.Origin.x;
                 shaft.MinFloor = room.Origin.y;
                 shaft.MaxFloor = room.Origin.y + room.Size.y - 1;
-                shaft.Car.Floor = Clamp(shaft.Car.Floor, shaft.MinFloor, shaft.MaxFloor);
+                shaft.StopFloors = shaft.Kind == ElevatorShaftKind.Express
+                    ? BuildExpressStopFloors(grid, shaft.MinFloor, shaft.MaxFloor)
+                    : null;
+                if (!existingById.ContainsKey(room.InstanceId))
+                {
+                    shaft.Car.Floor = Clamp(
+                        InitialCarFloor(room.Type, shaft.MinFloor, shaft.MaxFloor, grid, shaft),
+                        shaft.MinFloor,
+                        shaft.MaxFloor);
+                }
+                else
+                {
+                    shaft.Car.Floor = Clamp(shaft.Car.Floor, shaft.MinFloor, shaft.MaxFloor);
+                    if (!shaft.Serves(shaft.Car.Floor))
+                        shaft.Car.Floor = InitialCarFloor(room.Type, shaft.MinFloor, shaft.MaxFloor, grid, shaft);
+                }
                 SyncQueues(shaft.UpQueues, shaft.MinFloor, shaft.MaxFloor);
                 SyncQueues(shaft.DownQueues, shaft.MinFloor, shaft.MaxFloor);
                 _shafts.Add(shaft);
@@ -129,7 +148,7 @@ namespace BuildATower
 
             foreach (var shaft in _shafts)
             {
-                if (shaft.InMaintenance || shaft.X != x || !shaft.Serves(floor))
+                if (shaft.InMaintenance || !shaft.MatchesColumn(x) || !shaft.Serves(floor))
                     continue;
 
                 var queues = direction == ElevatorDirection.Up
@@ -321,13 +340,87 @@ namespace BuildATower
             return removed;
         }
 
+        public static int ClosestServedFloorOnShaft(ElevatorShaftRuntime shaft, int targetFloor)
+        {
+            if (shaft == null)
+                return targetFloor;
+            if (shaft.Kind != ElevatorShaftKind.Express || shaft.StopFloors == null || shaft.StopFloors.Count == 0)
+                return ClosestFloorOnShaft(shaft, targetFloor);
+
+            var found = false;
+            var best = shaft.MinFloor;
+            var bestDistance = int.MaxValue;
+            foreach (var floor in shaft.StopFloors)
+            {
+                if (floor < shaft.MinFloor || floor > shaft.MaxFloor)
+                    continue;
+
+                var distance = Math.Abs(floor - targetFloor);
+                if (found && distance >= bestDistance)
+                    continue;
+
+                found = true;
+                bestDistance = distance;
+                best = floor;
+            }
+
+            return found ? best : ClosestFloorOnShaft(shaft, targetFloor);
+        }
+
+        static HashSet<int> BuildExpressStopFloors(TowerGrid grid, int minFloor, int maxFloor)
+        {
+            var stops = new HashSet<int>();
+            foreach (var floor in grid.GetLobbyFloors())
+            {
+                if (floor >= minFloor && floor <= maxFloor)
+                    stops.Add(floor);
+            }
+
+            return stops;
+        }
+
+        static int InitialCarFloor(
+            RoomTypeSO type,
+            int minFloor,
+            int maxFloor,
+            TowerGrid grid,
+            ElevatorShaftRuntime shaft = null)
+        {
+            if (type != null && type.ResolvedElevatorKind() == ElevatorShaftKind.Express)
+            {
+                var target = TowerGrid.LobbyFloor;
+                if (shaft != null)
+                    return ClosestServedFloorOnShaft(shaft, target);
+
+                var stops = BuildExpressStopFloors(grid, minFloor, maxFloor);
+                if (stops.Count == 0)
+                    return Clamp(TowerGrid.LobbyFloor, minFloor, maxFloor);
+
+                var best = minFloor;
+                var bestDistance = int.MaxValue;
+                foreach (var floor in stops)
+                {
+                    var distance = Math.Abs(floor - target);
+                    if (distance >= bestDistance)
+                        continue;
+                    bestDistance = distance;
+                    best = floor;
+                }
+
+                return best;
+            }
+
+            return Clamp(TowerGrid.LobbyFloor, minFloor, maxFloor);
+        }
+
         public ElevatorShaftRuntime FindServing(int x, int floorA, int floorB)
         {
             foreach (var shaft in _shafts)
             {
                 if (shaft.InMaintenance) continue;
-                if (shaft.X == x && shaft.Serves(floorA) && shaft.Serves(floorB))
-                    return shaft;
+                if (!shaft.MatchesColumn(x) || !shaft.Serves(floorA) || !shaft.Serves(floorB))
+                    continue;
+                return shaft;
             }
 
             return null;
@@ -439,7 +532,10 @@ namespace BuildATower
             var queueAhead = QueueLength(shaft, entryFloor, direction);
             var sameWay = SameWayPassengerCount(shaft, direction);
             var busy = ElevatorRouting.NeedsBusyPenalty(shaft, entryFloor, direction);
-            return ElevatorRouting.EstimateWaitMinutes(queueAhead, sameWay, busy);
+            var wait = ElevatorRouting.EstimateWaitMinutes(queueAhead, sameWay, busy);
+            if (shaft.Kind == ElevatorShaftKind.Express)
+                wait /= ElevatorShaftRuntime.ExpressSpeedMultiplier;
+            return wait;
         }
 
         /// <summary>
@@ -450,7 +546,7 @@ namespace BuildATower
         {
             foreach (var shaft in _shafts)
             {
-                if (shaft.X == x && shaft.Serves(floorA) && shaft.Serves(floorB))
+                if (!shaft.MatchesColumn(x) || !shaft.Serves(floorA) || !shaft.Serves(floorB))
                     return shaft;
             }
 
@@ -532,6 +628,8 @@ namespace BuildATower
             target = shaft.Car.Floor;
             for (var floor = shaft.MinFloor; floor <= shaft.MaxFloor; floor++)
             {
+                if (!shaft.Serves(floor))
+                    continue;
                 if (shaft.UpQueues[floor].Count == 0 &&
                     shaft.DownQueues[floor].Count == 0)
                     continue;
@@ -590,7 +688,10 @@ namespace BuildATower
                     : ElevatorCar.MinutesPerPassingFloor;
             }
 
-            return baseMinutes / _speedMultiplier;
+            var shaftSpeed = shaft.Kind == ElevatorShaftKind.Express
+                ? ElevatorShaftRuntime.ExpressSpeedMultiplier
+                : 1f;
+            return baseMinutes / (_speedMultiplier * shaftSpeed);
         }
 
         bool WillStopAt(ElevatorShaftRuntime shaft, int floor)

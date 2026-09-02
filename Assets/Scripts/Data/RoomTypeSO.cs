@@ -22,6 +22,7 @@ namespace BuildATower
         public bool allowAboveGround = true;
         public bool allowBasement;
         public bool isLobby;
+        public bool isSkyLobby;
         public bool isScaffolding;
         public bool isStairs;
         public bool isElevatorShaft;
@@ -53,6 +54,41 @@ namespace BuildATower
                 RoomCategory.Parking => BuildFamily.Transit,
                 _ => BuildFamily.None
             };
+        }
+
+        public ElevatorShaftKind ResolvedElevatorKind()
+        {
+            if (!isElevatorShaft) return ElevatorShaftKind.Normal;
+            if (id == "elevator_express") return ElevatorShaftKind.Express;
+            if (id == "elevator_service") return ElevatorShaftKind.Service;
+            return ElevatorShaftKind.Normal;
+        }
+
+        public static RoomTypeSO CreateRuntimeElevator(
+            string id,
+            string displayName,
+            ElevatorShaftKind kind,
+            int requiredStars,
+            int buildCost = 8000)
+        {
+            var width = kind == ElevatorShaftKind.Express ? 2 : 1;
+            var so = CreateInstance<RoomTypeSO>();
+            so.id = id;
+            so.displayName = displayName;
+            so.category = RoomCategory.Transit;
+            so.isElevatorShaft = true;
+            so.allowAboveGround = true;
+            so.allowBasement = kind == ElevatorShaftKind.Service;
+            so.requiredStars = requiredStars;
+            so.buildCost = buildCost;
+            so.size = new Vector2Int(width, 2);
+            so.placeholderColor = kind switch
+            {
+                ElevatorShaftKind.Express => new Color(0.55f, 0.72f, 0.95f, 1f),
+                ElevatorShaftKind.Service => new Color(0.48f, 0.50f, 0.42f, 1f),
+                _ => new Color(0.45f, 0.45f, 0.5f, 1f)
+            };
+            return so;
         }
 
         public BuildSubgroup ResolvedBuildSubgroup()

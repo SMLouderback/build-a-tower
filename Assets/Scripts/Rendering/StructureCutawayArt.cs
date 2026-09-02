@@ -42,6 +42,14 @@ namespace BuildATower
         static readonly Color Pit = new(0.080f, 0.080f, 0.100f, 1f);
         static readonly Color Spring = new(0.630f, 0.590f, 0.510f, 1f);
 
+        static readonly Color UtilShaft = new(0.30f, 0.32f, 0.28f, 1f);
+        static readonly Color UtilPlate = new(0.42f, 0.44f, 0.38f, 1f);
+        static readonly Color UtilPlateHi = new(0.50f, 0.52f, 0.46f, 1f);
+        static readonly Color UtilCaution = new(0.86f, 0.70f, 0.10f, 1f);
+        static readonly Color UtilCautionDark = new(0.14f, 0.12f, 0.10f, 1f);
+        static readonly Color UtilDoor = new(0.22f, 0.24f, 0.20f, 1f);
+        static readonly Color UtilRivet = new(0.58f, 0.55f, 0.48f, 1f);
+
         const int Edge = 18;
         // Prompt anchors: top 10% crown, bottom 15% floor (of CellPixels).
         const int CrownH = 13;  // ~10% of 128
@@ -56,6 +64,10 @@ namespace BuildATower
         static Tile _elevatorTop;
         static Tile _elevatorMid;
         static Tile _elevatorBottom;
+        static Tile _utilityElevatorTop;
+        static Tile _utilityElevatorMid;
+        static Tile _utilityElevatorBottom;
+        static Tile _elevatorOccluder;
         static Sprite _stairsSprite;
         static Color[] _lobbyShell;
         static int _stairsStarTier = -1;
@@ -183,24 +195,40 @@ namespace BuildATower
             return true;
         }
 
-        public static bool TryElevatorTile(int cellY, int minY, int maxY, out Tile tile)
+        public static bool TryElevatorTile(int cellY, int minY, int maxY, out Tile tile) =>
+            TryElevatorTile(cellY, minY, maxY, ElevatorShaftKind.Normal, out tile);
+
+        public static bool TryElevatorTile(
+            int cellY,
+            int minY,
+            int maxY,
+            ElevatorShaftKind kind,
+            out Tile tile)
         {
             EnsureLoaded();
             tile = null;
+            var utility = kind == ElevatorShaftKind.Service;
             if (cellY == maxY)
             {
-                tile = _elevatorTop;
+                tile = utility ? _utilityElevatorTop : _elevatorTop;
                 return tile != null;
             }
 
             if (cellY == minY)
             {
-                tile = _elevatorBottom;
+                tile = utility ? _utilityElevatorBottom : _elevatorBottom;
                 return tile != null;
             }
 
-            tile = _elevatorMid;
+            tile = utility ? _utilityElevatorMid : _elevatorMid;
             return tile != null;
+        }
+
+        /// <summary>Fully opaque shaft fill for foreground occlusion (no hollow center).</summary>
+        public static Tile ElevatorOccluderTile()
+        {
+            EnsureLoaded();
+            return _elevatorOccluder;
         }
 
         public static bool TryStairsSprite(out Sprite sprite)
@@ -218,6 +246,10 @@ namespace BuildATower
             _elevatorTop = null;
             _elevatorMid = null;
             _elevatorBottom = null;
+            _utilityElevatorTop = null;
+            _utilityElevatorMid = null;
+            _utilityElevatorBottom = null;
+            _elevatorOccluder = null;
             _stairsSprite = null;
             _lobbyShell = null;
             _stairsStarTier = -1;
@@ -277,6 +309,10 @@ namespace BuildATower
             _elevatorMid = MakeElevatorTile("elevator_mid", PaintElevatorMid, true);
             _elevatorTop = MakeElevatorTile("elevator_top", PaintElevatorTop, true);
             _elevatorBottom = MakeElevatorTile("elevator_bottom", PaintElevatorBottom, true);
+            _utilityElevatorMid = MakeElevatorTile("utility_elevator_mid", PaintUtilityElevatorMid, true);
+            _utilityElevatorTop = MakeElevatorTile("utility_elevator_top", PaintUtilityElevatorTop, true);
+            _utilityElevatorBottom = MakeElevatorTile("utility_elevator_bottom", PaintUtilityElevatorBottom, true);
+            _elevatorOccluder = MakeElevatorTile("elevator_occluder", PaintSolidShaftOccluder, true);
             _stairsSprite = LoadOrBuildStairs();
         }
 
@@ -942,6 +978,67 @@ namespace BuildATower
                 Set(px, s1 + i % 2, 2 + i, Spring);
                 Set(px, s1 + 1 + i % 2, 2 + i, Spring);
             }
+        }
+
+        static void PaintSolidShaftOccluder(Color[] px)
+        {
+            for (var y = 0; y < CellPixels; y++)
+            for (var x = 0; x < CellPixels; x++)
+                Set(px, x, y, Shaft);
+        }
+
+        static void PaintUtilityElevatorMid(Color[] px)
+        {
+            for (var y = 0; y < CellPixels; y++)
+            for (var x = 0; x < CellPixels; x++)
+            {
+                var diamond = ((x + y) / 5 + (x - y) / 5) % 2 == 0;
+                Set(px, x, y, diamond ? UtilPlate : UtilShaft);
+                if ((x + y) % 23 == 0)
+                    Set(px, x, y, UtilPlateHi);
+            }
+
+            var stripeW = CellPixels / 10;
+            for (var y = 0; y < CellPixels; y++)
+            for (var x = 0; x < stripeW; x++)
+                Set(px, x, y, ((y / 5) % 2 == 0) ? UtilCaution : UtilCautionDark);
+
+            var doorL = CellPixels * 30 / 64;
+            var doorR = CellPixels * 52 / 64;
+            for (var y = CellPixels / 8; y < CellPixels - CellPixels / 8; y++)
+            for (var x = doorL; x <= doorR; x++)
+                Set(px, x, y, UtilDoor);
+
+            for (var y = CellPixels / 6; y < CellPixels - CellPixels / 6; y += CellPixels / 8)
+            {
+                Set(px, doorL + 2, y, UtilRivet);
+                Set(px, doorR - 2, y, UtilRivet);
+            }
+        }
+
+        static void PaintUtilityElevatorTop(Color[] px)
+        {
+            PaintUtilityElevatorMid(px);
+            var machineH = CellPixels * 14 / 64;
+            for (var y = CellPixels - machineH; y < CellPixels; y++)
+            for (var x = CellPixels / 10; x < CellPixels - CellPixels / 10; x++)
+                Set(px, x, y, UtilDoor);
+            for (var x = CellPixels / 10; x < CellPixels - CellPixels / 10; x++)
+            {
+                Set(px, x, CellPixels - machineH - 1, UtilCautionDark);
+                Set(px, x, CellPixels - machineH, UtilCaution);
+            }
+        }
+
+        static void PaintUtilityElevatorBottom(Color[] px)
+        {
+            PaintUtilityElevatorMid(px);
+            var pitH = CellPixels * 12 / 64;
+            for (var y = 0; y < pitH; y++)
+            for (var x = CellPixels / 8; x < CellPixels - CellPixels / 8; x++)
+                Set(px, x, y, UtilCautionDark);
+            for (var x = CellPixels / 8; x < CellPixels - CellPixels / 8; x++)
+                Set(px, x, pitH, UtilCaution);
         }
 
         static void PaintDisc(Color[] px, int cx, int cy, int r, Color c)
