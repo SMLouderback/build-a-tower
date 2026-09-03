@@ -2834,6 +2834,7 @@ namespace BuildATower
         /// <summary>
         /// Waiters stand beside the shaft on the side they walked in from, so a long
         /// line is visible instead of agents stacking inside the shaft cell.
+        /// Positions are clamped to walkable cells so queues never spill into open sky/dirt.
         /// </summary>
         void PlaceInQueueLane(Agent agent, ElevatorShaftRuntime shaft)
         {
@@ -2846,9 +2847,74 @@ namespace BuildATower
                 direction,
                 agent.Id);
             var slot = Mathf.Max(0, index);
-            var side = agent.ElevatorQueueSide >= 0 ? 1f : -1f;
-            var x = shaft.X + 0.5f + side * (QueueLaneOffset + slot * QueueSpacing);
-            agent.WorldPosition = new Vector2(x, agent.ElevatorEntryFloor + 0.5f);
+            var floor = agent.ElevatorEntryFloor;
+            var x = ComputeQueueLaneX(
+                shaft.X,
+                Mathf.Max(1, shaft.Width),
+                floor,
+                slot,
+                agent.ElevatorQueueSide,
+                _router.IsWalkable);
+            agent.WorldPosition = new Vector2(x, floor + 0.5f);
+            agent.Cell = new Vector2Int(Mathf.FloorToInt(x), floor);
+        }
+
+        /// <summary>
+        /// World X for elevator queue slot <paramref name="slot"/> (0 = first waiter).
+        /// Prefers <paramref name="preferredSide"/> (≥0 = right) when that side has a
+        /// contiguous walkable strip; otherwise tries the opposite side; otherwise shaft centre.
+        /// </summary>
+        public static float ComputeQueueLaneX(
+            int shaftX,
+            int shaftWidth,
+            int floor,
+            int slot,
+            int preferredSide,
+            System.Func<Vector2Int, bool> isWalkable)
+        {
+            var width = Mathf.Max(1, shaftWidth);
+            var center = shaftX + width * 0.5f;
+            if (isWalkable == null)
+                return center;
+
+            var preferRight = preferredSide >= 0;
+            if (TryQueueLaneXOnSide(shaftX, width, floor, slot, preferRight, isWalkable, out var x))
+                return x;
+            if (TryQueueLaneXOnSide(shaftX, width, floor, slot, !preferRight, isWalkable, out x))
+                return x;
+            return center;
+        }
+
+        static bool TryQueueLaneXOnSide(
+            int shaftX,
+            int shaftWidth,
+            int floor,
+            int slot,
+            bool right,
+            System.Func<Vector2Int, bool> isWalkable,
+            out float worldX)
+        {
+            worldX = 0f;
+            var dir = right ? 1 : -1;
+            var edge = right ? shaftX + shaftWidth - 1 : shaftX;
+            var extentCells = 0;
+            for (var i = 1; i <= 32; i++)
+            {
+                if (!isWalkable(new Vector2Int(edge + dir * i, floor)))
+                    break;
+                extentCells = i;
+            }
+
+            if (extentCells <= 0)
+                return false;
+
+            var desired = QueueLaneOffset + Mathf.Max(0, slot) * QueueSpacing;
+            var maxOffset = extentCells - 0.05f;
+            if (maxOffset < 0.2f)
+                maxOffset = 0.2f;
+            var offset = Mathf.Min(desired, maxOffset);
+            worldX = edge + 0.5f + dir * offset;
+            return true;
         }
 
         static int QueueSideFor(Agent agent, TransitLeg leg)

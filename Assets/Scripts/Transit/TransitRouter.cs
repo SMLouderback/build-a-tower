@@ -44,6 +44,8 @@ namespace BuildATower
             _elevators.SyncFromGrid(grid);
         }
 
+        public bool IsWalkable(Vector2Int cell) => _stairs != null && _stairs.IsWalkable(cell);
+
         /// <summary>
         /// Pathfinder walks for a shaft candidate (start→entry, exit→goal).
         /// Returns false when either walk fails — same gate as elevator planning / wait rescoring.

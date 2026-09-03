@@ -45,6 +45,8 @@ namespace BuildATower
             }
         }
 
+        public bool IsWalkable(Vector2Int cell) => _walkable.Contains(cell);
+
         public bool TryFindPath(Vector2Int start, Vector2Int goal, out List<Vector2Int> path) =>
             TryFindPath(start, goal, MaxStairsFloorSpan, out path);
 
