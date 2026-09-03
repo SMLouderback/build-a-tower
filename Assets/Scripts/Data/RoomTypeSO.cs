@@ -31,6 +31,7 @@ namespace BuildATower
         [Min(0f)] public float cleanMinutes;
         [Min(0)] public int requiredStars;
         [Min(0)] public int maxOccupants;
+        [Min(0f)] public float streetVisitWeight = 1f;
         [Min(0)] public int eventCapacity;
         public BuildFamily buildFamily = BuildFamily.None;
         public BuildSubgroup buildSubgroup = BuildSubgroup.None;

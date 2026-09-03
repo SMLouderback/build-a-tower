@@ -1905,7 +1905,8 @@ namespace BuildATower
             var shops = FindOpenShops(grid, clock.MinuteOfDay, remaining);
             if (shops.Count == 0) return false;
 
-            var shop = shops[_rng.Next(shops.Count)];
+            var shop = ShopVisitRules.PickWeightedShop(shops, _rng);
+            if (shop == null) return false;
             if (!shop.TryOccupyVisitorSlot()) return false;
 
             var shopCell = ShopEntryCell(shop);

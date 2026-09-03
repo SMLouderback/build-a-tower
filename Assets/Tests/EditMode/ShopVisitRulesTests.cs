@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using BuildATower;
 using NUnit.Framework;
 using UnityEngine;
@@ -84,6 +85,113 @@ namespace BuildATower.Tests
                 var retailDwell = ShopVisitRules.PickDwellMinutes(retail, rng);
                 Assert.That(retailDwell, Is.InRange(20, 40));
             }
+        }
+
+        [Test]
+        public void PickDwellMinutes_fine_dining_uses_restaurant_range_not_fast_food()
+        {
+            var fine = ScriptableObject.CreateInstance<RoomTypeSO>();
+            fine.id = "shop_food_fine";
+            fine.incomeModel = IncomeModel.TrafficVariable;
+
+            var rng = new System.Random(42);
+            for (var i = 0; i < 20; i++)
+                Assert.That(ShopVisitRules.PickDwellMinutes(fine, rng), Is.InRange(40, 60));
+        }
+
+        [Test]
+        public void PickDwellMinutes_mexican_uses_mid_sit_down_not_restaurant_range()
+        {
+            var mexican = ScriptableObject.CreateInstance<RoomTypeSO>();
+            mexican.id = "shop_food_mexican";
+            mexican.incomeModel = IncomeModel.TrafficVariable;
+
+            var rng = new System.Random(42);
+            for (var i = 0; i < 20; i++)
+                Assert.That(ShopVisitRules.PickDwellMinutes(mexican, rng), Is.InRange(35, 50));
+        }
+
+        [Test]
+        public void PickDwellMinutes_new_shop_ids_use_authored_ranges()
+        {
+            var rng = new System.Random(7);
+            AssertDwell("shop_food_taco", 12, 20, rng);
+            AssertDwell("shop_food_chicken", 15, 25, rng);
+            AssertDwell("shop_retail_gifts", 15, 30, rng);
+            AssertDwell("shop_retail_shoes", 25, 40, rng);
+            AssertDwell("shop_retail_department", 30, 50, rng);
+        }
+
+        [Test]
+        public void PickWeightedShop_null_or_empty_returns_null()
+        {
+            Assert.IsNull(ShopVisitRules.PickWeightedShop(null, new System.Random(1)));
+            Assert.IsNull(ShopVisitRules.PickWeightedShop(new List<RoomInstance>(), new System.Random(1)));
+        }
+
+        [Test]
+        public void PickWeightedShop_single_shop_returns_it()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(LobbySo(), 0, 4, 0, out _);
+            var type = ShopSo("shop_retail", 1f);
+            grid.TryPlace(type, new Vector2Int(1, 0), out var shop);
+
+            var picked = ShopVisitRules.PickWeightedShop(new List<RoomInstance> { shop }, new System.Random(1));
+            Assert.AreSame(shop, picked);
+        }
+
+        [Test]
+        public void PickWeightedShop_biases_toward_higher_streetVisitWeight()
+        {
+            var giftsType = ShopSo("shop_retail_gifts", 2f);
+            var retailType = ShopSo("shop_retail", 1f);
+            var gifts = new RoomInstance(1, giftsType, new Vector2Int(0, 0), giftsType.size);
+            var retail = new RoomInstance(2, retailType, new Vector2Int(4, 0), retailType.size);
+            var shops = new List<RoomInstance> { gifts, retail };
+
+            var rng = new System.Random(12345);
+            var giftsPicks = 0;
+            const int trials = 6000;
+            for (var i = 0; i < trials; i++)
+            {
+                var pick = ShopVisitRules.PickWeightedShop(shops, rng);
+                if (pick == gifts) giftsPicks++;
+            }
+
+            Assert.That(giftsPicks, Is.InRange(3600, 4800));
+        }
+
+        static void AssertDwell(string id, int lo, int hi, System.Random rng)
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = id;
+            so.incomeModel = IncomeModel.TrafficVariable;
+            for (var i = 0; i < 15; i++)
+                Assert.That(ShopVisitRules.PickDwellMinutes(so, rng), Is.InRange(lo, hi));
+        }
+
+        static RoomTypeSO LobbySo()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "lobby";
+            so.isLobby = true;
+            so.size = Vector2Int.one;
+            so.allowAboveGround = true;
+            return so;
+        }
+
+        static RoomTypeSO ShopSo(string id, float streetVisitWeight)
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = id;
+            so.category = RoomCategory.Commercial;
+            so.incomeModel = IncomeModel.TrafficVariable;
+            so.streetVisitWeight = streetVisitWeight;
+            so.size = Vector2Int.one;
+            so.allowAboveGround = true;
+            so.maxOccupants = 4;
+            return so;
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BuildATower
@@ -30,16 +31,57 @@ namespace BuildATower
             return lo + rng.Next(0, hi - lo + 1);
         }
 
+        public static RoomInstance PickWeightedShop(IReadOnlyList<RoomInstance> shops, System.Random rng)
+        {
+            if (shops == null || shops.Count == 0) return null;
+            if (shops.Count == 1) return shops[0];
+
+            var total = 0f;
+            foreach (var shop in shops)
+            {
+                var w = shop?.Type?.streetVisitWeight ?? 1f;
+                if (w > 0f) total += w;
+            }
+
+            if (total <= 0f)
+                return shops[rng.Next(shops.Count)];
+
+            var roll = (float)(rng.NextDouble() * total);
+            foreach (var shop in shops)
+            {
+                var w = shop?.Type?.streetVisitWeight ?? 1f;
+                if (w <= 0f) continue;
+                roll -= w;
+                if (roll < 0f) return shop;
+            }
+
+            return shops[shops.Count - 1];
+        }
+
         static (int lo, int hi) DwellRange(RoomTypeSO type)
         {
             if (type != null && !string.IsNullOrEmpty(type.id))
             {
-                if (type.id.IndexOf("food_fast", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return (15, 25);
-                if (type.id.IndexOf("food_restaurant", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    type.id.IndexOf("restaurant", StringComparison.OrdinalIgnoreCase) >= 0)
+                var id = type.id;
+                if (id.IndexOf("food_fine", StringComparison.OrdinalIgnoreCase) >= 0)
                     return (40, 60);
-                if (type.id.IndexOf("retail", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (id.IndexOf("food_mexican", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return (35, 50);
+                if (id.IndexOf("food_taco", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return (12, 20);
+                if (id.IndexOf("food_chicken", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return (15, 25);
+                if (id.IndexOf("food_fast", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return (15, 25);
+                if (id.IndexOf("food_restaurant", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return (40, 60);
+                if (id.IndexOf("retail_gifts", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return (15, 30);
+                if (id.IndexOf("retail_department", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return (30, 50);
+                if (id.IndexOf("retail_shoes", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return (25, 40);
+                if (id.IndexOf("retail", StringComparison.OrdinalIgnoreCase) >= 0)
                     return (20, 40);
             }
 

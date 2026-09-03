@@ -49,7 +49,7 @@ namespace BuildATower.Tests
             var fine = Resources.Load<RoomTypeSO>("Rooms/ShopFineDining");
             Assert.AreEqual(BuildSubgroup.Food, fine.ResolvedBuildSubgroup());
             Assert.AreEqual(IncomeModel.TrafficVariable, fine.incomeModel);
-            Assert.AreEqual(150, fine.baseIncome);
+            Assert.AreEqual(100, fine.baseIncome);
         }
 
         [Test]
@@ -77,6 +77,38 @@ namespace BuildATower.Tests
             Assert.AreEqual(150000, hall.buildCost);
             Assert.AreEqual(RoomCategory.Service, hall.category);
             Assert.AreEqual(BuildFamily.Utility, hall.ResolvedBuildFamily());
+        }
+
+        [Test]
+        public void New_shop_resources_match_expanded_catalog()
+        {
+            AssertShop("Rooms/ShopTacoCounter", "shop_food_taco", 0, 28, 4, new Vector2Int(12, 1), 1f);
+            AssertShop("Rooms/ShopChickenShack", "shop_food_chicken", 0, 30, 5, new Vector2Int(12, 1), 1f);
+            AssertShop("Rooms/ShopMexicanRestaurant", "shop_food_mexican", 2, 60, 6, new Vector2Int(16, 1), 1f);
+            AssertShop("Rooms/ShopGagGifts", "shop_retail_gifts", 1, 35, 4, new Vector2Int(10, 1), 2f);
+            AssertShop("Rooms/ShopShoeStore", "shop_retail_shoes", 2, 65, 4, new Vector2Int(12, 1), 1f);
+            AssertShop("Rooms/ShopDepartmentStore", "shop_retail_department", 3, 55, 12, new Vector2Int(16, 2), 1f);
+        }
+
+        static void AssertShop(
+            string path,
+            string id,
+            int stars,
+            int payCap,
+            int slots,
+            Vector2Int size,
+            float streetWeight)
+        {
+            var room = Resources.Load<RoomTypeSO>(path);
+            Assert.IsNotNull(room, $"{path} should load from Resources");
+            Assert.AreEqual(id, room.id);
+            Assert.AreEqual(stars, room.requiredStars);
+            Assert.AreEqual(payCap, room.baseIncome);
+            Assert.AreEqual(slots, room.maxOccupants);
+            Assert.AreEqual(size, room.size);
+            Assert.AreEqual(IncomeModel.TrafficVariable, room.incomeModel);
+            Assert.AreEqual(streetWeight, room.streetVisitWeight, 0.001f);
+            Assert.AreEqual(BuildFamily.Shops, room.ResolvedBuildFamily());
         }
 
         static void AssertRoom(

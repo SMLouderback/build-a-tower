@@ -101,6 +101,40 @@ namespace BuildATower.Tests
             Assert.AreEqual(2f, load);
         }
 
+        [Test]
+        public void ShopLoadByFloor_spans_all_floors_for_multi_floor_shop()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 16, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
+
+            var dept = DepartmentStore();
+            Assert.IsTrue(grid.TryPlace(dept, new Vector2Int(1, 1), out var shop));
+
+            Assert.IsTrue(shop.TryOccupyVisitorSlot());
+            Assert.IsTrue(shop.TryOccupyVisitorSlot());
+            Assert.IsTrue(shop.TryOccupyVisitorSlot());
+
+            var loads = CrimeFloorLoads.ShopLoadByFloor(grid);
+            Assert.IsTrue(loads.TryGetValue(1, out var lower));
+            Assert.IsTrue(loads.TryGetValue(2, out var upper));
+            Assert.AreEqual(3f, lower);
+            Assert.AreEqual(3f, upper);
+        }
+
+        static RoomTypeSO DepartmentStore()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "shop_retail_department";
+            so.category = RoomCategory.Commercial;
+            so.size = new Vector2Int(16, 2);
+            so.allowAboveGround = true;
+            so.incomeModel = IncomeModel.TrafficVariable;
+            so.baseIncome = 55;
+            so.maxOccupants = 12;
+            return so;
+        }
+
         static RoomTypeSO Lobby()
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();

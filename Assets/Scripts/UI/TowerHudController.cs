@@ -226,6 +226,12 @@ namespace BuildATower
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopRestaurant"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopRetail"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopFineDining"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopTacoCounter"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopChickenShack"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopMexicanRestaurant"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopGagGifts"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopShoeStore"));
+            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopDepartmentStore"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/Housekeeping"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/Maintenance"));
             AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/SecurityPost"));

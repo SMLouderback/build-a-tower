@@ -149,5 +149,35 @@ namespace BuildATower.Tests
             Assert.AreEqual(1, researchRoom.StaffedWorkers);
             Assert.IsTrue(BuildController.IsStaffedServiceRoom(research));
         }
+
+        [Test]
+        public void Group_shop_subgroups_include_expanded_food_and_retail_counts()
+        {
+            var rooms = new List<RoomTypeSO>
+            {
+                Resources.Load<RoomTypeSO>("Rooms/ShopFastFood"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopTacoCounter"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopChickenShack"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopRestaurant"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopMexicanRestaurant"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopFineDining"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopRetail"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopGagGifts"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopShoeStore"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopDepartmentStore"),
+            };
+
+            var groups = BuildCatalog.Group(rooms);
+            var shops = groups.Find(g => g.Family == BuildFamily.Shops);
+            Assert.IsNotNull(shops);
+            Assert.AreEqual(2, shops.Subgroups.Count);
+
+            var food = shops.Subgroups.Find(s => s.Subgroup == BuildSubgroup.Food);
+            var retail = shops.Subgroups.Find(s => s.Subgroup == BuildSubgroup.Retail);
+            Assert.IsNotNull(food);
+            Assert.IsNotNull(retail);
+            Assert.GreaterOrEqual(food.Rooms.Count, 6);
+            Assert.GreaterOrEqual(retail.Rooms.Count, 4);
+        }
     }
 }
