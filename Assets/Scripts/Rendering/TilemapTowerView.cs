@@ -560,12 +560,14 @@ namespace BuildATower
         /// <summary>
         /// Paints grey/dirt structure filler behind dollhouse rooms so sky does not leak
         /// through frame gaps, floor seams, or stepped floor profiles.
+        /// Must not erase lobby/scaffolding/transit tiles that live on the structure map —
+        /// otherwise scaffolding becomes invisible while still walkable (agents in "dirt").
         /// </summary>
         public void RepaintBuildingShell(TowerGrid grid)
         {
             if (structureTilemap == null || grid == null) return;
 
-            ClearBuildingShell();
+            ClearBuildingShell(grid);
 
             foreach (var cell in BuildingShellEnvelope.ComputeCells(grid.Rooms))
             {
@@ -580,14 +582,39 @@ namespace BuildATower
                 structureTilemap.SetColor(tc, Color.white);
                 _shellCells.Add(tc);
             }
+
+            // Restore any structure-owned paint that an older shell clear may have wiped,
+            // and keep scaffolding visible after future shell refreshes.
+            RepaintStructureOwnedRooms(grid);
         }
 
-        void ClearBuildingShell()
+        void ClearBuildingShell(TowerGrid grid)
         {
             if (structureTilemap == null) return;
-            foreach (var cell in _shellCells)
-                structureTilemap.SetTile(cell, null);
+            foreach (var tc in _shellCells)
+            {
+                var logic = new Vector2Int(tc.x, tc.y);
+                if (grid != null &&
+                    grid.TryGetRoomAt(logic, out var room) &&
+                    BuildingShellEnvelope.OwnsStructurePaint(room?.Type))
+                    continue;
+
+                structureTilemap.SetTile(tc, null);
+            }
+
             _shellCells.Clear();
+        }
+
+        void RepaintStructureOwnedRooms(TowerGrid grid)
+        {
+            if (grid?.Rooms == null) return;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                if (!room.Type.isScaffolding && !room.Type.isLobby && !room.Type.isSkyLobby)
+                    continue;
+                PaintRoom(room);
+            }
         }
 
         Tile GetBuildingShellTile()

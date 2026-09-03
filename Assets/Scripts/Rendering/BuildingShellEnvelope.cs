@@ -57,11 +57,20 @@ namespace BuildATower
             if (grid == null || !grid.TryGetRoomAt(cell, out var room) || room?.Type == null)
                 return false;
 
-            return room.Type.isLobby
-                || room.Type.isSkyLobby
-                || room.Type.isScaffolding
-                || room.Type.isStairs
-                || room.Type.isElevatorShaft;
+            return OwnsStructurePaint(room.Type);
         }
+
+        /// <summary>
+        /// Rooms that paint on the structure tilemap (or must keep transit tiles).
+        /// Shell clear/repaint must not erase these cells' tiles.
+        /// </summary>
+        public static bool OwnsStructurePaint(RoomTypeSO type) =>
+            type != null &&
+            (type.isLobby
+             || type.isSkyLobby
+             || type.isScaffolding
+             || type.isStairs
+             || type.isElevatorShaft
+             || type.isParkingRamp);
     }
 }
