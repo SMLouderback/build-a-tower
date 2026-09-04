@@ -1,7 +1,7 @@
 # Build-A-Tower — Shop Dollhouse Art
 
 **Date:** 2026-09-04  
-**Status:** Approved — implementation plan ready  
+**Status:** Implemented  
 **Depends on:** Shop catalog expansion (`2026-09-02-shop-catalog-expansion-design.md`), existing `RoomDollhouseArt` pipeline  
 **Engine target:** Unity (2D Tilemap), desktop/Editor-first  
 
