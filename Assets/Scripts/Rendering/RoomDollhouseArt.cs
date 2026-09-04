@@ -48,6 +48,7 @@ namespace BuildATower
             ["condo_upper_corner"] = "corner_condo_14x1",
             ["condo_upper_penthouse"] = "penthouse_18x1",
             ["shop_food_fast"] = "fast_food_16x1",
+            ["shop_food_taco"] = "taco_counter_12x1",
             ["shop_food_restaurant"] = "restaurant_16x1",
             ["shop_food_fine"] = "fine_dining_4x1",
             ["shop_retail"] = "retail_16x1",

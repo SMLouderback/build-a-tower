@@ -29,11 +29,13 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void Does_not_map_elevator_stairs_lobby_or_legacy_premium()
+        public void Does_not_map_elevator_stairs_lobby_parking_ramp_or_legacy_premium()
         {
             Assert.IsNull(RoomDollhouseArt.ResourceLeaf("elevator_normal"));
             Assert.IsNull(RoomDollhouseArt.ResourceLeaf("stairs"));
             Assert.IsNull(RoomDollhouseArt.ResourceLeaf("lobby"));
+            Assert.IsFalse(RoomDollhouseArt.IsMapped(Type("parking_ramp", isParkingRamp: true)));
+            Assert.IsNull(RoomDollhouseArt.ResourceLeaf("parking_ramp"));
             Assert.IsNull(RoomDollhouseArt.ResourceLeaf("office_premium"));
             Assert.IsNull(RoomDollhouseArt.ResourceLeaf("hotel_premium"));
             Assert.IsNull(RoomDollhouseArt.ResourceLeaf("condo_premium"));
@@ -90,6 +92,12 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void SortingOrder_stays_below_transit_layers()
+        {
+            Assert.Less(RoomDollhouseArt.SortingOrder, 15);
+        }
+
+        [Test]
         public void Catalog_count_matches_approved_attachment_list()
         {
             Assert.AreEqual(40, Catalog.Length);
@@ -137,6 +145,7 @@ namespace BuildATower.Tests
             ("condo_upper_corner", "corner_condo_14x1"),
             ("condo_upper_penthouse", "penthouse_18x1"),
             ("shop_food_fast", "fast_food_16x1"),
+            ("shop_food_taco", "taco_counter_12x1"),
             ("shop_food_restaurant", "restaurant_16x1"),
             ("shop_food_fine", "fine_dining_4x1"),
             ("shop_retail", "retail_16x1"),
@@ -148,7 +157,6 @@ namespace BuildATower.Tests
             ("service_event_hall", "event_hall_12x2"),
             ("parking_underground", "underground_parking_6x1"),
             ("service_valet", "valet_3x1"),
-            ("parking_ramp", "parking_ramp_3x2"),
         };
 
         static Sprite DummySprite()
@@ -157,12 +165,17 @@ namespace BuildATower.Tests
             return Sprite.Create(tex, new Rect(0, 0, 8, 8), new Vector2(0f, 0f), 128f);
         }
 
-        static RoomTypeSO Type(string id, bool isStairs = false, bool isElevator = false)
+        static RoomTypeSO Type(
+            string id,
+            bool isStairs = false,
+            bool isElevator = false,
+            bool isParkingRamp = false)
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
             so.id = id;
             so.isStairs = isStairs;
             so.isElevatorShaft = isElevator;
+            so.isParkingRamp = isParkingRamp;
             so.size = Vector2Int.one;
             return so;
         }
