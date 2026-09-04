@@ -54,6 +54,7 @@ namespace BuildATower
             ["shop_food_mexican"] = "mexican_restaurant_16x1",
             ["shop_food_fine"] = "fine_dining_4x1",
             ["shop_retail"] = "retail_16x1",
+            ["shop_retail_gifts"] = "gag_gifts_10x1",
             ["service_housekeeping"] = "housekeeping_3x1",
             ["service_maintenance"] = "maintenance_3x1",
             ["service_security"] = "security_post_2x1",
