@@ -100,7 +100,7 @@ namespace BuildATower.Tests
         [Test]
         public void Catalog_count_matches_approved_attachment_list()
         {
-            Assert.AreEqual(41, Catalog.Length);
+            Assert.AreEqual(42, Catalog.Length);
         }
 
         [Test]
@@ -148,6 +148,7 @@ namespace BuildATower.Tests
             ("shop_food_taco", "taco_counter_12x1"),
             ("shop_food_chicken", "chicken_shack_12x1"),
             ("shop_food_restaurant", "restaurant_16x1"),
+            ("shop_food_mexican", "mexican_restaurant_16x1"),
             ("shop_food_fine", "fine_dining_4x1"),
             ("shop_retail", "retail_16x1"),
             ("service_housekeeping", "housekeeping_3x1"),
