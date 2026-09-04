@@ -80,6 +80,15 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Legacy_shop_resources_match_dollhouse_aspect_footprints()
+        {
+            AssertShop("Rooms/ShopFastFood", "shop_food_fast", 0, 25, 4, new Vector2Int(6, 1), 1f);
+            AssertShop("Rooms/ShopRestaurant", "shop_food_restaurant", 0, 50, 6, new Vector2Int(7, 1), 1f);
+            AssertShop("Rooms/ShopFineDining", "shop_food_fine", 3, 100, 8, new Vector2Int(5, 1), 1f);
+            AssertShop("Rooms/ShopRetail", "shop_retail", 0, 50, 5, new Vector2Int(6, 1), 1f);
+        }
+
+        [Test]
         public void New_shop_resources_match_expanded_catalog()
         {
             AssertShop("Rooms/ShopTacoCounter", "shop_food_taco", 0, 28, 4, new Vector2Int(4, 1), 1f);

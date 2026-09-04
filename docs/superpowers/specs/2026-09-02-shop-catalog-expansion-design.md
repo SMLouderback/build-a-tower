@@ -45,12 +45,12 @@ All shops use `IncomeModel.TrafficVariable`, `category = Commercial`, `buildFami
 
 | id | Display | ★ | Size | Slots | Pay cap | Build cost | Dwell (min) | Hours | Noise |
 |----|---------|---|------|-------|---------|------------|-------------|-------|-------|
-| `shop_food_fast` | Fast Food | 0 | 16×1 | 4 | $25 | $145,000 | 15–25 | 11:00–21:00 | 0.70 |
+| `shop_food_fast` | Fast Food | 0 | 6×1 | 4 | $25 | $145,000 | 15–25 | 11:00–21:00 | 0.70 |
 | `shop_food_taco` | Taco Counter | 0 | 4×1 | 4 | $28 | $138,000 | 12–20 | 11:00–22:00 | 0.65 |
 | `shop_food_chicken` | Chicken Shack | 0 | 4×1 | 5 | $30 | $148,000 | 15–25 | 11:00–21:00 | 0.68 |
-| `shop_food_restaurant` | Restaurant | 0 | 16×1 | 6 | $50 | $218,000 | 40–60 | 11:00–22:00 | 0.55 |
+| `shop_food_restaurant` | Restaurant | 0 | 7×1 | 6 | $50 | $218,000 | 40–60 | 11:00–22:00 | 0.55 |
 | `shop_food_mexican` | Mexican Restaurant | 2 | 6×1 | 6 | $60 | $235,000 | 35–50 | 12:00–22:00 | 0.50 |
-| `shop_food_fine` | Fine Dining | 3 | 4×1 | 8 | $100 | $290,000 | 40–60 | 12:00–23:00 | 0.45 |
+| `shop_food_fine` | Fine Dining | 3 | 5×1 | 8 | $100 | $290,000 | 40–60 | 12:00–23:00 | 0.45 |
 
 **Food ladder:** three 0★ fast options → two sit-down (0★ Restaurant, 2★ Mexican) → 3★ Fine Dining.
 
@@ -58,7 +58,7 @@ All shops use `IncomeModel.TrafficVariable`, `category = Commercial`, `buildFami
 
 | id | Display | ★ | Size | Slots | Pay cap | Build cost | Dwell (min) | Hours | Noise | Street weight |
 |----|---------|---|------|-------|---------|------------|-------------|-------|-------|---------------|
-| `shop_retail` | Retail | 0 | 16×1 | 5 | $50 | $174,000 | 20–40 | 10:00–20:00 | 0.45 | 1 |
+| `shop_retail` | Retail | 0 | 6×1 | 5 | $50 | $174,000 | 20–40 | 10:00–20:00 | 0.45 | 1 |
 | `shop_retail_gifts` | Gag Gifts | 1 | 4×1 | 4 | $35 | $158,000 | 15–30 | 10:00–21:00 | 0.40 | **2** |
 | `shop_retail_shoes` | Shoe Store | 2 | 4×1 | 4 | $65 | $205,000 | 25–40 | 10:00–19:00 | 0.35 | 1 |
 | `shop_retail_department` | Department Store | 3 | **8×2** | 12 | $55 | $385,000 | 30–50 | 10:00–20:00 | 0.50 | 1 |

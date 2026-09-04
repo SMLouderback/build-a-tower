@@ -15,7 +15,7 @@ MonoBehaviour:
   id: shop_food_fast
   displayName: Fast Food
   category: 4
-  size: {x: 16, y: 1}
+  size: {x: 6, y: 1}
   buildCost: 145000
   placeholderColor: {r: 0.9490196, g: 0.54901963, b: 0.15686275, a: 1}
   incomeModel: 4
