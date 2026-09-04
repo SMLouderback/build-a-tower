@@ -17,7 +17,7 @@ In Play Mode a player can:
 1. Place **10 shop types** (6 food, 4 retail) from the build HUD under Shops → Food / Retail.
 2. See residents and street visitors visit new shops using existing trip scheduling and afford gates.
 3. See **Gag Gifts** receive more street-visitor picks than other open shops (weighted destination, not higher spawn rate).
-4. Place a **Department Store** as a **16×2** multi-floor commercial room; visits enter at bottom-left origin only.
+4. Place a **Department Store** as an **8×2** multi-floor commercial room; visits enter at bottom-left origin only.
 5. See crime load scale on both floors when the department store is busy.
 6. At midnight, new shops credit `ShopEarningsToday` like existing shops.
 7. EditMode tests cover dwell ranges, star gates, department footprint, and street weight pick.
@@ -46,10 +46,10 @@ All shops use `IncomeModel.TrafficVariable`, `category = Commercial`, `buildFami
 | id | Display | ★ | Size | Slots | Pay cap | Build cost | Dwell (min) | Hours | Noise |
 |----|---------|---|------|-------|---------|------------|-------------|-------|-------|
 | `shop_food_fast` | Fast Food | 0 | 16×1 | 4 | $25 | $145,000 | 15–25 | 11:00–21:00 | 0.70 |
-| `shop_food_taco` | Taco Counter | 0 | 12×1 | 4 | $28 | $138,000 | 12–20 | 11:00–22:00 | 0.65 |
-| `shop_food_chicken` | Chicken Shack | 0 | 12×1 | 5 | $30 | $148,000 | 15–25 | 11:00–21:00 | 0.68 |
+| `shop_food_taco` | Taco Counter | 0 | 4×1 | 4 | $28 | $138,000 | 12–20 | 11:00–22:00 | 0.65 |
+| `shop_food_chicken` | Chicken Shack | 0 | 4×1 | 5 | $30 | $148,000 | 15–25 | 11:00–21:00 | 0.68 |
 | `shop_food_restaurant` | Restaurant | 0 | 16×1 | 6 | $50 | $218,000 | 40–60 | 11:00–22:00 | 0.55 |
-| `shop_food_mexican` | Mexican Restaurant | 2 | 16×1 | 6 | $60 | $235,000 | 35–50 | 12:00–22:00 | 0.50 |
+| `shop_food_mexican` | Mexican Restaurant | 2 | 6×1 | 6 | $60 | $235,000 | 35–50 | 12:00–22:00 | 0.50 |
 | `shop_food_fine` | Fine Dining | 3 | 4×1 | 8 | $100 | $290,000 | 40–60 | 12:00–23:00 | 0.45 |
 
 **Food ladder:** three 0★ fast options → two sit-down (0★ Restaurant, 2★ Mexican) → 3★ Fine Dining.
@@ -59,13 +59,13 @@ All shops use `IncomeModel.TrafficVariable`, `category = Commercial`, `buildFami
 | id | Display | ★ | Size | Slots | Pay cap | Build cost | Dwell (min) | Hours | Noise | Street weight |
 |----|---------|---|------|-------|---------|------------|-------------|-------|-------|---------------|
 | `shop_retail` | Retail | 0 | 16×1 | 5 | $50 | $174,000 | 20–40 | 10:00–20:00 | 0.45 | 1 |
-| `shop_retail_gifts` | Gag Gifts | 1 | 10×1 | 4 | $35 | $158,000 | 15–30 | 10:00–21:00 | 0.40 | **2** |
-| `shop_retail_shoes` | Shoe Store | 2 | 12×1 | 4 | $65 | $205,000 | 25–40 | 10:00–19:00 | 0.35 | 1 |
-| `shop_retail_department` | Department Store | 3 | **16×2** | 12 | $55 | $385,000 | 30–50 | 10:00–20:00 | 0.50 | 1 |
+| `shop_retail_gifts` | Gag Gifts | 1 | 4×1 | 4 | $35 | $158,000 | 15–30 | 10:00–21:00 | 0.40 | **2** |
+| `shop_retail_shoes` | Shoe Store | 2 | 4×1 | 4 | $65 | $205,000 | 25–40 | 10:00–19:00 | 0.35 | 1 |
+| `shop_retail_department` | Department Store | 3 | **8×2** | 12 | $55 | $385,000 | 30–50 | 10:00–20:00 | 0.50 | 1 |
 
 ### 3.3 Department store (multi-floor)
 
-- **Footprint:** `size = (16, 2)` — one `RoomInstance` spanning two floors.
+- **Footprint:** `size = (8, 2)` — one `RoomInstance` spanning two floors (matched to dollhouse art aspect).
 - **Placement:** Standard room rules (support below, not over lobby).
 - **Visits:** `ShopEntryCell` = `room.Origin` (bottom-left on lower floor). Upper floor is visual/capacity only; agents do not path inside the store across floors.
 - **Crime:** `CrimeFloorLoads.ShopLoadByFloor` already iterates `Origin.y` … `Origin.y + Size.y - 1`; concurrent visitors add load to **both** floors.

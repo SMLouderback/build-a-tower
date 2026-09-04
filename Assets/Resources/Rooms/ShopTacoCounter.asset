@@ -15,7 +15,7 @@ MonoBehaviour:
   id: shop_food_taco
   displayName: Taco Counter
   category: 4
-  size: {x: 12, y: 1}
+  size: {x: 4, y: 1}
   buildCost: 138000
   placeholderColor: {r: 0.55, g: 0.75, b: 0.25, a: 1}
   incomeModel: 4

@@ -82,12 +82,12 @@ namespace BuildATower.Tests
         [Test]
         public void New_shop_resources_match_expanded_catalog()
         {
-            AssertShop("Rooms/ShopTacoCounter", "shop_food_taco", 0, 28, 4, new Vector2Int(12, 1), 1f);
-            AssertShop("Rooms/ShopChickenShack", "shop_food_chicken", 0, 30, 5, new Vector2Int(12, 1), 1f);
-            AssertShop("Rooms/ShopMexicanRestaurant", "shop_food_mexican", 2, 60, 6, new Vector2Int(16, 1), 1f);
-            AssertShop("Rooms/ShopGagGifts", "shop_retail_gifts", 1, 35, 4, new Vector2Int(10, 1), 2f);
-            AssertShop("Rooms/ShopShoeStore", "shop_retail_shoes", 2, 65, 4, new Vector2Int(12, 1), 1f);
-            AssertShop("Rooms/ShopDepartmentStore", "shop_retail_department", 3, 55, 12, new Vector2Int(16, 2), 1f);
+            AssertShop("Rooms/ShopTacoCounter", "shop_food_taco", 0, 28, 4, new Vector2Int(4, 1), 1f);
+            AssertShop("Rooms/ShopChickenShack", "shop_food_chicken", 0, 30, 5, new Vector2Int(4, 1), 1f);
+            AssertShop("Rooms/ShopMexicanRestaurant", "shop_food_mexican", 2, 60, 6, new Vector2Int(6, 1), 1f);
+            AssertShop("Rooms/ShopGagGifts", "shop_retail_gifts", 1, 35, 4, new Vector2Int(4, 1), 2f);
+            AssertShop("Rooms/ShopShoeStore", "shop_retail_shoes", 2, 65, 4, new Vector2Int(4, 1), 1f);
+            AssertShop("Rooms/ShopDepartmentStore", "shop_retail_department", 3, 55, 12, new Vector2Int(8, 2), 1f);
         }
 
         static void AssertShop(

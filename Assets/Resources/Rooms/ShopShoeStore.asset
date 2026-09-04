@@ -15,7 +15,7 @@ MonoBehaviour:
   id: shop_retail_shoes
   displayName: Shoe Store
   category: 4
-  size: {x: 12, y: 1}
+  size: {x: 4, y: 1}
   buildCost: 205000
   placeholderColor: {r: 0.2, g: 0.28, b: 0.55, a: 1}
   incomeModel: 4

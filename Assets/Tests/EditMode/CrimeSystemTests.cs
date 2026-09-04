@@ -127,7 +127,7 @@ namespace BuildATower.Tests
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
             so.id = "shop_retail_department";
             so.category = RoomCategory.Commercial;
-            so.size = new Vector2Int(16, 2);
+            so.size = new Vector2Int(8, 2);
             so.allowAboveGround = true;
             so.incomeModel = IncomeModel.TrafficVariable;
             so.baseIncome = 55;

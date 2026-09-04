@@ -43,12 +43,12 @@ Give the six new commercial shops painterly dollhouse cutaways that match existi
 
 | Room id | Display | Cells | Resource leaf |
 |---------|---------|-------|---------------|
-| `shop_food_taco` | Taco Counter | 12×1 | `taco_counter_12x1` |
-| `shop_food_chicken` | Chicken Shack | 12×1 | `chicken_shack_12x1` |
-| `shop_food_mexican` | Mexican Restaurant | 16×1 | `mexican_restaurant_16x1` |
-| `shop_retail_gifts` | Gag Gifts | 10×1 | `gag_gifts_10x1` |
-| `shop_retail_shoes` | Shoe Store | 12×1 | `shoe_store_12x1` |
-| `shop_retail_department` | Department Store | 16×2 | `department_store_16x2` |
+| `shop_food_taco` | Taco Counter | 4×1 | `taco_counter_12x1` |
+| `shop_food_chicken` | Chicken Shack | 4×1 | `chicken_shack_12x1` |
+| `shop_food_mexican` | Mexican Restaurant | 6×1 | `mexican_restaurant_16x1` |
+| `shop_retail_gifts` | Gag Gifts | 4×1 | `gag_gifts_10x1` |
+| `shop_retail_shoes` | Shoe Store | 4×1 | `shoe_store_12x1` |
+| `shop_retail_department` | Department Store | 8×2 | `department_store_16x2` |
 
 ### Content briefs
 

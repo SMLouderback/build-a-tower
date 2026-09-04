@@ -15,7 +15,7 @@ MonoBehaviour:
   id: shop_food_chicken
   displayName: Chicken Shack
   category: 4
-  size: {x: 12, y: 1}
+  size: {x: 4, y: 1}
   buildCost: 148000
   placeholderColor: {r: 0.9, g: 0.35, b: 0.2, a: 1}
   incomeModel: 4
