@@ -56,6 +56,7 @@ namespace BuildATower
             ["shop_retail"] = "retail_16x1",
             ["shop_retail_gifts"] = "gag_gifts_10x1",
             ["shop_retail_shoes"] = "shoe_store_12x1",
+            ["shop_retail_department"] = "department_store_16x2",
             ["service_housekeeping"] = "housekeeping_3x1",
             ["service_maintenance"] = "maintenance_3x1",
             ["service_security"] = "security_post_2x1",
