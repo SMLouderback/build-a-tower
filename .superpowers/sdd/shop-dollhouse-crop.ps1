@@ -18,20 +18,26 @@ $dst = Join-Path $repoRoot "Assets/Resources/Art/Dollhouse"
 function New-Guid32 { [guid]::NewGuid().ToString("N") }
 
 function Test-IsMagenta([System.Drawing.Color]$c) {
-    return ($c.R -gt 200 -and $c.B -gt 200 -and $c.G -lt 120) -or ($c.A -lt 20)
+    if ($c.A -lt 20) { return $true }
+    # Classic chroma #FF00FF-ish
+    if ($c.R -gt 200 -and $c.B -gt 200 -and $c.G -lt 120) { return $true }
+    # AI contact-sheet hot pink / fuchsia (high R, low G, mid B)
+    if ($c.R -gt 160 -and $c.G -lt 90 -and $c.B -gt 60 -and (($c.R - $c.G) -gt 80)) { return $true }
+    return $false
 }
 
 function Get-StripBounds([System.Drawing.Bitmap]$bmp) {
     $w = $bmp.Width
     $h = $bmp.Height
+    # Row is content when enough non-key pixels exist (avoids AA pink edges merging strips).
+    $minContentFrac = 0.04
     $rowHasContent = New-Object bool[] $h
     for ($y = 0; $y -lt $h; $y++) {
+        $content = 0
         for ($x = 0; $x -lt $w; $x++) {
-            if (-not (Test-IsMagenta $bmp.GetPixel($x, $y))) {
-                $rowHasContent[$y] = $true
-                break
-            }
+            if (-not (Test-IsMagenta $bmp.GetPixel($x, $y))) { $content++ }
         }
+        $rowHasContent[$y] = (($content / [double]$w) -ge $minContentFrac)
     }
 
     $strips = @()
