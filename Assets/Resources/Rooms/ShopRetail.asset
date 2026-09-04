@@ -34,5 +34,6 @@ MonoBehaviour:
   isElevatorShaft: 0
   requiredStars: 0
   maxOccupants: 5
+  streetVisitWeight: 1
   buildFamily: 4
   buildSubgroup: 2
