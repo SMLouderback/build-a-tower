@@ -1,7 +1,7 @@
 # Build-A-Tower — Elevator Shaft Floor Labels
 
 **Date:** 2026-09-05  
-**Status:** Approved — implementation plan ready  
+**Status:** Implemented  
 **Depends on:** `ElevatorSystem` / `ElevatorShaftRuntime.Serves`, lobby + sky-lobby floors on `TowerGrid`  
 **Engine target:** Unity (2D Tilemap), desktop/Editor-first  
 
