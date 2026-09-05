@@ -59,7 +59,7 @@ namespace BuildATower.Tests
             Assert.IsNotNull(room, "Conference should load from Resources/Rooms");
             Assert.AreEqual("service_conference", room.id);
             Assert.AreEqual(3, room.requiredStars);
-            Assert.AreEqual(new Vector2Int(8, 1), room.size);
+            Assert.AreEqual(new Vector2Int(5, 1), room.size);
             Assert.AreEqual(40, room.eventCapacity);
             Assert.AreEqual(90000, room.buildCost);
         }
@@ -72,7 +72,7 @@ namespace BuildATower.Tests
             Assert.AreEqual("service_event_hall", hall.id);
             Assert.AreEqual("Event Hall", hall.displayName);
             Assert.AreEqual(4, hall.requiredStars);
-            Assert.AreEqual(new Vector2Int(12, 2), hall.size);
+            Assert.AreEqual(new Vector2Int(9, 2), hall.size);
             Assert.AreEqual(120, hall.eventCapacity);
             Assert.AreEqual(150000, hall.buildCost);
             Assert.AreEqual(RoomCategory.Service, hall.category);
