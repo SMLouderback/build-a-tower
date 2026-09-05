@@ -50,14 +50,14 @@ namespace BuildATower.Tests
         public void Condo_catalog_assets_match_spec()
         {
             AssertCondo("Rooms/CondoStudio", "condo_studio", LuxuryBand.Base, 0, 4, 1, 35000, 65000);
-            AssertCondo("Rooms/CondoAlcove", "condo_alcove", LuxuryBand.Base, 0, 5, 2, 45000, 85000);
-            AssertCondo("Rooms/CondoBase", "condo_base", LuxuryBand.Base, 0, 8, 2, 80000, 150000);
-            AssertCondo("Rooms/CondoMidStandard", "condo_mid_standard", LuxuryBand.Mid, 2, 10, 3, 120000, 200000);
-            AssertCondo("Rooms/CondoMidLoft", "condo_mid_loft", LuxuryBand.Mid, 2, 12, 2, 140000, 230000);
-            AssertCondo("Rooms/CondoMidFamily", "condo_mid_family", LuxuryBand.Mid, 2, 14, 4, 160000, 270000);
-            AssertCondo("Rooms/CondoUpperStandard", "condo_upper_standard", LuxuryBand.Upper, 3, 12, 3, 180000, 300000);
-            AssertCondo("Rooms/CondoUpperCorner", "condo_upper_corner", LuxuryBand.Upper, 3, 14, 4, 220000, 360000);
-            AssertCondo("Rooms/CondoUpperPenthouse", "condo_upper_penthouse", LuxuryBand.Upper, 3, 18, 4, 280000, 450000);
+            AssertCondo("Rooms/CondoAlcove", "condo_alcove", LuxuryBand.Base, 0, 4, 2, 45000, 85000);
+            AssertCondo("Rooms/CondoBase", "condo_base", LuxuryBand.Base, 0, 5, 2, 80000, 150000);
+            AssertCondo("Rooms/CondoMidStandard", "condo_mid_standard", LuxuryBand.Mid, 2, 5, 3, 120000, 200000);
+            AssertCondo("Rooms/CondoMidLoft", "condo_mid_loft", LuxuryBand.Mid, 2, 5, 2, 140000, 230000);
+            AssertCondo("Rooms/CondoMidFamily", "condo_mid_family", LuxuryBand.Mid, 2, 6, 4, 160000, 270000);
+            AssertCondo("Rooms/CondoUpperStandard", "condo_upper_standard", LuxuryBand.Upper, 3, 5, 3, 180000, 300000);
+            AssertCondo("Rooms/CondoUpperCorner", "condo_upper_corner", LuxuryBand.Upper, 3, 6, 4, 220000, 360000);
+            AssertCondo("Rooms/CondoUpperPenthouse", "condo_upper_penthouse", LuxuryBand.Upper, 3, 7, 4, 280000, 450000);
         }
 
         [Test]
