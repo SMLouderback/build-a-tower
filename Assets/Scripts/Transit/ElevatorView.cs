@@ -7,11 +7,22 @@ namespace BuildATower
     public sealed class ElevatorView : MonoBehaviour
     {
         readonly List<SpriteRenderer> _renderers = new();
+        readonly ElevatorShaftFloorLabels _floorLabels = new();
         ElevatorSystem _elevators;
         Sprite _carSprite;
         int _starRating = -1;
 
         public void Bind(ElevatorSystem elevators) => _elevators = elevators;
+
+        /// <summary>
+        /// Refresh shaft floor labels after elevators rebuild from the grid
+        /// (place / remove / resize / sky lobby Express stops).
+        /// </summary>
+        public void SyncFloorLabels(TowerGrid grid)
+        {
+            if (_elevators == null) return;
+            _floorLabels.Sync(grid, _elevators, transform);
+        }
 
         public static string ElevatorCarResource(int star) =>
             $"elevator_car_s{Mathf.Clamp(star, 0, 5):00}";

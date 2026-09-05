@@ -266,6 +266,7 @@ namespace BuildATower
         {
             if (build?.Grid == null || _router == null || _agents == null) return;
             _router.Rebuild(build.Grid);
+            elevatorView?.SyncFloorLabels(build.Grid);
             _agents.SyncHomes(
                 build.Grid,
                 room => _economy?.TrySellCondo(room, build.Wallet),
