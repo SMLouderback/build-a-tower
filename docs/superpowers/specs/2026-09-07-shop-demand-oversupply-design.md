@@ -1,7 +1,7 @@
 # Build-A-Tower — Shop Demand and Oversupply
 
 **Date:** 2026-09-07  
-**Status:** Approved — implementation plan ready  
+**Status:** Implemented
 **Depends on:** Existing commercial trip scheduling, `AgentWealth`, `ShopVisitRules`, `EconomySystem`, agent stress  
 **Engine target:** Unity 6000.4.7f1, desktop/Editor-first
 
