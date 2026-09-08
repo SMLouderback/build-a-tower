@@ -76,6 +76,70 @@ namespace BuildATower
             }
         }
 
+        public int AvailableFor(ShopDemandFamily family, WealthBand wealth)
+        {
+            var originTier = ShopDemandBalance.TierForWealth(wealth);
+            var origin = Pool(family, originTier);
+            var spill = originTier == ShopDemandTier.Budget
+                ? 0
+                : Mathf.Max(0, SpillLimit(origin) - origin.SpilledOut);
+            return origin.Remaining + spill;
+        }
+
+        public bool CanServe(RoomTypeSO shopType, WealthBand wealth)
+        {
+            if (shopType == null || !ShopVisitRules.IsShop(shopType))
+                return false;
+
+            var family = ShopDemandBalance.FamilyFor(shopType);
+            var originTier = ShopDemandBalance.TierForWealth(wealth);
+            var shopTier = ShopDemandBalance.TierForShop(shopType);
+            if (shopTier == originTier)
+                return Pool(family, originTier).Remaining > 0;
+            if ((int)shopTier != (int)originTier - 1)
+                return false;
+
+            var origin = Pool(family, originTier);
+            return origin.Remaining > 0 && origin.SpilledOut < SpillLimit(origin);
+        }
+
+        public bool TryConsume(RoomTypeSO shopType, WealthBand wealth)
+        {
+            if (!CanServe(shopType, wealth))
+                return false;
+
+            var family = ShopDemandBalance.FamilyFor(shopType);
+            var originTier = ShopDemandBalance.TierForWealth(wealth);
+            var shopTier = ShopDemandBalance.TierForShop(shopType);
+            var origin = Pool(family, originTier);
+
+            origin.Remaining--;
+            if (shopTier == originTier)
+            {
+                origin.Served++;
+                return true;
+            }
+
+            origin.SpilledOut++;
+            Pool(family, shopTier).SpilledIn++;
+            return true;
+        }
+
+        public ShopDemandSnapshot Archive()
+        {
+            var archived = CreateSnapshot();
+            history.Add(archived);
+            while (history.Count > ShopDemandBalance.HistoryCapacity)
+                history.RemoveAt(0);
+            return archived;
+        }
+
+        PoolState Pool(ShopDemandFamily family, ShopDemandTier tier) =>
+            pools[new ShopDemandKey(family, tier)];
+
+        static int SpillLimit(PoolState origin) =>
+            Mathf.FloorToInt(origin.Generated * ShopDemandBalance.SpillRate);
+
         Dictionary<ShopDemandKey, float> CreateEmptyGeneration()
         {
             var generated = new Dictionary<ShopDemandKey, float>(6);

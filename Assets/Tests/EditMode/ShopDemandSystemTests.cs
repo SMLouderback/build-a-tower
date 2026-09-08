@@ -71,6 +71,151 @@ namespace BuildATower.Tests
             AssertPool(demand.Snapshot, ShopDemandFamily.Retail, ShopDemandTier.Premium, generated: 0);
         }
 
+        [Test]
+        public void Consume_uses_native_pool_before_spill()
+        {
+            var demand = DemandFrom(
+                RepeatAgents(6, AgentRole.HotelGuest, WealthBand.Premium),
+                stars: 0);
+            var shop = FoodShop(stars: 3);
+
+            Assert.IsTrue(demand.CanServe(shop, WealthBand.Premium));
+            Assert.AreEqual(5, demand.AvailableFor(ShopDemandFamily.Food, WealthBand.Premium));
+            Assert.IsTrue(demand.TryConsume(shop, WealthBand.Premium));
+            Assert.AreEqual(
+                1,
+                demand.Snapshot.Pool(ShopDemandFamily.Food, ShopDemandTier.Premium).Served);
+            Assert.AreEqual(
+                0,
+                demand.Snapshot.Pool(ShopDemandFamily.Food, ShopDemandTier.Premium).SpilledOut);
+
+            Object.DestroyImmediate(shop);
+        }
+
+        [Test]
+        public void Spill_is_one_tier_down_and_capped_at_twenty_five_percent()
+        {
+            var demand = DemandFrom(
+                RepeatAgents(11, AgentRole.HotelGuest, WealthBand.Premium),
+                stars: 0);
+            var midShop = FoodShop(stars: 2);
+            var budgetShop = FoodShop(stars: 0);
+
+            Assert.AreEqual(10, demand.AvailableFor(ShopDemandFamily.Food, WealthBand.Premium));
+            Assert.IsTrue(demand.TryConsume(midShop, WealthBand.Premium));
+            Assert.IsTrue(demand.TryConsume(midShop, WealthBand.Premium));
+            Assert.IsFalse(demand.TryConsume(midShop, WealthBand.Premium));
+            Assert.IsFalse(demand.TryConsume(budgetShop, WealthBand.Premium));
+            Assert.AreEqual(
+                2,
+                demand.Snapshot.Pool(ShopDemandFamily.Food, ShopDemandTier.Premium).SpilledOut);
+            Assert.AreEqual(
+                2,
+                demand.Snapshot.Pool(ShopDemandFamily.Food, ShopDemandTier.Mid).SpilledIn);
+
+            Object.DestroyImmediate(midShop);
+            Object.DestroyImmediate(budgetShop);
+        }
+
+        [Test]
+        public void Demand_never_moves_up_or_cross_family()
+        {
+            var budgetDemand = DemandFrom(
+                RepeatAgents(2, AgentRole.OfficeWorker, WealthBand.Basic),
+                stars: 0);
+            var midFood = FoodShop(stars: 2);
+            Assert.IsFalse(budgetDemand.TryConsume(midFood, WealthBand.Basic));
+
+            var premiumDemand = DemandFrom(
+                RepeatAgents(1, AgentRole.HotelGuest, WealthBand.Premium),
+                stars: 0);
+            var premiumRetail = RetailShop(stars: 3);
+            Assert.AreEqual(
+                1,
+                premiumDemand.Snapshot
+                    .Pool(ShopDemandFamily.Food, ShopDemandTier.Premium)
+                    .Remaining);
+            Assert.IsFalse(premiumDemand.TryConsume(premiumRetail, WealthBand.Premium));
+
+            Object.DestroyImmediate(midFood);
+            Object.DestroyImmediate(premiumRetail);
+        }
+
+        [Test]
+        public void Archive_keeps_only_thirty_snapshots_and_next_day_resets()
+        {
+            var demand = new ShopDemandSystem();
+            for (var day = 0; day < 35; day++)
+            {
+                demand.BeginDay(new List<Agent>(), stars: day, climateMultiplier: 1f);
+                demand.Archive();
+            }
+
+            Assert.AreEqual(30, demand.History.Count);
+            Assert.AreEqual(
+                7,
+                demand.History[0].Pool(ShopDemandFamily.Food, ShopDemandTier.Budget).Generated);
+
+            demand.BeginDay(new List<Agent>(), stars: 0, climateMultiplier: 1f);
+
+            Assert.AreEqual(
+                2,
+                demand.Snapshot.Pool(ShopDemandFamily.Food, ShopDemandTier.Budget).Remaining);
+            Assert.AreEqual(30, demand.History.Count);
+        }
+
+        [Test]
+        public void Archive_returns_immutable_copy_and_leaves_current_pools_untouched()
+        {
+            var demand = DemandFrom(
+                RepeatAgents(6, AgentRole.HotelGuest, WealthBand.Premium),
+                stars: 0);
+            var premiumFood = FoodShop(stars: 3);
+            var archived = demand.Archive();
+
+            Assert.AreEqual(
+                4,
+                demand.Snapshot.Pool(ShopDemandFamily.Food, ShopDemandTier.Premium).Remaining);
+            Assert.IsTrue(demand.TryConsume(premiumFood, WealthBand.Premium));
+            Assert.AreEqual(
+                4,
+                archived.Pool(ShopDemandFamily.Food, ShopDemandTier.Premium).Remaining);
+            Assert.AreEqual(
+                4,
+                demand.History[0].Pool(ShopDemandFamily.Food, ShopDemandTier.Premium).Remaining);
+
+            Object.DestroyImmediate(premiumFood);
+        }
+
+        static ShopDemandSystem DemandFrom(IReadOnlyList<Agent> agents, int stars)
+        {
+            var demand = new ShopDemandSystem();
+            demand.BeginDay(agents, stars, climateMultiplier: 1f);
+            return demand;
+        }
+
+        static List<Agent> RepeatAgents(int count, AgentRole role, WealthBand wealth)
+        {
+            var agents = new List<Agent>(count);
+            for (var i = 0; i < count; i++)
+                agents.Add(AgentOf(role, wealth));
+            return agents;
+        }
+
+        static RoomTypeSO FoodShop(int stars) => Shop(BuildSubgroup.Food, stars);
+
+        static RoomTypeSO RetailShop(int stars) => Shop(BuildSubgroup.Retail, stars);
+
+        static RoomTypeSO Shop(BuildSubgroup subgroup, int stars)
+        {
+            var shop = ScriptableObject.CreateInstance<RoomTypeSO>();
+            shop.incomeModel = IncomeModel.TrafficVariable;
+            shop.buildFamily = BuildFamily.Shops;
+            shop.buildSubgroup = subgroup;
+            shop.requiredStars = stars;
+            return shop;
+        }
+
         static Agent AgentOf(AgentRole role, WealthBand wealth)
         {
             var agent = new Agent(0, role, null, Vector2Int.zero)
