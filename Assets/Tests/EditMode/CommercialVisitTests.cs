@@ -406,9 +406,15 @@ namespace BuildATower.Tests
             economy.OnNewDay(grid, new List<Agent>(), wallet);
 
             Assert.AreEqual(65, economy.LastIncome);
-            Assert.AreEqual(65, wallet.Balance);
+            Assert.AreEqual(20, economy.LastExpense);
+            Assert.AreEqual(45, wallet.Balance);
             Assert.AreEqual(65, shop.LifetimeIncome);
+            Assert.AreEqual(20, shop.LifetimeExpense);
             Assert.AreEqual(65, economy.GetLastRoomIncome(shop));
+            Assert.AreEqual(20, economy.GetLastRoomExpense(shop));
+            Assert.AreEqual(65, shop.ShopRevenueYesterday);
+            Assert.AreEqual(20, shop.ShopUpkeepYesterday);
+            Assert.AreEqual(45, shop.ShopNetYesterday);
             Assert.AreEqual(0, shop.VisitsToday);
             Assert.AreEqual(0, shop.ShopEarningsToday);
             Assert.AreNotEqual(80, economy.LastIncome);
