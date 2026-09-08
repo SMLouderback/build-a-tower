@@ -329,6 +329,106 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Native_tier_shop_wins_over_higher_weight_lower_tier_shop()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, 1), out _));
+            Assert.IsTrue(grid.TryPlace(
+                TieredFoodShop(stars: 0, slots: 1000),
+                new Vector2Int(9, 1),
+                out var lowerTier));
+            Assert.IsTrue(grid.TryPlace(
+                TieredFoodShop(stars: 1, slots: 1),
+                new Vector2Int(10, 1),
+                out var nativeTier));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
+
+            var demandAgents = Enumerable.Range(0, 20)
+                .Select(i => new Agent(i, AgentRole.OfficeWorker, null, Vector2Int.zero)
+                {
+                    Wealth = WealthBand.Mid
+                })
+                .ToList();
+            var demand = new ShopDemandSystem();
+            demand.BeginDay(demandAgents, stars: 0, climateMultiplier: 1f);
+
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router, shopDemand: demand);
+            agents.SyncHomes(grid);
+            var agent = agents.Agents.Single();
+            PlaceAgentWorkingAtOffice(agent);
+            agent.Wealth = WealthBand.Mid;
+            agent.DisposableRemaining = 100;
+            var clock = new GameClock(1f, 12 * 60);
+            agent.DisposableDayIndex = clock.DayIndex;
+
+            Assert.Greater(
+                ShopVisitRules.DemandWeight(lowerTier, streetOrigin: false),
+                ShopVisitRules.DemandWeight(nativeTier, streetOrigin: false));
+            Assert.IsTrue(agents.TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Working));
+            Assert.AreSame(nativeTier, agent.VisitTarget);
+        }
+
+        [Test]
+        public void Event_family_weighting_uses_spill_capacity_not_origin_plus_spill()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, 1), out _));
+            Assert.IsTrue(grid.TryPlace(
+                TieredFoodShop(stars: 0, slots: 4),
+                new Vector2Int(9, 1),
+                out _));
+            var retailType = Retail();
+            retailType.requiredStars = 1;
+            Assert.IsTrue(grid.TryPlace(retailType, new Vector2Int(10, 1), out var retail));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
+
+            var demandAgents = Enumerable.Range(0, 20)
+                .Select(i => new Agent(i, AgentRole.OfficeWorker, null, Vector2Int.zero)
+                {
+                    Wealth = WealthBand.Mid
+                })
+                .ToList();
+            var demand = new ShopDemandSystem();
+            demand.BeginDay(demandAgents, stars: 3, climateMultiplier: 1f);
+
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router, shopDemand: demand);
+            var clock = new GameClock(1f, 12 * 60);
+            var visitorCell = new Vector2Int(0, 1);
+            var visitor = new Agent(100, AgentRole.EventVisitor, null, visitorCell)
+            {
+                Wealth = WealthBand.Mid,
+                DisposableRemaining = 100,
+                DisposableDayIndex = clock.DayIndex,
+                Phase = AgentPhase.Outside
+            };
+
+            Assert.AreEqual(
+                3,
+                demand.AvailableFor(
+                    ShopDemandFamily.Food,
+                    WealthBand.Mid,
+                    ShopDemandTier.Budget));
+            Assert.AreEqual(
+                3,
+                demand.AvailableFor(
+                    ShopDemandFamily.Retail,
+                    WealthBand.Mid,
+                    ShopDemandTier.Mid));
+            Assert.IsTrue(agents.TryBeginCommercialTrip(
+                visitor,
+                grid,
+                clock,
+                AgentPhase.Outside));
+            Assert.AreSame(retail, visitor.VisitTarget);
+        }
+
+        [Test]
         public void SyncHomes_assigns_wealth_when_reconciling_sold_condo()
         {
             var grid = new TowerGrid();
@@ -680,6 +780,15 @@ namespace BuildATower.Tests
             so.hasActiveHours = true;
             so.activeHoursStart = 11 * 60;
             so.activeHoursEnd = 21 * 60;
+            return so;
+        }
+
+        static RoomTypeSO TieredFoodShop(int stars, int slots)
+        {
+            var so = FastFood();
+            so.requiredStars = stars;
+            so.maxOccupants = slots;
+            so.baseIncome = 20;
             return so;
         }
 

@@ -76,14 +76,20 @@ namespace BuildATower
             }
         }
 
-        public int AvailableFor(ShopDemandFamily family, WealthBand wealth)
+        public int AvailableFor(
+            ShopDemandFamily family,
+            WealthBand wealth,
+            ShopDemandTier candidateTier)
         {
             var originTier = ShopDemandBalance.TierForWealth(wealth);
             var origin = Pool(family, originTier);
-            var spill = originTier == ShopDemandTier.Budget
-                ? 0
-                : Mathf.Max(0, SpillLimit(origin) - origin.SpilledOut);
-            return origin.Remaining + spill;
+            if (candidateTier == originTier)
+                return origin.Remaining;
+            if ((int)candidateTier != (int)originTier - 1)
+                return 0;
+
+            var spillCapacity = Mathf.Max(0, SpillLimit(origin) - origin.SpilledOut);
+            return Mathf.Min(origin.Remaining, spillCapacity);
         }
 
         public bool CanServe(RoomTypeSO shopType, WealthBand wealth)

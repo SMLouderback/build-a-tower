@@ -83,7 +83,7 @@ namespace BuildATower
                     lines.Add($"Avg visits (7d): {room.AverageVisitsLast7Days:0.#}");
                     lines.Add($"Earnings today: ${room.ShopEarningsToday:N0}");
                     lines.Add($"Yesterday revenue: ${room.ShopRevenueYesterday:N0}");
-                    lines.Add($"Daily upkeep: ${room.ShopUpkeepYesterday:N0}");
+                    lines.Add($"Daily upkeep: ${ShopDemandBalance.DailyUpkeep(type):N0}");
                     lines.Add($"Yesterday net: {SignedMoney(room.ShopNetYesterday)}");
                     if (demand != null)
                     {

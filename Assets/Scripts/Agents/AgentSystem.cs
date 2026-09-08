@@ -1873,23 +1873,38 @@ namespace BuildATower
                     : eligible[_rng.Next(eligible.Count)];
             }
 
-            var food = new List<RoomInstance>();
-            var retail = new List<RoomInstance>();
+            var nativeTier = ShopDemandBalance.TierForWealth(wealth);
+            var foodNative = new List<RoomInstance>();
+            var foodSpill = new List<RoomInstance>();
+            var retailNative = new List<RoomInstance>();
+            var retailSpill = new List<RoomInstance>();
             foreach (var shop in eligible)
             {
                 if (!_shopDemand.CanServe(shop.Type, wealth))
                     continue;
 
                 var family = ShopDemandBalance.FamilyFor(shop.Type);
-                (family == ShopDemandFamily.Retail ? retail : food).Add(shop);
+                var native = ShopDemandBalance.TierForShop(shop.Type) == nativeTier;
+                if (family == ShopDemandFamily.Retail)
+                    (native ? retailNative : retailSpill).Add(shop);
+                else
+                    (native ? foodNative : foodSpill).Add(shop);
             }
 
+            var food = foodNative.Count > 0 ? foodNative : foodSpill;
+            var retail = retailNative.Count > 0 ? retailNative : retailSpill;
             var foodAvailable = food.Count == 0
                 ? 0
-                : _shopDemand.AvailableFor(ShopDemandFamily.Food, wealth);
+                : _shopDemand.AvailableFor(
+                    ShopDemandFamily.Food,
+                    wealth,
+                    ShopDemandBalance.TierForShop(food[0].Type));
             var retailAvailable = retail.Count == 0
                 ? 0
-                : _shopDemand.AvailableFor(ShopDemandFamily.Retail, wealth);
+                : _shopDemand.AvailableFor(
+                    ShopDemandFamily.Retail,
+                    wealth,
+                    ShopDemandBalance.TierForShop(retail[0].Type));
             var familyChoice = ShopDemandBalance.PickFamily(
                 role,
                 foodAvailable,

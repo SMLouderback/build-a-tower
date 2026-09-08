@@ -108,6 +108,22 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Newly_built_shop_shows_known_daily_upkeep_before_first_rollover()
+        {
+            var shop = Room(100_000, IncomeModel.TrafficVariable, 65);
+            shop.buildFamily = BuildFamily.Shops;
+            shop.buildSubgroup = BuildSubgroup.Retail;
+            var instance = new RoomInstance(11, shop, Vector2Int.zero, Vector2Int.one);
+
+            var lines = RoomEconomyFormat.SelectedUnitLines(instance, null, null);
+
+            CollectionAssert.Contains(lines, "Daily upkeep: $33");
+            CollectionAssert.Contains(lines, "Yesterday net: $0");
+
+            Object.DestroyImmediate(shop);
+        }
+
+        [Test]
         public void Selected_condo_reports_sale_state()
         {
             var condo = Room(80_000, IncomeModel.UpfrontSale, 150_000);

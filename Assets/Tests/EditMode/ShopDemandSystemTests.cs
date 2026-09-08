@@ -80,7 +80,12 @@ namespace BuildATower.Tests
             var shop = FoodShop(stars: 3);
 
             Assert.IsTrue(demand.CanServe(shop, WealthBand.Premium));
-            Assert.AreEqual(5, demand.AvailableFor(ShopDemandFamily.Food, WealthBand.Premium));
+            Assert.AreEqual(
+                4,
+                demand.AvailableFor(
+                    ShopDemandFamily.Food,
+                    WealthBand.Premium,
+                    ShopDemandTier.Premium));
             Assert.IsTrue(demand.TryConsume(shop, WealthBand.Premium));
             Assert.AreEqual(
                 1,
@@ -101,7 +106,12 @@ namespace BuildATower.Tests
             var midShop = FoodShop(stars: 2);
             var budgetShop = FoodShop(stars: 0);
 
-            Assert.AreEqual(10, demand.AvailableFor(ShopDemandFamily.Food, WealthBand.Premium));
+            Assert.AreEqual(
+                2,
+                demand.AvailableFor(
+                    ShopDemandFamily.Food,
+                    WealthBand.Premium,
+                    ShopDemandTier.Mid));
             Assert.IsTrue(demand.TryConsume(midShop, WealthBand.Premium));
             Assert.IsTrue(demand.TryConsume(midShop, WealthBand.Premium));
             Assert.IsFalse(demand.TryConsume(midShop, WealthBand.Premium));
@@ -115,6 +125,39 @@ namespace BuildATower.Tests
 
             Object.DestroyImmediate(midShop);
             Object.DestroyImmediate(budgetShop);
+        }
+
+        [Test]
+        public void Spill_only_availability_reports_remaining_spill_capacity()
+        {
+            var demand = DemandFrom(
+                RepeatAgents(11, AgentRole.HotelGuest, WealthBand.Premium),
+                stars: 0);
+            var midShop = FoodShop(stars: 2);
+
+            Assert.AreEqual(
+                8,
+                demand.AvailableFor(
+                    ShopDemandFamily.Food,
+                    WealthBand.Premium,
+                    ShopDemandTier.Premium));
+            Assert.AreEqual(
+                2,
+                demand.AvailableFor(
+                    ShopDemandFamily.Food,
+                    WealthBand.Premium,
+                    ShopDemandTier.Mid));
+
+            Assert.IsTrue(demand.TryConsume(midShop, WealthBand.Premium));
+
+            Assert.AreEqual(
+                1,
+                demand.AvailableFor(
+                    ShopDemandFamily.Food,
+                    WealthBand.Premium,
+                    ShopDemandTier.Mid));
+
+            Object.DestroyImmediate(midShop);
         }
 
         [Test]
