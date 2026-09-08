@@ -94,7 +94,7 @@ Street-generated units are part of the same finite pools as occupant demand.
 
 When an eligible resident, worker, guest, event visitor, or street visitor attempts a commercial trip:
 
-1. Resolve requested family (Food or Retail) using the existing schedule/role behavior.
+1. Resolve requested family (Food or Retail) using the role weights below.
 2. Resolve the customer’s native demand tier from wealth.
 3. Find shops that are open, reachable, affordable, not full, and assigned to that family/tier.
 4. Select a destination using the competition weight below.
@@ -105,7 +105,23 @@ Closed, broken, full, unreachable, or unaffordable shops receive no allocation. 
 
 Existing dwell times, visitor slots, opening hours, affordability, and rolled spending remain authoritative.
 
-### 5.2 Competition weight
+### 5.2 Role-weighted family choice
+
+The approved per-occupant generation weights also define trip-family preference:
+
+| Role | Food | Retail |
+|------|-----:|-------:|
+| Office worker | 83% | 17% |
+| Condo resident | 57% | 43% |
+| Hotel guest | 74% | 26% |
+| Street visitor | Proportional to remaining eligible Food/Retail demand |
+| Event visitor | Proportional to remaining eligible Mid Food/Retail demand |
+
+Percentages for office, condo, and hotel are the normalized ratios of their Food/Retail generation weights, rounded to whole percentages.
+
+Only families with remaining serviceable demand and at least one eligible shop participate. If the preferred family has no valid option, use the other valid family. If neither family is valid, no trip is scheduled and no demand is consumed.
+
+### 5.3 Competition weight
 
 Eligible shops use:
 
