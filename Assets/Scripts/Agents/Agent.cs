@@ -161,5 +161,8 @@ namespace BuildATower
             Path = new List<Vector2Int>();
             TripLegs = new List<TransitLeg>();
         }
+
+        public void AddStress(float amount) =>
+            Stress = Mathf.Clamp(Stress + Mathf.Max(0f, amount), 0f, 100f);
     }
 }

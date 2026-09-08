@@ -134,11 +134,56 @@ namespace BuildATower
             return archived;
         }
 
+        public void ArchiveAndApplyStress(IReadOnlyList<Agent> agents)
+        {
+            var archived = Archive();
+            if (agents == null)
+                return;
+
+            var towerRatio = archived.TotalUnmetRatio;
+            for (var i = 0; i < agents.Count; i++)
+            {
+                var agent = agents[i];
+                if (agent == null)
+                    continue;
+
+                switch (agent.Role)
+                {
+                    case AgentRole.OfficeWorker:
+                    case AgentRole.CondoResident:
+                    case AgentRole.HotelGuest:
+                        agent.AddStress(ShopDemandBalance.StressForTier(
+                            UnmetRatioForTier(
+                                archived,
+                                ShopDemandBalance.TierForWealth(agent.Wealth)),
+                            towerRatio));
+                        break;
+                    case AgentRole.Maid:
+                    case AgentRole.Handyman:
+                    case AgentRole.Security:
+                        agent.AddStress(ShopDemandBalance.TowerStress(towerRatio));
+                        break;
+                }
+            }
+        }
+
         PoolState Pool(ShopDemandFamily family, ShopDemandTier tier) =>
             pools[new ShopDemandKey(family, tier)];
 
         static int SpillLimit(PoolState origin) =>
             Mathf.FloorToInt(origin.Generated * ShopDemandBalance.SpillRate);
+
+        static float UnmetRatioForTier(
+            ShopDemandSnapshot snapshot,
+            ShopDemandTier tier)
+        {
+            var food = snapshot.Pool(ShopDemandFamily.Food, tier);
+            var retail = snapshot.Pool(ShopDemandFamily.Retail, tier);
+            var generated = food.Generated + retail.Generated;
+            return generated <= 0
+                ? 0f
+                : (food.Unmet + retail.Unmet) / (float)generated;
+        }
 
         Dictionary<ShopDemandKey, float> CreateEmptyGeneration()
         {

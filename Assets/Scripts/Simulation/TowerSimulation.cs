@@ -79,6 +79,7 @@ namespace BuildATower
         ElevatorSystem _elevators;
         TransitRouter _router;
         AgentSystem _agents;
+        ShopDemandSystem _shopDemand;
         CrimeSystem _crime;
         EconomySystem _economy;
         ResearchSystem _research;
@@ -96,6 +97,7 @@ namespace BuildATower
 
         public GameClock Clock => _clock;
         public AgentSystem Agents => _agents;
+        public ShopDemandSystem ShopDemand => _shopDemand;
         public CrimeSystem Crime => _crime;
         public EconomySystem Economy => _economy;
         public ResearchSystem Research => _research;
@@ -130,7 +132,8 @@ namespace BuildATower
             _elevators = new ElevatorSystem();
             _pathfinder = new StairsPathfinder();
             _router = new TransitRouter(_pathfinder, _elevators);
-            _agents = new AgentSystem(_router);
+            _shopDemand = new ShopDemandSystem();
+            _agents = new AgentSystem(_router, shopDemand: _shopDemand);
             _crime = new CrimeSystem();
             _economy = new EconomySystem();
             _research = new ResearchSystem();
@@ -166,6 +169,10 @@ namespace BuildATower
         {
             TrySubscribe();
             OnGridChanged();
+            _shopDemand.BeginDay(
+                _agents.Agents,
+                _stars.CurrentStars,
+                _climate?.SpendMultiplier ?? 1f);
         }
 
         void OnDisable()
@@ -325,6 +332,8 @@ namespace BuildATower
             var climateSpendMult = _climate?.SpendMultiplier ?? 1f;
             for (var day = _lastDayIndex + 1; day <= _clock.DayIndex; day++)
             {
+                _shopDemand.ArchiveAndApplyStress(_agents.Agents);
+
                 // Event schedule first so pending lump / daily credits land in OnNewDay.
                 _conference?.TickDay(
                     day,
@@ -345,6 +354,11 @@ namespace BuildATower
                     _research,
                     climateSpendMult,
                     _conference);
+
+                _shopDemand.BeginDay(
+                    _agents.Agents,
+                    _stars.CurrentStars,
+                    climateSpendMult);
 
                 _elevators?.ArchiveDay();
 

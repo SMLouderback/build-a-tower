@@ -187,11 +187,90 @@ namespace BuildATower.Tests
             Object.DestroyImmediate(premiumFood);
         }
 
+        [Test]
+        public void Stress_formula_combines_matching_and_tower_ratios()
+        {
+            Assert.AreEqual(
+                3.5f,
+                ShopDemandBalance.StressForTier(
+                    tierUnmetRatio: 0.5f,
+                    towerUnmetRatio: 0.25f),
+                0.001f);
+            Assert.AreEqual(
+                0.5f,
+                ShopDemandBalance.TowerStress(towerUnmetRatio: 0.25f),
+                0.001f);
+        }
+
+        [Test]
+        public void Matching_tier_gets_more_stress_and_street_is_exempt()
+        {
+            var basic = AgentOf(AgentRole.OfficeWorker, WealthBand.Basic, stress: 0f);
+            var premium = AgentOf(AgentRole.HotelGuest, WealthBand.Premium, stress: 0f);
+            var street = AgentOf(AgentRole.StreetVisitor, WealthBand.Street, stress: 0f);
+            var demand = DemandFrom(new[] { basic, premium }, stars: 0);
+            ConsumeAllPremiumDemand(demand);
+
+            demand.ArchiveAndApplyStress(new[] { basic, premium, street });
+
+            Assert.Greater(basic.Stress, premium.Stress);
+            Assert.Greater(premium.Stress, 0f);
+            Assert.AreEqual(0f, street.Stress);
+        }
+
+        [Test]
+        public void Demand_stress_clamps_at_one_hundred()
+        {
+            var agent = AgentOf(AgentRole.CondoResident, WealthBand.Basic, stress: 99f);
+            var demand = DemandFrom(
+                RepeatAgents(2, AgentRole.OfficeWorker, WealthBand.Basic),
+                stars: 0);
+
+            demand.ArchiveAndApplyStress(new[] { agent });
+
+            Assert.AreEqual(100f, agent.Stress);
+        }
+
+        [Test]
+        public void Archive_then_BeginDay_keeps_history_and_replaces_current_pools()
+        {
+            var demand = new ShopDemandSystem();
+            demand.BeginDay(
+                RepeatAgents(2, AgentRole.OfficeWorker, WealthBand.Basic),
+                stars: 0,
+                climateMultiplier: 1f);
+            var completedGenerated = demand.Snapshot.TotalGenerated;
+
+            demand.ArchiveAndApplyStress(System.Array.Empty<Agent>());
+            demand.BeginDay(
+                RepeatAgents(2, AgentRole.HotelGuest, WealthBand.Premium),
+                stars: 0,
+                climateMultiplier: 1f);
+
+            Assert.AreEqual(1, demand.History.Count);
+            Assert.AreEqual(completedGenerated, demand.History[0].TotalGenerated);
+            Assert.AreNotEqual(completedGenerated, demand.Snapshot.TotalGenerated);
+        }
+
         static ShopDemandSystem DemandFrom(IReadOnlyList<Agent> agents, int stars)
         {
             var demand = new ShopDemandSystem();
             demand.BeginDay(agents, stars, climateMultiplier: 1f);
             return demand;
+        }
+
+        static void ConsumeAllPremiumDemand(ShopDemandSystem demand)
+        {
+            var food = FoodShop(stars: 3);
+            var retail = RetailShop(stars: 3);
+            while (demand.TryConsume(food, WealthBand.Premium))
+            {
+            }
+            while (demand.TryConsume(retail, WealthBand.Premium))
+            {
+            }
+            Object.DestroyImmediate(food);
+            Object.DestroyImmediate(retail);
         }
 
         static List<Agent> RepeatAgents(int count, AgentRole role, WealthBand wealth)
@@ -216,11 +295,12 @@ namespace BuildATower.Tests
             return shop;
         }
 
-        static Agent AgentOf(AgentRole role, WealthBand wealth)
+        static Agent AgentOf(AgentRole role, WealthBand wealth, float stress = 0f)
         {
             var agent = new Agent(0, role, null, Vector2Int.zero)
             {
-                Wealth = wealth
+                Wealth = wealth,
+                Stress = stress
             };
             return agent;
         }

@@ -55,5 +55,12 @@ namespace BuildATower
             type == null ? 0 : (int)System.Math.Round(
                 System.Math.Max(0, type.baseIncome) * ShopUpkeepRate,
                 System.MidpointRounding.AwayFromZero);
+
+        public static float TowerStress(float towerUnmetRatio) =>
+            TowerStressMax * UnityEngine.Mathf.Clamp01(towerUnmetRatio);
+
+        public static float StressForTier(float tierUnmetRatio, float towerUnmetRatio) =>
+            MatchingStressMax * UnityEngine.Mathf.Clamp01(tierUnmetRatio) +
+            TowerStress(towerUnmetRatio);
     }
 }
