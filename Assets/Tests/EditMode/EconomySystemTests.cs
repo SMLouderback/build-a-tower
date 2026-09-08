@@ -154,6 +154,53 @@ namespace BuildATower.Tests
             return so;
         }
 
+        [TestCase(28, 14)]
+        [TestCase(65, 33)]
+        [TestCase(100, 50)]
+        public void Shop_upkeep_rounds_half_pay_cap_away_from_zero(int cap, int expected)
+        {
+            Assert.AreEqual(expected, ShopDemandBalance.DailyUpkeep(FastFoodShop(cap)));
+        }
+
+        [Test]
+        public void Empty_shop_charges_upkeep_and_reports_negative_net()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(FastFoodShop(baseIncome: 50), new Vector2Int(0, 1), out var shop));
+            var wallet = new FundsWallet(100_000);
+            var economy = new EconomySystem();
+
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+
+            Assert.AreEqual(25, economy.GetLastRoomExpense(shop));
+            Assert.AreEqual(0, shop.ShopRevenueYesterday);
+            Assert.AreEqual(25, shop.ShopUpkeepYesterday);
+            Assert.AreEqual(-25, shop.ShopNetYesterday);
+            Assert.AreEqual(25, shop.LifetimeExpense);
+            Assert.AreEqual(99_975, wallet.Balance);
+        }
+
+        [Test]
+        public void Broken_shop_still_pays_upkeep_without_income()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(FastFoodShop(baseIncome: 50), new Vector2Int(0, 1), out var shop));
+            shop.RecordShopSpend(100);
+            shop.Condition = 0;
+            var wallet = new FundsWallet(100_000);
+            var economy = new EconomySystem();
+
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+
+            Assert.AreEqual(0, shop.ShopRevenueYesterday);
+            Assert.AreEqual(25, shop.ShopUpkeepYesterday);
+            Assert.AreEqual(-25, shop.ShopNetYesterday);
+            Assert.AreEqual(0, shop.ShopEarningsToday);
+            Assert.AreEqual(99_975, wallet.Balance);
+        }
+
         [Test]
         public void Midnight_pays_traffic_from_visits_and_clears_counter()
         {
@@ -175,12 +222,41 @@ namespace BuildATower.Tests
             economy.OnNewDay(grid, new List<Agent>(), wallet);
 
             Assert.AreEqual(120, economy.LastIncome);
-            Assert.AreEqual(100_120, wallet.Balance);
+            Assert.AreEqual(20, economy.LastExpense);
+            Assert.AreEqual(100_100, wallet.Balance);
             Assert.AreEqual(0, shop.VisitsToday);
             Assert.AreEqual(0, shop.ShopEarningsToday);
             Assert.AreEqual(120, shop.LifetimeIncome);
+            Assert.AreEqual(20, shop.LifetimeExpense);
             Assert.AreEqual(120, economy.GetLastRoomIncome(shop));
+            Assert.AreEqual(120, shop.ShopRevenueYesterday);
+            Assert.AreEqual(20, shop.ShopUpkeepYesterday);
+            Assert.AreEqual(100, shop.ShopNetYesterday);
             Assert.IsTrue(economy.HasRecordedEconomyEvent);
+        }
+
+        [Test]
+        public void Shop_revenue_yesterday_records_credited_difficulty_scaled_income()
+        {
+            GameSession.Difficulty = GameDifficulty.Hard;
+            try
+            {
+                var grid = new TowerGrid();
+                grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+                Assert.IsTrue(grid.TryPlace(FastFoodShop(baseIncome: 40), new Vector2Int(0, 1), out var shop));
+                shop.RecordShopSpend(101);
+                var wallet = new FundsWallet(100_000);
+
+                new EconomySystem().OnNewDay(grid, new List<Agent>(), wallet);
+
+                Assert.AreEqual(BuildEconomy.ApplyIncome(101), shop.ShopRevenueYesterday);
+                Assert.AreEqual(81, shop.ShopRevenueYesterday);
+                Assert.AreEqual(100_061, wallet.Balance);
+            }
+            finally
+            {
+                GameSession.ResetForTests();
+            }
         }
 
         [Test]
@@ -401,9 +477,12 @@ namespace BuildATower.Tests
             economy.OnNewDay(grid, new List<Agent>(), wallet);
 
             Assert.AreEqual(0, economy.LastIncome);
-            Assert.AreEqual(100_000, wallet.Balance);
+            Assert.AreEqual(20, economy.LastExpense);
+            Assert.AreEqual(99_980, wallet.Balance);
             Assert.AreEqual(0, shop.VisitsToday);
             Assert.AreEqual(0, shop.ShopEarningsToday);
+            Assert.AreEqual(0, shop.ShopRevenueYesterday);
+            Assert.AreEqual(20, shop.ShopUpkeepYesterday);
         }
 
         [Test]

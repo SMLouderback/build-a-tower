@@ -107,20 +107,17 @@ namespace BuildATower
 
                 if (ShopVisitRules.IsShop(room.Type))
                 {
+                    var creditedRevenue = 0;
                     if (!incomeBlocked && room.ShopEarningsToday > 0)
                     {
-                        var amount = BuildEconomy.ApplyIncome(room.ShopEarningsToday);
-                        LastIncome += amount;
-                        if (_lastIncomeByRoom.TryGetValue(room.InstanceId, out var existing))
-                            _lastIncomeByRoom[room.InstanceId] = existing + amount;
-                        else
-                            _lastIncomeByRoom[room.InstanceId] = amount;
-                        room.RecordLifetimeIncome(amount);
+                        creditedRevenue = BuildEconomy.ApplyIncome(room.ShopEarningsToday);
+                        AddRoomIncome(room, creditedRevenue);
                     }
 
+                    var upkeep = ShopDemandBalance.DailyUpkeep(room.Type);
+                    AddRoomExpense(room, upkeep);
                     towerShopVisits += room.VisitsToday;
-                    room.PushVisitHistoryDay();
-                    room.ResetVisitsToday();
+                    room.ArchiveShopDay(creditedRevenue, upkeep);
                 }
 
                 var wage = WageForRoom(room);
@@ -323,6 +320,28 @@ namespace BuildATower
 
         public int GetLastRoomNet(RoomInstance room) =>
             GetLastRoomIncome(room) - GetLastRoomExpense(room);
+
+        void AddRoomIncome(RoomInstance room, int amount)
+        {
+            if (room == null || amount <= 0) return;
+            LastIncome += amount;
+            if (_lastIncomeByRoom.TryGetValue(room.InstanceId, out var existing))
+                _lastIncomeByRoom[room.InstanceId] = existing + amount;
+            else
+                _lastIncomeByRoom[room.InstanceId] = amount;
+            room.RecordLifetimeIncome(amount);
+        }
+
+        void AddRoomExpense(RoomInstance room, int amount)
+        {
+            if (room == null || amount <= 0) return;
+            LastExpense += amount;
+            if (_lastExpenseByRoom.TryGetValue(room.InstanceId, out var existing))
+                _lastExpenseByRoom[room.InstanceId] = existing + amount;
+            else
+                _lastExpenseByRoom[room.InstanceId] = amount;
+            room.RecordLifetimeExpense(amount);
+        }
 
         static int WageForRoom(RoomInstance room)
         {

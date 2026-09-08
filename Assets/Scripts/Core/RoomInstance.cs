@@ -41,6 +41,9 @@ namespace BuildATower
         public int VisitsToday { get; private set; }
         public int ShopEarningsToday { get; private set; }
         public int ConcurrentVisitors { get; private set; }
+        public int ShopRevenueYesterday { get; private set; }
+        public int ShopUpkeepYesterday { get; private set; }
+        public int ShopNetYesterday => ShopRevenueYesterday - ShopUpkeepYesterday;
 
         readonly VisitHistoryRing _visitHistory = new();
 
@@ -95,6 +98,14 @@ namespace BuildATower
 
         /// <summary>Archives today's visit count into the 7-day ring (call before reset at midnight).</summary>
         public void PushVisitHistoryDay() => _visitHistory.Push(VisitsToday);
+
+        public void ArchiveShopDay(int creditedRevenue, int upkeep)
+        {
+            ShopRevenueYesterday = Mathf.Max(0, creditedRevenue);
+            ShopUpkeepYesterday = Mathf.Max(0, upkeep);
+            PushVisitHistoryDay();
+            ResetVisitsToday();
+        }
 
         public void ResetVisitsToday()
         {
