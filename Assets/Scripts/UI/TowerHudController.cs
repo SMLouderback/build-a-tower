@@ -417,7 +417,11 @@ namespace BuildATower
                     foreach (var line in RoomEconomyFormat.SelectedUnitLines(
                                  build.SelectedRoom,
                                  agents?.Agents,
-                                 simulation?.Economy))
+                                 simulation?.Economy,
+                                 simulation?.ShopDemand,
+                                 ShopDemandFormat.CountOpenShopsInPool(
+                                     build.Grid?.Rooms,
+                                     build.SelectedRoom?.Type)))
                     {
                         GUI.Label(new Rect(cx, cy, contentInner, row), line, label);
                         cy += row;
@@ -1603,6 +1607,28 @@ namespace BuildATower
                     {
                         lines.Add($"Shops yday {economy.LastShopVisitsYesterday}");
                         lines.Add($"Shops ~{economy.AverageShopVisitsLast7Days:0.#}/d");
+                    }
+                    var demand = simulation?.ShopDemand;
+                    if (demand != null)
+                    {
+                        var snapshot = demand.Snapshot;
+                        var families = new[]
+                        {
+                            ShopDemandFamily.Food,
+                            ShopDemandFamily.Retail
+                        };
+                        var tiers = new[]
+                        {
+                            ShopDemandTier.Budget,
+                            ShopDemandTier.Mid,
+                            ShopDemandTier.Premium
+                        };
+                        foreach (var family in families)
+                        foreach (var tier in tiers)
+                            lines.Add(ShopDemandFormat.PoolLine(
+                                family,
+                                tier,
+                                snapshot.Pool(family, tier)));
                     }
                     break;
                 }

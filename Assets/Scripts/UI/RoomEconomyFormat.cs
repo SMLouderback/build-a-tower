@@ -37,7 +37,9 @@ namespace BuildATower
         public static List<string> SelectedUnitLines(
             RoomInstance room,
             IReadOnlyList<Agent> agents,
-            EconomySystem economy)
+            EconomySystem economy,
+            ShopDemandSystem demand = null,
+            int openShopCountInPool = 0)
         {
             var lines = new List<string>();
             if (room?.Type == null) return lines;
@@ -72,10 +74,23 @@ namespace BuildATower
                             : "Status: For sale — no payout yet");
                     break;
                 case IncomeModel.TrafficVariable:
+                    var family = ShopDemandBalance.FamilyFor(type);
+                    var demandTier = ShopDemandBalance.TierForShop(type);
+                    if (demand != null)
+                        lines.Add($"Demand: {family} / {demandTier}");
                     lines.Add($"Visits today: {room.VisitsToday}");
                     lines.Add($"Visits yesterday: {room.VisitsYesterday}");
                     lines.Add($"Avg visits (7d): {room.AverageVisitsLast7Days:0.#}");
                     lines.Add($"Earnings today: ${room.ShopEarningsToday:N0}");
+                    lines.Add($"Yesterday revenue: ${room.ShopRevenueYesterday:N0}");
+                    lines.Add($"Daily upkeep: ${room.ShopUpkeepYesterday:N0}");
+                    lines.Add($"Yesterday net: {SignedMoney(room.ShopNetYesterday)}");
+                    if (demand != null)
+                    {
+                        var pool = demand.Snapshot.Pool(family, demandTier);
+                        lines.Add(
+                            $"Competition: {ShopDemandFormat.Competition(pool, openShopCountInPool)}");
+                    }
                     break;
                 default:
                     if (type.id == ConferenceSystem.ConferenceId)
@@ -91,6 +106,13 @@ namespace BuildATower
             var expense = economy?.GetLastRoomExpense(room) ?? 0;
             lines.Add($"Last contribution: +${income:N0} / -${expense:N0} = ${income - expense:N0}");
             return lines;
+        }
+
+        static string SignedMoney(int amount)
+        {
+            if (amount > 0) return $"+${amount:N0}";
+            if (amount < 0) return $"-${-amount:N0}";
+            return "$0";
         }
 
         static int ConstructionCost(RoomInstance room)
@@ -211,6 +233,57 @@ namespace BuildATower
             }
 
             return $"${dollars:N0}";
+        }
+    }
+
+    public static class ShopDemandFormat
+    {
+        public static string PoolLine(
+            ShopDemandFamily family,
+            ShopDemandTier tier,
+            ShopDemandPoolSnapshot pool)
+        {
+            var fulfilledNative = pool.Served + pool.SpilledOut;
+            var percent = pool.Generated <= 0
+                ? 0
+                : UnityEngine.Mathf.RoundToInt(fulfilledNative * 100f / pool.Generated);
+            return $"{family} / {tier}: {fulfilledNative}/{pool.Generated} served, " +
+                   $"spill +{pool.SpilledIn}/-{pool.SpilledOut}, " +
+                   $"unmet {pool.Unmet} ({percent}%)";
+        }
+
+        public static string Competition(
+            ShopDemandPoolSnapshot pool,
+            int openShopCountInPool)
+        {
+            if (pool.Generated > 0 &&
+                pool.Unmet * 5 >= pool.Generated)
+                return "Underserved";
+            if (openShopCountInPool > pool.Generated)
+                return "Oversupplied";
+            return "Balanced";
+        }
+
+        public static int CountOpenShopsInPool(
+            IReadOnlyList<RoomInstance> rooms,
+            RoomTypeSO selectedType)
+        {
+            if (rooms == null || !ShopVisitRules.IsShop(selectedType))
+                return 0;
+
+            var family = ShopDemandBalance.FamilyFor(selectedType);
+            var tier = ShopDemandBalance.TierForShop(selectedType);
+            var count = 0;
+            foreach (var room in rooms)
+            {
+                if (room?.Type == null || room.IsBroken || !ShopVisitRules.IsShop(room.Type))
+                    continue;
+                if (ShopDemandBalance.FamilyFor(room.Type) == family &&
+                    ShopDemandBalance.TierForShop(room.Type) == tier)
+                    count++;
+            }
+
+            return count;
         }
     }
 }

@@ -79,6 +79,35 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Selected_shop_lines_show_pool_upkeep_and_negative_net()
+        {
+            var shop = Room(100_000, IncomeModel.TrafficVariable, 50);
+            shop.buildFamily = BuildFamily.Shops;
+            shop.buildSubgroup = BuildSubgroup.Food;
+            shop.requiredStars = 0;
+            var instance = new RoomInstance(10, shop, Vector2Int.zero, Vector2Int.one);
+            instance.ArchiveShopDay(creditedRevenue: 10, upkeep: 25);
+            var demand = new ShopDemandSystem();
+            demand.BeginDay(new List<Agent>(), stars: 0, climateMultiplier: 1f);
+
+            var lines = RoomEconomyFormat.SelectedUnitLines(
+                instance,
+                null,
+                null,
+                demand,
+                openShopCountInPool: 1);
+
+            CollectionAssert.Contains(lines, "Demand: Food / Budget");
+            CollectionAssert.Contains(lines, "Visits yesterday: 0");
+            CollectionAssert.Contains(lines, "Yesterday revenue: $10");
+            CollectionAssert.Contains(lines, "Daily upkeep: $25");
+            CollectionAssert.Contains(lines, "Yesterday net: -$15");
+            CollectionAssert.Contains(lines, "Competition: Underserved");
+
+            Object.DestroyImmediate(shop);
+        }
+
+        [Test]
         public void Selected_condo_reports_sale_state()
         {
             var condo = Room(80_000, IncomeModel.UpfrontSale, 150_000);
