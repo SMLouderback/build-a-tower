@@ -261,6 +261,91 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Failed_commercial_path_does_not_consume_demand()
+        {
+            var (grid, shop, agents, agent, clock, demand) = SetupOfficeWithDemand();
+            PlaceAgentWorkingAtOffice(agent);
+            agent.Cell = new Vector2Int(5, 5);
+            agent.WorldPosition = new Vector2(5.5f, 5.5f);
+
+            Assert.IsFalse(agents.TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Working));
+            Assert.AreEqual(
+                1,
+                demand.Snapshot
+                    .Pool(ShopDemandFamily.Food, ShopDemandTier.Budget)
+                    .Remaining);
+            Assert.AreEqual(0, shop.ConcurrentVisitors);
+        }
+
+        [Test]
+        public void Successful_commercial_trip_consumes_exactly_one_unit()
+        {
+            var (grid, _, agents, agent, clock, demand) = SetupOfficeWithDemand();
+            PlaceAgentWorkingAtOffice(agent);
+
+            Assert.IsTrue(agents.TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Working));
+            Assert.AreEqual(
+                0,
+                demand.Snapshot
+                    .Pool(ShopDemandFamily.Food, ShopDemandTier.Budget)
+                    .Remaining);
+        }
+
+        [Test]
+        public void Family_choice_ignores_demand_without_an_eligible_candidate()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, 1), out _));
+            Assert.IsTrue(grid.TryPlace(Restaurant(), new Vector2Int(9, 1), out _));
+            Assert.IsTrue(grid.TryPlace(Retail(), new Vector2Int(10, 1), out var retail));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
+
+            var demand = new ShopDemandSystem();
+            demand.BeginDay(new List<Agent>(), stars: 0, climateMultiplier: 1f);
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router, shopDemand: demand);
+            agents.SyncHomes(grid);
+            var agent = agents.Agents.Single();
+            PlaceAgentWorkingAtOffice(agent);
+            agent.Wealth = WealthBand.Basic;
+            agent.DisposableRemaining = 50;
+            var clock = new GameClock(1f, 12 * 60);
+            agent.DisposableDayIndex = clock.DayIndex;
+
+            Assert.IsTrue(agents.TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Working));
+            Assert.AreSame(retail, agent.VisitTarget);
+            Assert.AreEqual(
+                2,
+                demand.Snapshot
+                    .Pool(ShopDemandFamily.Food, ShopDemandTier.Budget)
+                    .Remaining);
+            Assert.AreEqual(
+                0,
+                demand.Snapshot
+                    .Pool(ShopDemandFamily.Retail, ShopDemandTier.Budget)
+                    .Remaining);
+        }
+
+        [Test]
+        public void SyncHomes_assigns_wealth_when_reconciling_sold_condo()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Condo(), new Vector2Int(0, 1), out var condo));
+            condo.CondoSold = true;
+
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router);
+
+            agents.SyncHomes(grid);
+
+            Assert.AreNotEqual(WealthBand.Street, agents.Agents.Single().Wealth);
+        }
+
+        [Test]
         public void SyncHomes_releases_visitor_slot_when_removing_agent_with_visit_target()
         {
             var (grid, shop, agents, agent, _) = SetupOfficeWithShop(open: true);
@@ -384,6 +469,41 @@ namespace BuildATower.Tests
             var agent = agents.Agents.Single();
             var clock = new GameClock(1f, open ? 12 * 60 : 22 * 60);
             return (grid, shop, agents, agent, clock);
+        }
+
+        static (
+            TowerGrid grid,
+            RoomInstance shop,
+            AgentSystem agents,
+            Agent agent,
+            GameClock clock,
+            ShopDemandSystem demand) SetupOfficeWithDemand()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, 1), out _));
+            Assert.IsTrue(grid.TryPlace(FastFood(), new Vector2Int(9, 1), out var shop));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
+
+            var demand = new ShopDemandSystem();
+            demand.BeginDay(new List<Agent>(), stars: 0, climateMultiplier: 1f);
+            Assert.IsTrue(demand.TryConsume(shop.Type, WealthBand.Basic));
+            Assert.AreEqual(
+                1,
+                demand.Snapshot
+                    .Pool(ShopDemandFamily.Food, ShopDemandTier.Budget)
+                    .Remaining);
+
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router, shopDemand: demand);
+            agents.SyncHomes(grid);
+            var agent = agents.Agents.Single();
+            agent.Wealth = WealthBand.Basic;
+            agent.DisposableRemaining = 100;
+            var clock = new GameClock(1f, 12 * 60);
+            agent.DisposableDayIndex = clock.DayIndex;
+            return (grid, shop, agents, agent, clock, demand);
         }
 
         static (
@@ -570,6 +690,24 @@ namespace BuildATower.Tests
             so.hasActiveHours = true;
             so.activeHoursStart = 11 * 60;
             so.activeHoursEnd = 22 * 60;
+            return so;
+        }
+
+        static RoomTypeSO Retail()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "shop_retail";
+            so.category = RoomCategory.Commercial;
+            so.buildFamily = BuildFamily.Shops;
+            so.buildSubgroup = BuildSubgroup.Retail;
+            so.size = Vector2Int.one;
+            so.allowAboveGround = true;
+            so.incomeModel = IncomeModel.TrafficVariable;
+            so.baseIncome = 20;
+            so.maxOccupants = 4;
+            so.hasActiveHours = true;
+            so.activeHoursStart = 11 * 60;
+            so.activeHoursEnd = 21 * 60;
             return so;
         }
     }

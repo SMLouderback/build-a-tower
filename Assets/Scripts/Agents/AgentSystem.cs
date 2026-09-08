@@ -76,6 +76,7 @@ namespace BuildATower
         readonly TransitRouter _router;
         readonly ElevatorSystem _elevators;
         readonly StairCapacity _stairCapacity;
+        readonly ShopDemandSystem _shopDemand;
         readonly HashSet<int> _stairWaitIds = new();
         readonly System.Random _rng = new(42);
 
@@ -133,12 +134,14 @@ namespace BuildATower
         public AgentSystem(
             TransitRouter router,
             MarketClimate climate = null,
-            StairCapacity stairCapacity = null)
+            StairCapacity stairCapacity = null,
+            ShopDemandSystem shopDemand = null)
         {
             _router = router;
             _elevators = router.Elevators;
             _climate = climate;
             _stairCapacity = stairCapacity ?? new StairCapacity(StairCapacity.DefaultCap);
+            _shopDemand = shopDemand;
         }
 
         public void SetClimate(MarketClimate climate) => _climate = climate;
@@ -230,6 +233,7 @@ namespace BuildATower
                     var agent = new Agent(_nextId++, role, room, homeCell)
                     {
                         HomeSlot = existing,
+                        Wealth = AgentWealth.ResolveBand(role, room.Type, _rng),
                         Gender = RollGender(_rng)
                     };
                     ConfigureSchedule(agent);
@@ -868,6 +872,7 @@ namespace BuildATower
                         HomeSlot = existing,
                         Phase = AgentPhase.AtHome,
                         Visible = true,
+                        Wealth = AgentWealth.ResolveBand(role, room.Type, _rng),
                         Gender = RollGender(_rng)
                     };
                     _agents.Add(agent);
@@ -1766,10 +1771,15 @@ namespace BuildATower
             if (agent.CommercialTripDay == clock.DayIndex) return false;
 
             EnsureDisposable(agent, clock.DayIndex);
-            var shops = FindOpenShops(grid, clock.MinuteOfDay, agent.DisposableRemaining);
-            if (shops.Count == 0) return false;
-
-            var shop = shops[_rng.Next(shops.Count)];
+            var wealth = CommercialWealth(agent);
+            var shop = PickCommercialShop(
+                grid,
+                clock.MinuteOfDay,
+                agent.DisposableRemaining,
+                agent.Role,
+                wealth,
+                streetOrigin: false);
+            if (shop == null) return false;
             if (!shop.TryOccupyVisitorSlot()) return false;
 
             agent.CommercialTripDay = clock.DayIndex;
@@ -1778,11 +1788,21 @@ namespace BuildATower
             agent.ReturnCell = agent.Cell;
             agent.VisitDwellRemaining = ShopVisitRules.PickDwellMinutes(shop.Type, _rng);
             if (BeginTrip(agent, agent.Cell, ShopEntryCell(shop), AgentPhase.VisitingShop, grid))
+            {
+                _shopDemand?.TryConsume(shop.Type, wealth);
                 return true;
+            }
 
             CancelCommercialVisit(agent);
             return false;
         }
+
+        static WealthBand CommercialWealth(Agent agent) => agent.Role switch
+        {
+            AgentRole.StreetVisitor => WealthBand.Street,
+            AgentRole.EventVisitor => WealthBand.Mid,
+            _ => agent.Wealth
+        };
 
         static void CancelCommercialVisit(Agent agent)
         {
@@ -1834,6 +1854,51 @@ namespace BuildATower
             }
 
             return open;
+        }
+
+        RoomInstance PickCommercialShop(
+            TowerGrid grid,
+            int minuteOfDay,
+            int disposableRemaining,
+            AgentRole role,
+            WealthBand wealth,
+            bool streetOrigin)
+        {
+            var eligible = FindOpenShops(grid, minuteOfDay, disposableRemaining);
+            if (_shopDemand == null)
+            {
+                if (eligible.Count == 0) return null;
+                return streetOrigin
+                    ? ShopVisitRules.PickWeightedShop(eligible, _rng)
+                    : eligible[_rng.Next(eligible.Count)];
+            }
+
+            var food = new List<RoomInstance>();
+            var retail = new List<RoomInstance>();
+            foreach (var shop in eligible)
+            {
+                if (!_shopDemand.CanServe(shop.Type, wealth))
+                    continue;
+
+                var family = ShopDemandBalance.FamilyFor(shop.Type);
+                (family == ShopDemandFamily.Retail ? retail : food).Add(shop);
+            }
+
+            var foodAvailable = food.Count == 0
+                ? 0
+                : _shopDemand.AvailableFor(ShopDemandFamily.Food, wealth);
+            var retailAvailable = retail.Count == 0
+                ? 0
+                : _shopDemand.AvailableFor(ShopDemandFamily.Retail, wealth);
+            var familyChoice = ShopDemandBalance.PickFamily(
+                role,
+                foodAvailable,
+                retailAvailable,
+                _rng.NextDouble());
+            if (!familyChoice.HasValue) return null;
+
+            var candidates = familyChoice.Value == ShopDemandFamily.Food ? food : retail;
+            return ShopVisitRules.PickDemandWeightedShop(candidates, _rng, streetOrigin);
         }
 
         bool CanReachShopFromLobby(TowerGrid grid, RoomInstance shop) =>
@@ -1902,10 +1967,13 @@ namespace BuildATower
                 WealthBand.Street,
                 _climate?.SpendMultiplier ?? 1f,
                 _rng);
-            var shops = FindOpenShops(grid, clock.MinuteOfDay, remaining);
-            if (shops.Count == 0) return false;
-
-            var shop = ShopVisitRules.PickWeightedShop(shops, _rng);
+            var shop = PickCommercialShop(
+                grid,
+                clock.MinuteOfDay,
+                remaining,
+                AgentRole.StreetVisitor,
+                WealthBand.Street,
+                streetOrigin: true);
             if (shop == null) return false;
             if (!shop.TryOccupyVisitorSlot()) return false;
 
@@ -1919,13 +1987,17 @@ namespace BuildATower
                 VisitDwellRemaining = ShopVisitRules.PickDwellMinutes(shop.Type, _rng),
                 DisposableRemaining = remaining,
                 DisposableDayIndex = clock.DayIndex,
+                Wealth = WealthBand.Street,
                 Gender = RollGender(_rng)
             };
             _agents.Add(agent);
             var spawn = ArrivalSpawnCell(agent, grid, lobby);
             agent.ReturnCell = DepartureExitCell(agent, grid, shopCell.x);
             if (BeginTrip(agent, spawn, shopCell, AgentPhase.VisitingShop, grid))
+            {
+                _shopDemand?.TryConsume(shop.Type, WealthBand.Street);
                 return true;
+            }
 
             CancelCommercialVisit(agent);
             RemoveAgentAt(_agents.Count - 1);

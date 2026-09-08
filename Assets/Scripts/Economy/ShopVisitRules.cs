@@ -58,6 +58,40 @@ namespace BuildATower
             return shops[shops.Count - 1];
         }
 
+        public static float DemandWeight(RoomInstance shop, bool streetOrigin)
+        {
+            if (shop?.Type == null) return 0f;
+            var free = Mathf.Max(1, SlotCount(shop.Type) - shop.ConcurrentVisitors);
+            var fairness = 1f + 1f / (1f + Mathf.Max(0, shop.VisitsToday));
+            var origin = streetOrigin ? Mathf.Max(0.1f, shop.Type.streetVisitWeight) : 1f;
+            return free * fairness * origin;
+        }
+
+        public static RoomInstance PickDemandWeightedShop(
+            IReadOnlyList<RoomInstance> shops,
+            System.Random rng,
+            bool streetOrigin)
+        {
+            if (shops == null || shops.Count == 0) return null;
+            if (shops.Count == 1) return shops[0];
+
+            var total = 0f;
+            foreach (var shop in shops)
+                total += DemandWeight(shop, streetOrigin);
+
+            if (total <= 0f)
+                return shops[rng.Next(shops.Count)];
+
+            var roll = (float)(rng.NextDouble() * total);
+            foreach (var shop in shops)
+            {
+                roll -= DemandWeight(shop, streetOrigin);
+                if (roll < 0f) return shop;
+            }
+
+            return shops[shops.Count - 1];
+        }
+
         static (int lo, int hi) DwellRange(RoomTypeSO type)
         {
             if (type != null && !string.IsNullOrEmpty(type.id))

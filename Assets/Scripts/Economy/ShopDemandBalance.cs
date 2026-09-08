@@ -31,6 +31,26 @@ namespace BuildATower
             _ => ShopDemandTier.Budget
         };
 
+        public static ShopDemandFamily? PickFamily(
+            AgentRole role,
+            int foodAvailable,
+            int retailAvailable,
+            double roll)
+        {
+            if (foodAvailable <= 0 && retailAvailable <= 0) return null;
+            if (foodAvailable <= 0) return ShopDemandFamily.Retail;
+            if (retailAvailable <= 0) return ShopDemandFamily.Food;
+
+            var foodChance = role switch
+            {
+                AgentRole.OfficeWorker => 0.83,
+                AgentRole.CondoResident => 0.57,
+                AgentRole.HotelGuest => 0.74,
+                _ => foodAvailable / (double)(foodAvailable + retailAvailable)
+            };
+            return roll < foodChance ? ShopDemandFamily.Food : ShopDemandFamily.Retail;
+        }
+
         public static int DailyUpkeep(RoomTypeSO type) =>
             type == null ? 0 : (int)System.Math.Round(
                 System.Math.Max(0, type.baseIncome) * ShopUpkeepRate,

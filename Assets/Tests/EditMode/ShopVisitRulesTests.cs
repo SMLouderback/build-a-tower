@@ -162,6 +162,41 @@ namespace BuildATower.Tests
             Assert.That(giftsPicks, Is.InRange(3600, 4800));
         }
 
+        [Test]
+        public void Demand_pick_favors_free_slots_and_under_visited_shops()
+        {
+            var busy = Shop(slots: 4, reserved: 3, visitsToday: 4, streetWeight: 1f);
+            var open = Shop(slots: 4, reserved: 0, visitsToday: 0, streetWeight: 1f);
+
+            Assert.Greater(
+                ShopVisitRules.DemandWeight(open, streetOrigin: false),
+                ShopVisitRules.DemandWeight(busy, streetOrigin: false));
+        }
+
+        [Test]
+        public void Street_weight_is_ignored_for_internal_origin()
+        {
+            var shop = Shop(slots: 4, reserved: 0, visitsToday: 0, streetWeight: 2f);
+
+            Assert.AreEqual(
+                ShopVisitRules.DemandWeight(shop, false) * 2f,
+                ShopVisitRules.DemandWeight(shop, true),
+                0.001f);
+        }
+
+        [Test]
+        public void PickDemandWeightedShop_returns_only_candidate()
+        {
+            var shop = Shop(slots: 4, reserved: 0, visitsToday: 0, streetWeight: 1f);
+
+            Assert.AreSame(
+                shop,
+                ShopVisitRules.PickDemandWeightedShop(
+                    new List<RoomInstance> { shop },
+                    new System.Random(1),
+                    streetOrigin: false));
+        }
+
         static void AssertDwell(string id, int lo, int hi, System.Random rng)
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
@@ -192,6 +227,18 @@ namespace BuildATower.Tests
             so.allowAboveGround = true;
             so.maxOccupants = 4;
             return so;
+        }
+
+        static RoomInstance Shop(int slots, int reserved, int visitsToday, float streetWeight)
+        {
+            var type = ShopSo("shop_food_fast", streetWeight);
+            type.maxOccupants = slots;
+            var shop = new RoomInstance(1, type, Vector2Int.zero, type.size);
+            for (var i = 0; i < reserved; i++)
+                Assert.IsTrue(shop.TryOccupyVisitorSlot());
+            for (var i = 0; i < visitsToday; i++)
+                shop.RecordVisit();
+            return shop;
         }
     }
 }
