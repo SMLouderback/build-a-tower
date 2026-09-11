@@ -214,17 +214,8 @@ namespace BuildATower
                     if (!IsRamp(room) || room.IsBroken) continue;
                     var lo = room.Origin.y;
                     var hi = room.Origin.y + room.Size.y - 1;
-                    var touches = false;
-                    for (var y = lo; y <= hi; y++)
-                    {
-                        if (reachable.Contains(y))
-                        {
-                            touches = true;
-                            break;
-                        }
-                    }
+                    if (!RampTouchesReachable(grid, room, lo, hi, reachable)) continue;
 
-                    if (!touches) continue;
                     for (var y = lo; y <= hi; y++)
                     {
                         if (reachable.Add(y))
@@ -232,6 +223,40 @@ namespace BuildATower
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// A ramp joins the flood when it overlaps a reachable floor, or when an
+        /// exact-X vertically abutting ramp (3×1 stack) already reaches those floors.
+        /// </summary>
+        static bool RampTouchesReachable(
+            TowerGrid grid, RoomInstance ramp, int lo, int hi, HashSet<int> reachable)
+        {
+            for (var y = lo; y <= hi; y++)
+            {
+                if (reachable.Contains(y))
+                    return true;
+            }
+
+            foreach (var other in grid.Rooms)
+            {
+                if (!IsRamp(other) || other.IsBroken) continue;
+                if (ReferenceEquals(other, ramp)) continue;
+                if (other.Origin.x != ramp.Origin.x || other.Size.x != ramp.Size.x) continue;
+
+                var oLo = other.Origin.y;
+                var oHi = other.Origin.y + other.Size.y - 1;
+                // Exact-X stack: floors abut (no gap), same column span.
+                if (oHi + 1 != lo && hi + 1 != oLo) continue;
+
+                for (var y = oLo; y <= oHi; y++)
+                {
+                    if (reachable.Contains(y))
+                        return true;
+                }
+            }
+
+            return false;
         }
 
         static bool TouchesLobbyReachingRamp(TowerGrid grid, RoomInstance parking)
