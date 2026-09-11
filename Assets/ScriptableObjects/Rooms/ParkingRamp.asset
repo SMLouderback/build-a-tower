@@ -15,7 +15,7 @@ MonoBehaviour:
   id: parking_ramp
   displayName: Parking Ramp
   category: 5
-  size: {x: 3, y: 2}
+  size: {x: 3, y: 1}
   buildCost: 36000
   placeholderColor: {r: 0.42, g: 0.4, b: 0.32, a: 1}
   incomeModel: 0

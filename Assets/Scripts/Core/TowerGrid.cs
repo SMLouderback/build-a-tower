@@ -679,7 +679,26 @@ namespace BuildATower
                 if (!HasSupportForStairs(cell, footprint)) return false;
             }
 
+            // B1 attaches to lobby; deeper floors need an exact same-X ramp on y+1.
+            if (!LobbyAttach(origin) && !ExactRampAbove(origin, type.size.x))
+                return false;
+
             return true;
+        }
+
+        static bool LobbyAttach(Vector2Int origin) => origin.y == -1;
+
+        bool ExactRampAbove(Vector2Int origin, int width)
+        {
+            var aboveY = origin.y + 1;
+            foreach (var room in _rooms)
+            {
+                if (!IsParkingRamp(room) || room.IsBroken) continue;
+                if (room.Origin.y != aboveY) continue;
+                if (room.Origin.x == origin.x && room.Size.x == width) return true;
+            }
+
+            return false;
         }
 
         RoomInstance PlaceParkingRamp(

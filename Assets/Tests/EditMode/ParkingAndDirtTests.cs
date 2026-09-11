@@ -76,6 +76,8 @@ namespace BuildATower.Tests
             Assert.IsFalse(ParkingStalls.IsParkingAccessible(grid, deep));
             Assert.AreEqual(12, ParkingStalls.TotalStalls(grid)); // only two B1 lots
 
+            // Stack-to-lobby: B2 requires exact-X ramp on B1 first.
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -1), out _));
             Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -2), out _));
             // Ramp at x0–2 does not touch parking at x10–15 — still inaccessible.
             Assert.IsTrue(ParkingStalls.IsParkingFloorAccessible(grid, -2));
@@ -93,7 +95,8 @@ namespace BuildATower.Tests
             Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(9, -1), out _));
             Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(16, -1), out _));
 
-            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -2), out _)); // x0–2, floors -2/-1
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -1), out _)); // lobby-attach B1
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -2), out _)); // exact-X stack
             Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(3, -2), out var nearRamp)); // touches ramp
             Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(9, -2), out var mid)); // touches nearRamp
             Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(16, -2), out var gap)); // gap at x15
@@ -117,10 +120,11 @@ namespace BuildATower.Tests
 
             Assert.AreEqual(6, ParkingStalls.TotalStalls(grid)); // B1 only
 
-            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -2), out _)); // -2..-1, touches x3 parking
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -1), out _)); // lobby-attach
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -2), out _)); // exact-X stack
             Assert.AreEqual(12, ParkingStalls.TotalStalls(grid)); // B1+B2
 
-            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -3), out _)); // -3..-2, touches B3 parking
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -3), out _)); // exact-X continue
             Assert.AreEqual(18, ParkingStalls.TotalStalls(grid)); // B1+B2+B3
         }
 
@@ -132,8 +136,12 @@ namespace BuildATower.Tests
             Assert.IsTrue(grid.CanPlace(Ramp(), new Vector2Int(2, -1)));
             Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(2, -1), out var ramp));
             Assert.IsTrue(ramp.Type.isParkingRamp);
+            Assert.AreEqual(new Vector2Int(3, 1), ramp.Size);
+            // B1 lobby-attach: ramp occupies basement only; Floor G stays lobby.
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(2, -1), out var atB1));
+            Assert.AreSame(ramp, atB1);
             Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(2, 0), out var atLobby));
-            Assert.AreSame(ramp, atLobby);
+            Assert.IsTrue(atLobby.Type.isLobby);
         }
 
         [Test]
@@ -143,8 +151,10 @@ namespace BuildATower.Tests
             var lobbyType = Lobby();
             Assert.IsTrue(grid.TryPlaceLobby(lobbyType, 0, 20, 0, out _));
             Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(2, -1), out var ramp));
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(2, -1), out var atB1));
+            Assert.AreSame(ramp, atB1);
             Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(2, 0), out var atLobby));
-            Assert.AreSame(ramp, atLobby);
+            Assert.IsTrue(atLobby.Type.isLobby);
 
             Assert.IsTrue(grid.CanExtendLobby(-4, 24),
                 "Lobby must extend past a parking-ramp entrance on Floor G.");
@@ -152,8 +162,10 @@ namespace BuildATower.Tests
             Assert.AreEqual(8, added);
             Assert.AreEqual(-4, grid.MinX);
             Assert.AreEqual(24, grid.MaxX);
-            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(2, 0), out var stillRamp));
-            Assert.AreSame(ramp, stillRamp, "Ramp must remain the Floor G occupant after extend.");
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(2, -1), out var stillRamp));
+            Assert.AreSame(ramp, stillRamp, "Ramp must remain on B1 after lobby extend.");
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(2, 0), out var stillLobby));
+            Assert.IsTrue(stillLobby.Type.isLobby);
             Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(-4, 0), out var left));
             Assert.IsTrue(left.Type.isLobby);
         }
@@ -169,6 +181,7 @@ namespace BuildATower.Tests
             Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(15, -1), out _));
             Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(21, -1), out _));
 
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -1), out _));
             Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -2), out _));
             Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(3, -2), out var a));
             Assert.IsTrue(grid.TryPlace(Parking(), new Vector2Int(9, -2), out var b));
@@ -236,7 +249,7 @@ namespace BuildATower.Tests
             so.id = ParkingStalls.RampId;
             so.displayName = "Parking Ramp";
             so.isParkingRamp = true;
-            so.size = new Vector2Int(3, 2);
+            so.size = new Vector2Int(3, 1);
             so.allowBasement = true;
             so.allowAboveGround = false;
             so.buildFamily = BuildFamily.Transit;
