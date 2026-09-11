@@ -283,15 +283,14 @@ namespace BuildATower
             var footprint = BuildSkyLobbyFootprint(newMinX, newMaxX, floor);
             foreach (var cell in footprint)
             {
-                if (!_cells.TryGetValue(cell, out var occupant)) continue;
-                if (IsLobbyOverlappingTransit(occupant)) continue;
-                if (IsSkyLobby(occupant)) continue;
-                return false;
-            }
+                if (_cells.TryGetValue(cell, out var occupant))
+                {
+                    if (IsLobbyOverlappingTransit(occupant)) continue;
+                    if (IsSkyLobby(occupant)) continue;
+                    if (IsScaffolding(occupant)) continue;
+                    return false;
+                }
 
-            foreach (var cell in footprint)
-            {
-                if (_cells.ContainsKey(cell)) continue;
                 if (!HasSupportFromAdjacentLevel(cell, footprint)) return false;
             }
 
@@ -315,6 +314,7 @@ namespace BuildATower
             addedCells = (newMaxX - newMinX + 1) - oldSkyLobby.Size.x;
             if (addedCells <= 0) return false;
 
+            var footprint = BuildSkyLobbyFootprint(newMinX, newMaxX, floor);
             var transitOnFloor = new List<RoomInstance>();
             foreach (var existing in _rooms)
             {
@@ -322,9 +322,19 @@ namespace BuildATower
                 foreach (var c in existing.OccupiedCells())
                 {
                     if (c.y != floor) continue;
+                    if (!footprint.Contains(c)) continue;
                     if (!transitOnFloor.Contains(existing))
                         transitOnFloor.Add(existing);
                 }
+            }
+
+            var seenScaffold = new HashSet<RoomInstance>();
+            foreach (var cell in footprint)
+            {
+                if (!_cells.TryGetValue(cell, out var occupant)) continue;
+                if (!IsScaffolding(occupant)) continue;
+                if (!seenScaffold.Add(occupant)) continue;
+                RemoveRoom(occupant);
             }
 
             foreach (var c in oldSkyLobby.OccupiedCells())
@@ -340,10 +350,7 @@ namespace BuildATower
                 skyLobbyType,
                 new Vector2Int(newMinX, floor),
                 new Vector2Int(newMaxX - newMinX + 1, 1));
-            RegisterSkyLobby(
-                skyLobby,
-                BuildSkyLobbyFootprint(newMinX, newMaxX, floor),
-                transitOnFloor);
+            RegisterSkyLobby(skyLobby, footprint, transitOnFloor);
             return true;
         }
 

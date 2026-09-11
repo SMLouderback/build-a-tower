@@ -100,5 +100,49 @@ namespace BuildATower.Tests
             Assert.AreEqual(3, added);
             Assert.AreEqual(7, extended.Size.x);
         }
+
+        [Test]
+        public void CanExtendSkyLobby_allows_scaffolding_like_place()
+        {
+            var grid = new TowerGrid();
+            PlaceGroundLobby(grid);
+            BuildSupportBand(grid, 0, 8, 29);
+            Assert.IsTrue(grid.TryPlaceSkyLobby(SkyLobby(), 2, 5, 30, out _));
+            Assert.IsTrue(grid.TryPlaceScaffold(new Vector2Int(6, 30), out _));
+            Assert.IsTrue(grid.TryPlaceScaffold(new Vector2Int(7, 30), out _));
+            Assert.IsTrue(grid.CanExtendSkyLobby(30, 2, 7));
+        }
+
+        [Test]
+        public void TryExtendSkyLobby_clears_scaffolding_on_new_span()
+        {
+            var grid = new TowerGrid();
+            PlaceGroundLobby(grid);
+            BuildSupportBand(grid, 0, 8, 29);
+            Assert.IsTrue(grid.TryPlaceSkyLobby(SkyLobby(), 2, 5, 30, out _));
+            Assert.IsTrue(grid.TryPlaceScaffold(new Vector2Int(6, 30), out var stud));
+            Assert.IsTrue(grid.TryExtendSkyLobby(SkyLobby(), 30, 2, 7, out var extended, out var added));
+            Assert.AreEqual(2, added);
+            Assert.AreEqual(6, extended.Size.x);
+            Assert.IsFalse(grid.Rooms.Contains(stud));
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(6, 30), out var at6));
+            Assert.IsTrue(at6.Type != null && at6.Type.isSkyLobby);
+        }
+
+        [Test]
+        public void CanExtendSkyLobby_still_rejects_real_rooms()
+        {
+            var grid = new TowerGrid();
+            PlaceGroundLobby(grid);
+            BuildSupportBand(grid, 0, 8, 29);
+            Assert.IsTrue(grid.TryPlaceSkyLobby(SkyLobby(), 2, 5, 30, out _));
+
+            var office = ScriptableObject.CreateInstance<RoomTypeSO>();
+            office.id = "office";
+            office.allowAboveGround = true;
+            office.size = Vector2Int.one;
+            Assert.IsTrue(grid.TryPlace(office, new Vector2Int(6, 30), out _, out _));
+            Assert.IsFalse(grid.CanExtendSkyLobby(30, 2, 7));
+        }
     }
 }
