@@ -1,6 +1,6 @@
 # Scaffolding & Parking Ramp Structure Art Design
 
-**Status:** Approved  
+**Status:** Implemented  
 **Date:** 2026-09-11  
 **Supersedes:** earlier draft of this doc that used 3×2 stairs-style multi-floor cutaways.
 
@@ -82,6 +82,7 @@ Do **not** map ramp/scaffold into `RoomDollhouseArt`.
 - Placing ramps above lobby
 - Changing underground parking lot / valet dollhouse art
 - Soft X-overlap stacking (only exact span)
+- **Follow-up (art):** revisit `parking_ramp_3x1_c12` right-side perspective if stacked B1/B2 reads misaligned in Play
 
 ## 6. Testing
 
