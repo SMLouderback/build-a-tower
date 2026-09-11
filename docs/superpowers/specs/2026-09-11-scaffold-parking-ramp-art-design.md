@@ -1,79 +1,98 @@
 # Scaffolding & Parking Ramp Structure Art Design
 
 **Status:** Approved  
-**Date:** 2026-09-11
+**Date:** 2026-09-11  
+**Supersedes:** earlier draft of this doc that used 3×2 stairs-style multi-floor cutaways.
 
 ## 1. Goal
 
-Replace flat procedural tiles for scaffolding and parking ramps with structure cutaway art that matches the rest of the building.
+- **Parking ramp:** SimTower-style **3×1** room-like piece with per-floor art that stacks vertically into a continuous ramp to lobby.
+- **Scaffolding:** repeating **1×1** wood stud/plank structure tiles.
+- One look for all star tiers (no 01/03/05 variants).
 
-- **Parking ramps:** stairs-style transparent 3×2 cutaway overlays so stacked flights layer correctly.
-- **Scaffolding:** repeating 1×1 wood stud/plank tiles for temporary structure fill.
-- **One look** for all star tiers (no 01/03/05 variants).
-- Visuals only — placement, cost, and accessibility rules unchanged.
+## 2. Parking ramp — footprint & placement
 
-## 2. Why not dollhouse
+### 2.1 Size
 
-`RoomDollhouseArt` paints opaque whole-room overlays. Stacked parking ramps need transparent corners so flights compose like stairs. Both assets therefore use the **structure cutaway** path (`StructureCutawayArt` + `TilemapTowerView` overlays/tiles), not dollhouse.
+- Change `ParkingRamp` from **3×2** to **3×1**.
+- One flight occupies a single basement floor strip.
 
-The existing solid `Assets/Resources/Art/Dollhouse/parking_ramp_3x2.png` is **not** wired for this feature (keep on disk unused, or archive later).
+### 2.2 Placement rules (`CanPlaceParkingRamp`)
 
-## 3. Architecture
+Treated as a normal room occupant (owns cells). May clear scaffolding. Must not overlap elevators.
 
-### 3.1 Art loaders — `StructureCutawayArt`
+A candidate footprint is valid only if **either**:
 
-- `TryRampSprite(out Sprite)` — load/build a single 3×2 transparent cutaway (keyed magenta/alpha), bottom-left pivot, PPU sized so the sprite spans the 3×2 footprint (same approach as stairs).
-- `TryScaffoldSprite(out Sprite)` — load/build a single 1×1 wood stud/plank sprite for structure-layer paint.
+1. **Lobby attach:** ramp origin floor is **B1** (`y == -1`), so the floor above is lobby (Floor G / `LobbyFloor`), **or**
+2. **Exact stack:** a parking ramp already exists on floor `y + 1` with the **same `Origin.x`** and **width 3**.
 
-Assets under `Resources/Art/Structure/` (names finalized in the plan, e.g. `parking_ramp_cutaway`, `scaffolding_stud`).
+Invalid examples:
 
-### 3.2 Paint — `TilemapTowerView`
+- B2/B3 with no aligned ramp above
+- Ramp whose X span does not exactly match the ramp above
+- Any floor above lobby
 
-**Ramps (mirror stairs):**
+### 2.3 Stack chain
 
-1. When ramp sprite exists, do **not** paint opaque rooms-layer tiles for that footprint.
-2. One `SpriteRenderer` overlay per ramp `InstanceId` (parent e.g. `RampOverlays`).
-3. Sorting order in the stairs band (~20); if stacked overlays Z-fight, bias by `Origin.y`.
-4. Scale/position to room origin and size so the upper tread meets the floor above, matching stairs fit conventions.
-5. Refresh overlays on place, demolish, and existing structure refresh hooks (extend stairs refresh into a shared transit overlay refresh if cleaner).
+Example: place 3×1 on B1, then another 3×1 on B2 with the same X span → continuous vertical connection visually and for accessibility up to lobby.
 
-**Scaffolding:**
+Demolishing a mid-chain ramp leaves deeper ramps **orphaned** until rebuilt; placement/ghost must reject new orphans the same way.
 
-1. When scaffold sprite exists, paint structure-layer cells with that sprite instead of `TowerLookPalette.Scaffold` procedural color.
-2. Keep scaffolding on the structure map ownership path (`UsesStructureMap`).
+### 2.4 Accessibility
+
+Update `ParkingStalls` / ramp floor expansion so 3×1 vertical chains (exact-X stacks reaching B1/lobby) remain the path that makes basement parking reachable.
+
+## 3. Art
+
+### 3.1 Parking ramp (3×1)
+
+SimTower reference: curved drive band + landing/pillar on one floor height; hazard stripes; reads as two-lane circulation; stacks floor-by-floor without spanning two floors.
+
+- Resource under `Resources/Art/Structure/` (e.g. `parking_ramp_3x1`).
+- Paint as a per-instance sprite overlay (or structure sprite path) sized to 3×1 — **not** the old solid `Dollhouse/parking_ramp_3x2.png`.
+- Magenta/transparent unused areas optional if they help stacking readability.
+
+### 3.2 Scaffolding (1×1)
+
+Light timber posts + planks on keyed background; tiles in bands on the structure layer instead of flat tan procedural color.
+
+- Resource e.g. `scaffolding_stud` under `Resources/Art/Structure/`.
 
 ### 3.3 Fallbacks
 
-If art is missing, keep today’s procedural colored tiles so builds never break.
+Missing art → today’s procedural tiles.
 
-## 4. Art content
+## 4. Architecture
 
-| Asset | Size | Look |
-|-------|------|------|
-| Parking ramp cutaway | 3×2 | Industrial concrete garage ramp, optional yellow chevrons/hazard edges; **transparent non-run corners** for stacking |
-| Scaffolding stud | 1×1 | Light timber posts + planks on keyed background; tiles cleanly in bands |
+| Piece | Change |
+|-------|--------|
+| `RoomTypeSO` / `ParkingRamp.asset` | `size = (3, 1)` |
+| `TowerGrid.CanPlaceParkingRamp` | Lobby-attach **or** exact-X ramp above |
+| `StructureCutawayArt` | `TryRampSprite` (3×1), `TryScaffoldSprite` (1×1) |
+| `TilemapTowerView` | Ramp sprite paint; scaffold structure sprite paint; clear overlays on demolish |
+| Help text / HUD | Describe 3×1 stack-to-lobby rule |
+| Tests | Placement chain, accessibility, art loaders |
 
-Generation: AI contact sheet → chroma-key crop / meta, same pipeline as other structure art.
+Do **not** map ramp/scaffold into `RoomDollhouseArt`.
 
 ## 5. Out of scope
 
-- Star-tier variants for ramp or scaffold
-- Cars driving on ramps / ramp agent visuals
-- Changing ramp stack or role-conflict rules
-- Scaffold “finished corridor kit”
-- Re-arting underground parking lots or valet (already dollhouse)
-- Wiring the old solid dollhouse ramp PNG
+- Star-tier art variants
+- Cars driving on ramps
+- Placing ramps above lobby
+- Changing underground parking lot / valet dollhouse art
+- Soft X-overlap stacking (only exact span)
 
 ## 6. Testing
 
-- EditMode: ramp and scaffold structure loaders return non-null sprites when assets exist.
-- EditMode: ramp paint path uses overlay when sprite exists (no opaque rooms tiles for that room).
-- EditMode: scaffold paint path uses structure sprite when present.
-- Play Mode / visual: two stacked ramp flights compose without fully occluding each other; scaffold bands read as wood fill.
+- B1 places; B2 exact-X under B1 places; B2 without B1 fails; misaligned X fails.
+- Accessibility: lot on B2 reachable only with continuous ramp stack to lobby.
+- Art loaders return sprites when assets exist.
+- Play smoke: stacked B1/B2 looks like one continuous ramp; scaffold bands read as wood.
 
 ## 7. Success criteria
 
-1. Parking ramps show cutaway art and stacked flights layer like stairs.
-2. Scaffolding shows wood stud tiles instead of flat tan squares.
-3. Missing art falls back safely to procedural tiles.
-4. Placement and parking accessibility behavior unchanged.
+1. Parking ramp is 3×1 and only places on lobby-attach B1 or exact-X under another ramp.
+2. Stacked ramps look and act like a SimTower garage shaft to lobby.
+3. Scaffolding shows wood stud tiles.
+4. Focused EditMode tests for placement + loaders pass.
