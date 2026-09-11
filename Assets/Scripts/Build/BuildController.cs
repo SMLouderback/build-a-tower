@@ -1431,6 +1431,7 @@ namespace BuildATower
         {
             if (view == null || Grid == null) return;
             view.RefreshStairsOverlays(Grid.Rooms);
+            view.RefreshRampOverlays(Grid.Rooms);
             foreach (var room in Grid.Rooms)
             {
                 if (room?.Type == null) continue;

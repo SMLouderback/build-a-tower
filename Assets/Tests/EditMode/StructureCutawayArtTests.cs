@@ -106,5 +106,21 @@ namespace BuildATower.Tests
                 Assert.IsNotNull(tile);
             });
         }
+
+        [Test]
+        public void TryRampSprite_ReturnsSpriteWhenArtPresent()
+        {
+            StructureCutawayArt.ResetCache();
+            Assert.IsTrue(StructureCutawayArt.TryRampSprite(out var sprite));
+            Assert.IsNotNull(sprite);
+        }
+
+        [Test]
+        public void TryScaffoldSprite_ReturnsSpriteWhenArtPresent()
+        {
+            StructureCutawayArt.ResetCache();
+            Assert.IsTrue(StructureCutawayArt.TryScaffoldSprite(out var sprite));
+            Assert.IsNotNull(sprite);
+        }
     }
 }

@@ -69,6 +69,9 @@ namespace BuildATower
         static Tile _utilityElevatorBottom;
         static Tile _elevatorOccluder;
         static Sprite _stairsSprite;
+        static Sprite _rampSprite;
+        static Sprite _scaffoldSprite;
+        static Tile _scaffoldTile;
         static Color[] _lobbyShell;
         static int _stairsStarTier = -1;
         static int _lobbyStar = -1;
@@ -238,6 +241,27 @@ namespace BuildATower
             return sprite != null;
         }
 
+        public static bool TryRampSprite(out Sprite sprite)
+        {
+            EnsureLoaded();
+            sprite = _rampSprite;
+            return sprite != null;
+        }
+
+        public static bool TryScaffoldSprite(out Sprite sprite)
+        {
+            EnsureLoaded();
+            sprite = _scaffoldSprite;
+            return sprite != null;
+        }
+
+        public static bool TryScaffoldTile(out Tile tile)
+        {
+            EnsureLoaded();
+            tile = _scaffoldTile;
+            return tile != null;
+        }
+
         public static void ResetCache()
         {
             _attempted = false;
@@ -251,6 +275,9 @@ namespace BuildATower
             _utilityElevatorBottom = null;
             _elevatorOccluder = null;
             _stairsSprite = null;
+            _rampSprite = null;
+            _scaffoldSprite = null;
+            _scaffoldTile = null;
             _lobbyShell = null;
             _stairsStarTier = -1;
             _lobbyStar = -1;
@@ -314,6 +341,8 @@ namespace BuildATower
             _utilityElevatorBottom = MakeElevatorTile("utility_elevator_bottom", PaintUtilityElevatorBottom, true);
             _elevatorOccluder = MakeElevatorTile("elevator_occluder", PaintSolidShaftOccluder, true);
             _stairsSprite = LoadOrBuildStairs();
+            _rampSprite = LoadRampSprite();
+            LoadScaffoldArt();
         }
 
         /// <summary>
@@ -456,7 +485,7 @@ namespace BuildATower
                 return null;
 
             var resized = ResizeToCell(decoded);
-            Object.Destroy(decoded);
+            DestroyDecoded(decoded);
             return resized;
         }
 
@@ -486,7 +515,7 @@ namespace BuildATower
                 return null;
 
             var resized = ResizeLobbyToCell(decoded);
-            Object.Destroy(decoded);
+            DestroyDecoded(decoded);
             return resized;
         }
 
@@ -516,7 +545,7 @@ namespace BuildATower
                 return null;
 
             var resized = ResizeLobbyToPan(decoded);
-            Object.Destroy(decoded);
+            DestroyDecoded(decoded);
             return resized;
         }
 
@@ -1096,6 +1125,152 @@ namespace BuildATower
                 ppu);
         }
 
+        static Sprite LoadRampSprite()
+        {
+            if (!TryLoadKeyedPng("parking_ramp_3x1", out var px, out var w, out var h))
+                return null;
+
+            FindOpaqueContent(px, w, h, out var minX, out var minY, out var maxX, out var maxY);
+            var cw = Mathf.Max(1, maxX - minX + 1);
+            var ch = Mathf.Max(1, maxY - minY + 1);
+            var cropped = CropPixels(px, w, minX, minY, cw, ch);
+            var tex = new Texture2D(cw, ch, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                name = "parking_ramp_3x1"
+            };
+            tex.SetPixels(cropped);
+            tex.Apply();
+            var ppu = Mathf.Max(cw / 3f, ch / 1f);
+            return Sprite.Create(
+                tex,
+                new Rect(0, 0, cw, ch),
+                new Vector2(0f, 0f),
+                ppu);
+        }
+
+        static void LoadScaffoldArt()
+        {
+            if (!TryLoadKeyedPng("scaffolding_stud", out var px, out var w, out var h))
+                return;
+
+            FindOpaqueContent(px, w, h, out var minX, out var minY, out var maxX, out var maxY);
+            var cw = Mathf.Max(1, maxX - minX + 1);
+            var ch = Mathf.Max(1, maxY - minY + 1);
+            var cropped = CropPixels(px, w, minX, minY, cw, ch);
+            var cell = FitIntoCell(cropped, cw, ch);
+            _scaffoldTile = MakeTile("scaffolding_stud", cell, FilterMode.Point);
+            _scaffoldSprite = _scaffoldTile != null ? _scaffoldTile.sprite : null;
+        }
+
+        static bool TryLoadKeyedPng(string fileName, out Color[] px, out int w, out int h)
+        {
+            px = null;
+            w = 0;
+            h = 0;
+            var bytesAsset = Resources.Load<TextAsset>(ResourcesRoot + fileName);
+            byte[] png = bytesAsset != null ? bytesAsset.bytes : null;
+            if (png == null)
+            {
+                var tex = Resources.Load<Texture2D>(ResourcesRoot + fileName);
+                if (tex == null) return false;
+                try { png = tex.EncodeToPNG(); }
+                catch (UnityException) { return false; }
+            }
+
+            if (png == null || png.Length < 32) return false;
+            var decoded = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            if (!decoded.LoadImage(png, false)) return false;
+
+            w = decoded.width;
+            h = decoded.height;
+            px = decoded.GetPixels();
+            DestroyDecoded(decoded);
+            KeyHotMagenta(px);
+            return true;
+        }
+
+        static void DestroyDecoded(Object obj)
+        {
+            if (obj == null) return;
+            if (Application.isPlaying)
+                Object.Destroy(obj);
+            else
+                Object.DestroyImmediate(obj);
+        }
+
+        static void KeyHotMagenta(Color[] px)
+        {
+            for (var i = 0; i < px.Length; i++)
+            {
+                if (IsHotMagenta(px[i]))
+                    px[i] = Color.clear;
+            }
+        }
+
+        static bool IsHotMagenta(Color c)
+        {
+            if (c.a < 0.08f) return true;
+            return c.r > 0.75f && c.b > 0.75f && c.g < 0.35f &&
+                   (c.r - c.g) > 0.40f && (c.b - c.g) > 0.40f;
+        }
+
+        static void FindOpaqueContent(
+            Color[] px, int w, int h,
+            out int minX, out int minY, out int maxX, out int maxY)
+        {
+            minX = w;
+            minY = h;
+            maxX = -1;
+            maxY = -1;
+            for (var y = 0; y < h; y++)
+            for (var x = 0; x < w; x++)
+            {
+                if (px[y * w + x].a < 0.08f) continue;
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            }
+
+            if (maxX < minX)
+            {
+                minX = 0;
+                minY = 0;
+                maxX = w - 1;
+                maxY = h - 1;
+            }
+        }
+
+        static Color[] CropPixels(Color[] px, int srcW, int minX, int minY, int cw, int ch)
+        {
+            var cropped = new Color[cw * ch];
+            for (var y = 0; y < ch; y++)
+            for (var x = 0; x < cw; x++)
+                cropped[y * cw + x] = px[(minY + y) * srcW + (minX + x)];
+            return cropped;
+        }
+
+        static Color[] FitIntoCell(Color[] src, int sw, int sh)
+        {
+            var dest = new Color[CellPixels * CellPixels];
+            var scale = Mathf.Min(CellPixels / (float)sw, CellPixels / (float)sh);
+            var dw = Mathf.Max(1, Mathf.RoundToInt(sw * scale));
+            var dh = Mathf.Max(1, Mathf.RoundToInt(sh * scale));
+            var ox = (CellPixels - dw) / 2;
+            var oy = (CellPixels - dh) / 2;
+            for (var y = 0; y < dh; y++)
+            for (var x = 0; x < dw; x++)
+            {
+                var sx = Mathf.Clamp((int)((x + 0.5f) / dw * sw), 0, sw - 1);
+                var sy = Mathf.Clamp((int)((y + 0.5f) / dh * sh), 0, sh - 1);
+                dest[(oy + y) * CellPixels + (ox + x)] = src[sy * sw + sx];
+            }
+
+            return dest;
+        }
+
         static void FindStairsContent(
             Color[] px, out int minX, out int minY, out int maxX, out int maxY)
         {
@@ -1181,7 +1356,7 @@ namespace BuildATower
                 px[y * StairsPixels + x] = c;
             }
 
-            Object.Destroy(decoded);
+            DestroyDecoded(decoded);
             return px;
         }
 

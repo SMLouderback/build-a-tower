@@ -29,6 +29,7 @@ namespace BuildATower
         readonly Dictionary<string, Tile> _dirtArtTiles = new();
         Tile _dirtColorFallback;
         readonly Dictionary<int, SpriteRenderer> _stairsOverlays = new();
+        readonly Dictionary<int, SpriteRenderer> _rampOverlays = new();
         readonly Dictionary<int, SpriteRenderer> _dollhouseOverlays = new();
         readonly Dictionary<int, SpriteRenderer> _condemnedOverlays = new();
         readonly List<Vector3Int> _ghostCells = new();
@@ -38,6 +39,7 @@ namespace BuildATower
         readonly List<Vector3Int> _shellCells = new();
         Tile _buildingShellTile;
         Transform _stairsOverlayRoot;
+        Transform _rampOverlayRoot;
         Transform _dollhouseOverlayRoot;
         Transform _condemnedOverlayRoot;
         int _lastLightingBucket = int.MinValue;
@@ -134,6 +136,12 @@ namespace BuildATower
                     return;
                 }
 
+                if (room.Type.isParkingRamp)
+                {
+                    PaintRampRoom(room, occupied, color);
+                    return;
+                }
+
                 if (room.Type.isElevatorShaft && TryPaintElevatorArt(room, occupied))
                     return;
 
@@ -180,7 +188,7 @@ namespace BuildATower
             foreach (var cell in occupied)
             {
                 if (skipCell != null && skipCell(cell)) continue;
-                var tile = GetTile(color, EdgeMaskFor(cell, occupied));
+                var tile = ResolvePaintTile(room, cell, occupied, color);
                 var tc = ToTileCell(cell);
                 map.SetTile(tc, tile);
                 map.SetColor(tc, Color.white);
@@ -203,6 +211,12 @@ namespace BuildATower
                 if (room.Type.isStairs)
                 {
                     PaintStairsRoom(room, occupied, color);
+                    return;
+                }
+
+                if (room.Type.isParkingRamp)
+                {
+                    PaintRampRoom(room, occupied, color);
                     return;
                 }
 
@@ -284,7 +298,7 @@ namespace BuildATower
 
             var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
             var fallbackTc = ToTileCell(cell);
-            map.SetTile(fallbackTc, GetTile(color, EdgeMaskFor(cell, occupied)));
+            map.SetTile(fallbackTc, ResolvePaintTile(room, cell, occupied, color));
             map.SetColor(fallbackTc, Color.white);
             if (OfficeCutawayArt.IsOffice(room.Type))
                 SyncOfficeCondemnedOverlay(room);
@@ -322,6 +336,14 @@ namespace BuildATower
                         roomsTilemap.SetTile(ToTileCell(cell), null);
                 }
 
+                return;
+            }
+
+            if (room?.Type != null && room.Type.isParkingRamp)
+            {
+                ClearRampOverlay(room.InstanceId);
+                foreach (var cell in room.OccupiedCells())
+                    roomsTilemap.SetTile(ToTileCell(cell), null);
                 return;
             }
 
@@ -778,6 +800,30 @@ namespace BuildATower
             }
         }
 
+        void PaintRampRoom(RoomInstance room, HashSet<Vector2Int> occupied, Color paletteColor)
+        {
+            if (StructureCutawayArt.TryRampSprite(out var sprite))
+            {
+                // Overlay-only: drop leftover procedural transit tiles so keyed
+                // magenta shows dirt/sky instead of an opaque rooms-layer fill.
+                if (roomsTilemap != null)
+                {
+                    foreach (var cell in occupied)
+                        roomsTilemap.SetTile(ToTileCell(cell), null);
+                }
+
+                SetRampOverlay(room, sprite, Color.white);
+                return;
+            }
+
+            ClearRampOverlay(room.InstanceId);
+            foreach (var cell in occupied)
+            {
+                var tile = GetTile(paletteColor, EdgeMaskFor(cell, occupied));
+                roomsTilemap.SetTile(ToTileCell(cell), tile);
+            }
+        }
+
         void SetStairsOverlay(RoomInstance room, Sprite sprite, Color tint)
         {
             var root = StairsOverlayRoot();
@@ -815,12 +861,66 @@ namespace BuildATower
             }
         }
 
+        public void RefreshRampOverlays(IEnumerable<RoomInstance> rooms)
+        {
+            if (rooms == null) return;
+            foreach (var room in rooms)
+            {
+                if (room?.Type == null || !room.Type.isParkingRamp) continue;
+                if (!StructureCutawayArt.TryRampSprite(out var sprite)) continue;
+                SetRampOverlay(room, sprite, Color.white);
+            }
+        }
+
+        void SetRampOverlay(RoomInstance room, Sprite sprite, Color tint)
+        {
+            var root = RampOverlayRoot();
+            if (!_rampOverlays.TryGetValue(room.InstanceId, out var sr) || sr == null)
+            {
+                var go = new GameObject($"RampOverlay_{room.InstanceId}");
+                go.transform.SetParent(root, false);
+                sr = go.AddComponent<SpriteRenderer>();
+                _rampOverlays[room.InstanceId] = sr;
+            }
+
+            sr.enabled = true;
+            sr.sprite = sprite;
+            sr.color = tint;
+            sr.sortingOrder = StairsOverlaySort + room.Origin.y;
+            sr.transform.position = new Vector3(room.Origin.x, room.Origin.y, 0f);
+            var b = sprite.bounds.size;
+            var sx = b.x > 0.01f ? room.Size.x / b.x : 1f;
+            var sy = b.y > 0.01f ? room.Size.y / b.y : 1f;
+            sr.transform.localScale = new Vector3(sx, sy, 1f);
+        }
+
         void ClearStairsOverlay(int instanceId)
         {
             if (!_stairsOverlays.TryGetValue(instanceId, out var sr)) return;
             if (sr != null)
                 Destroy(sr.gameObject);
             _stairsOverlays.Remove(instanceId);
+        }
+
+        void ClearRampOverlay(int instanceId)
+        {
+            if (!_rampOverlays.TryGetValue(instanceId, out var sr)) return;
+            if (sr != null)
+                Destroy(sr.gameObject);
+            _rampOverlays.Remove(instanceId);
+        }
+
+        Tile ResolvePaintTile(
+            RoomInstance room,
+            Vector2Int cell,
+            HashSet<Vector2Int> occupied,
+            Color color)
+        {
+            if (room?.Type != null &&
+                room.Type.isScaffolding &&
+                StructureCutawayArt.TryScaffoldTile(out var scaffold))
+                return scaffold;
+            return GetTile(color, EdgeMaskFor(cell, occupied));
         }
 
         bool TryPaintDollhouseArt(
@@ -1033,6 +1133,15 @@ namespace BuildATower
             go.transform.SetParent(transform, false);
             _stairsOverlayRoot = go.transform;
             return _stairsOverlayRoot;
+        }
+
+        Transform RampOverlayRoot()
+        {
+            if (_rampOverlayRoot != null) return _rampOverlayRoot;
+            var go = new GameObject("RampOverlays");
+            go.transform.SetParent(transform, false);
+            _rampOverlayRoot = go.transform;
+            return _rampOverlayRoot;
         }
 
         Transform DollhouseOverlayRoot()
