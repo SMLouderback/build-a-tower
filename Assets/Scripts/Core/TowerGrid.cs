@@ -669,8 +669,8 @@ namespace BuildATower
                 if (_cells.TryGetValue(cell, out var occupant))
                 {
                     if (IsElevator(occupant)) return false;
-                    if (IsParkingRamp(occupant) || IsStairs(occupant))
-                        continue;
+                    if (IsParkingRamp(occupant)) return false;
+                    if (IsStairs(occupant)) continue;
                     // Lobby, rooms, scaffolding may be overlapped / rebuilt.
                     continue;
                 }
@@ -719,8 +719,8 @@ namespace BuildATower
                     continue;
                 }
 
-                // Keep the original underlay when stacking over another ramp/stairs segment.
-                if (IsParkingRamp(occupant) || IsStairs(occupant))
+                // Keep the original underlay when punching through stairs.
+                if (IsStairs(occupant))
                     continue;
 
                 _underStairs[cell] = occupant;

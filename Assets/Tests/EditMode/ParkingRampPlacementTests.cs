@@ -47,6 +47,17 @@ namespace BuildATower.Tests
             Assert.AreEqual(new Vector2Int(3, 1), LoadParkingRampType().size);
         }
 
+        [Test]
+        public void Same_floor_ramps_cannot_overlap()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 24, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -1), out _));
+            Assert.IsFalse(grid.CanPlace(Ramp(), new Vector2Int(1, -1))); // shifts into first ramp
+            Assert.IsFalse(grid.CanPlace(Ramp(), new Vector2Int(0, -1))); // identical origin
+            Assert.IsFalse(grid.TryPlace(Ramp(), new Vector2Int(1, -1), out _));
+        }
+
         static RoomTypeSO LoadParkingRampType()
         {
             var so = Resources.Load<RoomTypeSO>("Rooms/ParkingRamp");
