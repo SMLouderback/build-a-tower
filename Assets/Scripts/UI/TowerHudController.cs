@@ -1850,7 +1850,7 @@ namespace BuildATower
             GUIStyle iconStyle,
             StarSystem stars)
         {
-            GUI.Label(new Rect(cx, cy, inner, row), "Families");
+            GUI.Label(new Rect(cx, cy, inner, row), "Rooms");
             cy += row;
 
             cy = DrawIconRow(
@@ -1893,6 +1893,26 @@ namespace BuildATower
 
             if (active == null)
                 return cy;
+
+            // Clear separator + title above the expanded units list.
+            cy += 6f;
+            EnsureWhiteTex();
+            var rule = new Color(1f, 1f, 1f, 0.28f);
+            GUI.DrawTexture(
+                new Rect(cx, cy, inner, 1f),
+                _whiteTex,
+                ScaleMode.StretchToFill,
+                false,
+                0f,
+                rule,
+                0f,
+                0f);
+            cy += 6f;
+            var unitsTitle = active.Family == BuildFamily.Shops && _expandedShopSubgroup.HasValue
+                ? $"{active.Label} · {_expandedShopSubgroup}"
+                : $"{active.Label} units";
+            GUI.Label(new Rect(cx, cy, inner, row), unitsTitle);
+            cy += row;
 
             if (active.Family == BuildFamily.Shops)
             {
@@ -2146,11 +2166,10 @@ namespace BuildATower
             if (!hasTex)
                 return false;
 
-            // Fill the button: crop-keyed icons are tight to content; ScaleAndCrop
-            // covers the square without letterboxing leftover magenta padding.
+            // Full-bleed cover texture — stretch into the button square.
             var inset = new Rect(rect.x + 1f, rect.y + 1f, rect.width - 2f, rect.height - 2f);
             var tint = enabled ? Color.white : new Color(1f, 1f, 1f, 0.45f);
-            GUI.DrawTexture(inset, tex, ScaleMode.ScaleAndCrop, true, 0f, tint, 0f, 0f);
+            GUI.DrawTexture(inset, tex, ScaleMode.StretchToFill, true, 0f, tint, 0f, 0f);
             return true;
         }
 

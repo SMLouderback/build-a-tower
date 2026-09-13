@@ -33,8 +33,10 @@ namespace BuildATower.Tests
         [Test]
         public void TryGetTexture_known_icon_keys_magenta_and_crops()
         {
-            Assert.IsTrue(MenuIconArt.TryGetTexture("tool_select", out var tex));
+            Assert.IsTrue(MenuIconArt.TryGetTexture("tool_bulldoze", out var tex));
             Assert.IsNotNull(tex);
+            Assert.AreEqual(MenuIconArt.OutputPixels, tex.width);
+            Assert.AreEqual(MenuIconArt.OutputPixels, tex.height);
 
             var px = tex.GetPixels();
             var opaque = 0;
@@ -44,13 +46,21 @@ namespace BuildATower.Tests
                 var c = px[i];
                 if (c.a < 0.08f) continue;
                 opaque++;
-                if (c.r > 0.70f && c.b > 0.55f && c.g < 0.28f)
+                if (MenuIconArt.IsHotMagenta(c))
                     hotMagenta++;
             }
 
-            Assert.Greater(opaque, 0);
-            // After keying, remaining hot-magenta fringe should be tiny.
+            Assert.Greater(opaque, px.Length / 4);
             Assert.Less(hotMagenta, opaque * 0.02f + 8);
+        }
+
+        [Test]
+        public void IsHotMagenta_catches_hot_pink_plate()
+        {
+            // Observed menu plate ~R237 G10 B126
+            var plate = new Color(237f / 255f, 10f / 255f, 126f / 255f, 1f);
+            Assert.IsTrue(MenuIconArt.IsHotMagenta(plate));
+            Assert.IsFalse(MenuIconArt.IsHotMagenta(new Color(0.72f, 0.55f, 0.28f, 1f))); // wood
         }
     }
 }
