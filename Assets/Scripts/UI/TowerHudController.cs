@@ -174,6 +174,8 @@ namespace BuildATower
 
         void Awake()
         {
+            // Domain-reload off can keep stale keyed icons; always rebuild on play.
+            MenuIconArt.ResetCache();
             if (simulation == null && build != null)
                 simulation = build.GetComponent<TowerSimulation>();
             ResolveCelebration();

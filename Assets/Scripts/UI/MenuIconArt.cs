@@ -5,7 +5,7 @@ namespace BuildATower
 {
     /// <summary>
     /// Loads square build-menu icons from Resources/Art/Menu/{id}.
-    /// Keys hot magenta/pink plates, crops to content, then cover-scales into a
+    /// Keys hot magenta/pink plates, trims sparse margins, then cover-scales into a
     /// fixed square so IMGUI StretchToFill shows a large subject with no letterbox.
     /// </summary>
     public static class MenuIconArt
@@ -100,11 +100,13 @@ namespace BuildATower
             var w = source.width;
             var h = source.height;
 
-            // Flood-fill key from the border so soft pink plates and fringe vanish.
             FloodKeyMagentaPlate(px, w, h);
             KeyHotMagenta(px);
+            ScrubNearMagentaFringe(px, w, h);
 
             FindOpaqueBounds(px, w, h, out var minX, out var minY, out var maxX, out var maxY);
+            TrimSparseMargins(px, w, h, ref minX, ref minY, ref maxX, ref maxY);
+
             var cw = Mathf.Max(1, maxX - minX + 1);
             var ch = Mathf.Max(1, maxY - minY + 1);
 
@@ -114,9 +116,10 @@ namespace BuildATower
                 cropped[y * cw + x] = px[(minY + y) * w + (minX + x)];
 
             KeyHotMagenta(cropped);
+            ScrubNearMagentaFringe(cropped, cw, ch);
 
-            // Cover-scale into a fixed square — subject fills the button, may clip edges.
-            var covered = CoverIntoSquare(cropped, cw, ch, OutputPixels);
+            // Slight overscan so transparent AABB padding never letterboxes the button.
+            var covered = CoverIntoSquare(cropped, cw, ch, OutputPixels, overscan: 1.12f);
             KeyHotMagenta(covered);
 
             var tex = new Texture2D(OutputPixels, OutputPixels, TextureFormat.RGBA32, false)
@@ -130,10 +133,10 @@ namespace BuildATower
             return tex;
         }
 
-        static Color[] CoverIntoSquare(Color[] src, int sw, int sh, int size)
+        static Color[] CoverIntoSquare(Color[] src, int sw, int sh, int size, float overscan)
         {
             var dest = new Color[size * size];
-            var scale = Mathf.Max(size / (float)sw, size / (float)sh);
+            var scale = Mathf.Max(size / (float)sw, size / (float)sh) * Mathf.Max(1f, overscan);
             var dw = Mathf.Max(1, Mathf.RoundToInt(sw * scale));
             var dh = Mathf.Max(1, Mathf.RoundToInt(sh * scale));
             var ox = (dw - size) / 2;
@@ -147,6 +150,67 @@ namespace BuildATower
             }
 
             return dest;
+        }
+
+        /// <summary>
+        /// Shrink AABB while edge rows/cols are mostly empty so floating subjects zoom up.
+        /// </summary>
+        static void TrimSparseMargins(
+            Color[] px, int w, int h,
+            ref int minX, ref int minY, ref int maxX, ref int maxY)
+        {
+            const float minFill = 0.04f;
+            var guard = 0;
+            while (guard++ < 512 && minY < maxY)
+            {
+                if (RowOpaqueFraction(px, w, minX, maxX, minY) >= minFill) break;
+                minY++;
+            }
+
+            guard = 0;
+            while (guard++ < 512 && minY < maxY)
+            {
+                if (RowOpaqueFraction(px, w, minX, maxX, maxY) >= minFill) break;
+                maxY--;
+            }
+
+            guard = 0;
+            while (guard++ < 512 && minX < maxX)
+            {
+                if (ColOpaqueFraction(px, w, minY, maxY, minX) >= minFill) break;
+                minX++;
+            }
+
+            guard = 0;
+            while (guard++ < 512 && minX < maxX)
+            {
+                if (ColOpaqueFraction(px, w, minY, maxY, maxX) >= minFill) break;
+                maxX--;
+            }
+        }
+
+        static float RowOpaqueFraction(Color[] px, int w, int minX, int maxX, int y)
+        {
+            var span = Mathf.Max(1, maxX - minX + 1);
+            var count = 0;
+            for (var x = minX; x <= maxX; x++)
+            {
+                if (px[y * w + x].a >= 0.08f) count++;
+            }
+
+            return count / (float)span;
+        }
+
+        static float ColOpaqueFraction(Color[] px, int w, int minY, int maxY, int x)
+        {
+            var span = Mathf.Max(1, maxY - minY + 1);
+            var count = 0;
+            for (var y = minY; y <= maxY; y++)
+            {
+                if (px[y * w + x].a >= 0.08f) count++;
+            }
+
+            return count / (float)span;
         }
 
         static void FloodKeyMagentaPlate(Color[] px, int w, int h)
@@ -197,17 +261,48 @@ namespace BuildATower
         }
 
         /// <summary>
+        /// Clear soft pink fringe pixels that sit next to already-cleared plate.
+        /// </summary>
+        static void ScrubNearMagentaFringe(Color[] px, int w, int h)
+        {
+            var copy = (Color[])px.Clone();
+            for (var y = 1; y < h - 1; y++)
+            for (var x = 1; x < w - 1; x++)
+            {
+                var i = y * w + x;
+                if (copy[i].a < 0.08f) continue;
+                if (!IsNearMagentaFringe(copy[i])) continue;
+
+                var clearN =
+                    copy[i - 1].a < 0.08f ||
+                    copy[i + 1].a < 0.08f ||
+                    copy[i - w].a < 0.08f ||
+                    copy[i + w].a < 0.08f;
+                if (clearN)
+                    px[i] = Color.clear;
+            }
+        }
+
+        static bool IsNearMagentaFringe(Color c)
+        {
+            if (c.a < 0.08f) return true;
+            if (c.g > 0.40f) return false;
+            if (c.r < 0.45f) return false;
+            // Soft pink / magenta bleed (looser than plate key).
+            return (c.r - c.g) > 0.18f && c.b > 0.22f && (c.b - c.g) > 0.08f;
+        }
+
+        /// <summary>
         /// AI menu plates are often hot pink (~R237 G10 B126), not pure #FF00FF.
         /// </summary>
         public static bool IsHotMagenta(Color c)
         {
             if (c.a < 0.08f) return true;
-            if (c.g > 0.32f) return false;
-            // Require red-dominant chroma toward magenta/pink.
-            if (c.r < 0.55f) return false;
-            if (c.b < 0.32f) return false;
-            if ((c.r - c.g) < 0.28f) return false;
-            if ((c.b - c.g) < 0.18f) return false;
+            if (c.g > 0.34f) return false;
+            if (c.r < 0.50f) return false;
+            if (c.b < 0.28f) return false;
+            if ((c.r - c.g) < 0.24f) return false;
+            if ((c.b - c.g) < 0.14f) return false;
             return true;
         }
 
