@@ -29,5 +29,28 @@ namespace BuildATower.Tests
             Assert.DoesNotThrow(() => MenuIconArt.ResetCache());
             Assert.DoesNotThrow(() => MenuIconArt.ResetCache());
         }
+
+        [Test]
+        public void TryGetTexture_known_icon_keys_magenta_and_crops()
+        {
+            Assert.IsTrue(MenuIconArt.TryGetTexture("tool_select", out var tex));
+            Assert.IsNotNull(tex);
+
+            var px = tex.GetPixels();
+            var opaque = 0;
+            var hotMagenta = 0;
+            for (var i = 0; i < px.Length; i++)
+            {
+                var c = px[i];
+                if (c.a < 0.08f) continue;
+                opaque++;
+                if (c.r > 0.70f && c.b > 0.55f && c.g < 0.28f)
+                    hotMagenta++;
+            }
+
+            Assert.Greater(opaque, 0);
+            // After keying, remaining hot-magenta fringe should be tiny.
+            Assert.Less(hotMagenta, opaque * 0.02f + 8);
+        }
     }
 }

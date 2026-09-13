@@ -2089,6 +2089,19 @@ namespace BuildATower
             if (selected)
                 fill = Color.Lerp(fill, Color.white, 0.25f);
 
+            // Peek whether an icon exists so we can use a neutral plate (not loud family tint)
+            // behind transparent keyed corners.
+            Texture2D preview = null;
+            var willDrawIcon = !string.IsNullOrEmpty(iconId) &&
+                               MenuIconArt.TryGetTexture(iconId, out preview) &&
+                               preview != null;
+            if (willDrawIcon)
+            {
+                fill = selected
+                    ? new Color(0.22f, 0.22f, 0.24f, enabled ? 1f : 0.45f)
+                    : new Color(0.16f, 0.16f, 0.18f, enabled ? 1f : 0.45f);
+            }
+
             GUI.DrawTexture(rect, _whiteTex, ScaleMode.StretchToFill, false, 0f, fill, 0f, 0f);
 
             var hasTex = TryDrawMenuIcon(rect, iconId, enabled);
@@ -2133,9 +2146,11 @@ namespace BuildATower
             if (!hasTex)
                 return false;
 
-            var inset = new Rect(rect.x + 2f, rect.y + 2f, rect.width - 4f, rect.height - 4f);
+            // Fill the button: crop-keyed icons are tight to content; ScaleAndCrop
+            // covers the square without letterboxing leftover magenta padding.
+            var inset = new Rect(rect.x + 1f, rect.y + 1f, rect.width - 2f, rect.height - 2f);
             var tint = enabled ? Color.white : new Color(1f, 1f, 1f, 0.45f);
-            GUI.DrawTexture(inset, tex, ScaleMode.ScaleToFit, true, 0f, tint, 0f, 0f);
+            GUI.DrawTexture(inset, tex, ScaleMode.ScaleAndCrop, true, 0f, tint, 0f, 0f);
             return true;
         }
 
