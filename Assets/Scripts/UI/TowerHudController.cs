@@ -4,8 +4,17 @@ using UnityEngine;
 
 namespace BuildATower
 {
+    public enum BuildMenuTool
+    {
+        Select,
+        Lobby,
+        SkyLobby,
+        Scaffold,
+        Bulldoze
+    }
+
     /// <summary>
-    /// Progressive IMGUI HUD: core strip + accordion sections + compact icon build grid.
+    /// Progressive IMGUI HUD: core strip + accordion sections + pictorial 2-column build menu.
     /// Keep the Game tab Scale at 1x (or Scale to Fit). Zoom &gt; 1x crops the HUD.
     /// </summary>
     public sealed class TowerHudController : MonoBehaviour
@@ -22,8 +31,12 @@ namespace BuildATower
         [SerializeField] float panelWidth = 280f;
         [SerializeField] float edgeGapPixels = 12f;
 
-        const float IconSize = 36f;
-        const float IconGap = 4f;
+        public const float MenuIconSize = 44f;
+        public const float MenuIconGap = 4f;
+        public const int MenuStripColumns = 2;
+
+        const float IconSize = MenuIconSize;
+        const float IconGap = MenuIconGap;
 
         /// <summary>Legacy single-variant Office / Hotel / Condo replaced by luxury catalog.</summary>
         static readonly HashSet<string> LegacyMenuRoomIds = new(StringComparer.Ordinal)
@@ -36,6 +49,37 @@ namespace BuildATower
 
         static bool IsLegacyMenuRoom(RoomTypeSO room) =>
             room != null && LegacyMenuRoomIds.Contains(room.id);
+
+        public static string MenuIconIdForFamily(BuildFamily family) => family switch
+        {
+            BuildFamily.Office => "family_office",
+            BuildFamily.Hotel => "family_hotel",
+            BuildFamily.Condo => "family_condo",
+            BuildFamily.Shops => "family_shops",
+            BuildFamily.Utility => "family_utility",
+            BuildFamily.Transit => "family_transit",
+            _ => null
+        };
+
+        public static string MenuIconIdForSubgroup(BuildSubgroup subgroup) => subgroup switch
+        {
+            BuildSubgroup.Food => "subgroup_food",
+            BuildSubgroup.Retail => "subgroup_retail",
+            _ => null
+        };
+
+        public static string MenuIconIdForTool(BuildMenuTool tool) => tool switch
+        {
+            BuildMenuTool.Select => "tool_select",
+            BuildMenuTool.Lobby => "tool_lobby",
+            BuildMenuTool.SkyLobby => "tool_sky_lobby",
+            BuildMenuTool.Scaffold => "tool_scaffold",
+            BuildMenuTool.Bulldoze => "tool_bulldoze",
+            _ => null
+        };
+
+        public static Rect MenuStripIconRect(float cx, float cy, int index) =>
+            IconRect(cx, cy, index, MenuStripColumns);
 
         Rect _panelRect;
         Rect _topBarRect;
@@ -440,12 +484,12 @@ namespace BuildATower
 
                 cy += row + 4f;
 
-                cy = DrawIconCatalog(cx, cy, contentInner, row, iconStyle, stars);
-                cy += 4f;
-
                 GUI.Label(new Rect(cx, cy, contentInner, row), "Tools");
                 cy += row;
-                cy = DrawToolIcons(cx, cy, contentInner, iconStyle);
+                cy = DrawToolIcons(cx, cy, iconStyle);
+                cy += 4f;
+
+                cy = DrawIconCatalog(cx, cy, contentInner, row, iconStyle, stars);
                 cy += 6f;
             }
 
@@ -1806,21 +1850,21 @@ namespace BuildATower
             GUIStyle iconStyle,
             StarSystem stars)
         {
-            GUI.Label(new Rect(cx, cy, inner, row), "Categories");
+            GUI.Label(new Rect(cx, cy, inner, row), "Families");
             cy += row;
 
             cy = DrawIconRow(
-                cx,
                 cy,
-                inner,
                 _catalog.Count,
+                MenuStripColumns,
                 i =>
                 {
                     var family = _catalog[i];
                     var selected = _expandedFamily == family.Family;
                     var tip = $"{family.Label}\nClick to {(selected ? "collapse" : "expand")}";
-                    if (DrawIconButton(
-                            IconRect(cx, cy, inner, i),
+                    if (DrawPictureButton(
+                            IconRect(cx, cy, i, MenuStripColumns),
+                            MenuIconIdForFamily(family.Family),
                             FamilyGlyph(family.Family),
                             tip,
                             FamilyColor(family.Family),
@@ -1850,23 +1894,20 @@ namespace BuildATower
             if (active == null)
                 return cy;
 
-            GUI.Label(new Rect(cx, cy, inner, row), active.Label);
-            cy += row;
-
             if (active.Family == BuildFamily.Shops)
             {
                 cy = DrawIconRow(
-                    cx,
                     cy,
-                    inner,
                     active.Subgroups.Count,
+                    MenuStripColumns,
                     i =>
                     {
                         var subgroup = active.Subgroups[i];
                         var selected = _expandedShopSubgroup == subgroup.Subgroup;
                         var tip = $"{active.Label} → {subgroup.Label}";
-                        if (DrawIconButton(
-                                IconRect(cx, cy, inner, i),
+                        if (DrawPictureButton(
+                                IconRect(cx, cy, i, MenuStripColumns),
+                                MenuIconIdForSubgroup(subgroup.Subgroup),
                                 SubgroupGlyph(subgroup.Subgroup),
                                 tip,
                                 FamilyColor(BuildFamily.Shops),
@@ -1881,16 +1922,14 @@ namespace BuildATower
                     foreach (var subgroup in active.Subgroups)
                     {
                         if (subgroup.Subgroup != _expandedShopSubgroup) continue;
-                        GUI.Label(new Rect(cx, cy, inner, row), subgroup.Label);
-                        cy += row;
-                        cy = DrawRoomIconGrid(cx, cy, inner, iconStyle, subgroup.Rooms, stars);
+                        cy = DrawRoomIconGrid(cx, cy, iconStyle, subgroup.Rooms, stars);
                         break;
                     }
                 }
             }
             else
             {
-                cy = DrawRoomIconGrid(cx, cy, inner, iconStyle, active.Rooms, stars);
+                cy = DrawRoomIconGrid(cx, cy, iconStyle, active.Rooms, stars);
             }
 
             return cy;
@@ -1899,7 +1938,6 @@ namespace BuildATower
         float DrawRoomIconGrid(
             float cx,
             float cy,
-            float inner,
             GUIStyle iconStyle,
             List<RoomTypeSO> rooms,
             StarSystem stars)
@@ -1911,10 +1949,9 @@ namespace BuildATower
             }
 
             return DrawIconRow(
-                cx,
                 cy,
-                inner,
                 count,
+                MenuStripColumns,
                 i =>
                 {
                     RoomTypeSO room = null;
@@ -1941,8 +1978,9 @@ namespace BuildATower
 
                     var wasEnabled = GUI.enabled;
                     GUI.enabled = wasEnabled && canBuild;
-                    if (DrawIconButton(
-                            IconRect(cx, cy, inner, i),
+                    if (DrawPictureButton(
+                            IconRect(cx, cy, i, MenuStripColumns),
+                            room.id,
                             RoomGlyph(room),
                             tip,
                             color,
@@ -1955,46 +1993,46 @@ namespace BuildATower
                 });
         }
 
-        float DrawToolIcons(float cx, float cy, float inner, GUIStyle iconStyle)
+        float DrawToolIcons(float cx, float cy, GUIStyle iconStyle)
         {
-            var tools = new (string glyph, string tip, System.Action onClick, bool selected, Color color)[]
+            var tools = new (BuildMenuTool id, string glyph, string tip, System.Action onClick, bool selected, Color color)[]
             {
-                ("Sel", "Selector\nClick rooms on the tower to inspect them.",
+                (BuildMenuTool.Select, "Sel", "Selector\nClick rooms on the tower to inspect them.",
                     () => build.SelectTool(),
                     build.CurrentTool == BuildTool.Select,
                     new Color(0.55f, 0.55f, 0.6f)),
-                ("Lob", "Extend Lobby\nDrag to widen the lobby on floor G.",
+                (BuildMenuTool.Lobby, "Lob", "Extend Lobby\nDrag to widen the lobby on floor G.",
                     () => build.SelectLobbyTool(),
                     build.CurrentTool == BuildTool.PlaceRoom &&
                     build.SelectedRoomType != null &&
                     build.SelectedRoomType.isLobby,
                     new Color(0.75f, 0.65f, 0.35f)),
-                ("Sky", "Sky Lobby\nTransfer floor: ≥15 up, ≥15 apart from other lobbies.",
+                (BuildMenuTool.SkyLobby, "Sky", "Sky Lobby\nTransfer floor: ≥15 up, ≥15 apart from other lobbies.",
                     () => build.SelectSkyLobbyTool(),
                     build.CurrentTool == BuildTool.PlaceRoom &&
                     build.SelectedRoomType != null &&
                     build.SelectedRoomType.isSkyLobby,
                     new Color(0.72f, 0.78f, 0.92f)),
-                ("Sc", "Scaffold ($750)\nClick or drag to place walkable structural fill.",
+                (BuildMenuTool.Scaffold, "Sc", "Scaffold ($750)\nClick or drag to place walkable structural fill.",
                     () => build.SelectScaffoldTool(),
                     build.CurrentTool == BuildTool.Scaffold,
                     new Color(0.76f, 0.62f, 0.40f)),
-                ("X", "Bulldoze\nDemolish a non-lobby room (grace refund if eligible).",
+                (BuildMenuTool.Bulldoze, "X", "Bulldoze\nDemolish a non-lobby room (grace refund if eligible).",
                     () => build.SetTool(BuildTool.Bulldoze),
                     build.CurrentTool == BuildTool.Bulldoze,
                     new Color(0.75f, 0.3f, 0.28f))
             };
 
             return DrawIconRow(
-                cx,
                 cy,
-                inner,
                 tools.Length,
+                MenuStripColumns,
                 i =>
                 {
                     var tool = tools[i];
-                    if (DrawIconButton(
-                            IconRect(cx, cy, inner, i),
+                    if (DrawPictureButton(
+                            IconRect(cx, cy, i, MenuStripColumns),
+                            MenuIconIdForTool(tool.id),
                             tool.glyph,
                             tool.tip,
                             tool.color,
@@ -2006,14 +2044,13 @@ namespace BuildATower
         }
 
         float DrawIconRow(
-            float cx,
             float cy,
-            float inner,
             int count,
+            int columns,
             System.Action<int> drawIndex)
         {
             if (count <= 0) return cy;
-            var cols = Mathf.Max(1, Mathf.FloorToInt((inner + IconGap) / (IconSize + IconGap)));
+            var cols = Mathf.Max(1, columns);
             for (var i = 0; i < count; i++)
                 drawIndex(i);
 
@@ -2021,9 +2058,9 @@ namespace BuildATower
             return cy + rows * (IconSize + IconGap) + 4f;
         }
 
-        static Rect IconRect(float cx, float cy, float inner, int index)
+        static Rect IconRect(float cx, float cy, int index, int columns)
         {
-            var cols = Mathf.Max(1, Mathf.FloorToInt((inner + IconGap) / (IconSize + IconGap)));
+            var cols = Mathf.Max(1, columns);
             var col = index % cols;
             var row = index / cols;
             return new Rect(
@@ -2033,9 +2070,10 @@ namespace BuildATower
                 IconSize);
         }
 
-        bool DrawIconButton(
+        bool DrawPictureButton(
             Rect rect,
-            string glyph,
+            string iconId,
+            string fallbackGlyph,
             string tooltip,
             Color color,
             bool selected,
@@ -2052,6 +2090,8 @@ namespace BuildATower
                 fill = Color.Lerp(fill, Color.white, 0.25f);
 
             GUI.DrawTexture(rect, _whiteTex, ScaleMode.StretchToFill, false, 0f, fill, 0f, 0f);
+
+            var hasTex = TryDrawMenuIcon(rect, iconId, enabled);
             if (selected)
             {
                 var outline = new Color(1f, 0.9f, 0.4f, 1f);
@@ -2061,9 +2101,10 @@ namespace BuildATower
                 GUI.DrawTexture(new Rect(rect.xMax - 2f, rect.y, 2f, rect.height), _whiteTex, ScaleMode.StretchToFill, false, 0f, outline, 0f, 0f);
             }
 
-            GUI.backgroundColor = new Color(1f, 1f, 1f, 0.15f);
+            GUI.backgroundColor = new Color(1f, 1f, 1f, 0f);
             GUI.contentColor = Luminance(color) > 0.55f ? Color.black : Color.white;
-            var clicked = GUI.Button(rect, new GUIContent(glyph, tooltip), style);
+            var label = hasTex ? string.Empty : fallbackGlyph ?? string.Empty;
+            var clicked = GUI.Button(rect, new GUIContent(label, tooltip), style);
             GUI.backgroundColor = prevBg;
             GUI.contentColor = prevContent;
 
@@ -2071,6 +2112,31 @@ namespace BuildATower
                 _hoverTooltip = tooltip;
 
             return clicked;
+        }
+
+        static bool TryDrawMenuIcon(Rect rect, string iconId, bool enabled)
+        {
+            if (string.IsNullOrEmpty(iconId))
+                return false;
+
+            Texture2D tex = null;
+            var hasTex = false;
+            try
+            {
+                hasTex = MenuIconArt.TryGetTexture(iconId, out tex) && tex != null;
+            }
+            catch
+            {
+                return false;
+            }
+
+            if (!hasTex)
+                return false;
+
+            var inset = new Rect(rect.x + 2f, rect.y + 2f, rect.width - 4f, rect.height - 4f);
+            var tint = enabled ? Color.white : new Color(1f, 1f, 1f, 0.45f);
+            GUI.DrawTexture(inset, tex, ScaleMode.ScaleToFit, true, 0f, tint, 0f, 0f);
+            return true;
         }
 
         void EnsureWhiteTex()
