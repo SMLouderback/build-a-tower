@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -23,6 +24,18 @@ namespace BuildATower
 
         const float IconSize = 36f;
         const float IconGap = 4f;
+
+        /// <summary>Legacy single-variant Office / Hotel / Condo replaced by luxury catalog.</summary>
+        static readonly HashSet<string> LegacyMenuRoomIds = new(StringComparer.Ordinal)
+        {
+            "office",
+            "hotel",
+            "hotel_single",
+            "condo",
+        };
+
+        static bool IsLegacyMenuRoom(RoomTypeSO room) =>
+            room != null && LegacyMenuRoomIds.Contains(room.id);
 
         Rect _panelRect;
         Rect _topBarRect;
@@ -168,87 +181,123 @@ namespace BuildATower
                 serviceElevatorRoom.allowBasement = true;
 
             _roomButtons.Clear();
-            foreach (var room in placeableRooms)
-                AddRoomButton(room);
-
-            if (stairsRoom != null && !_roomButtons.Contains(stairsRoom))
-            {
-                _roomButtons.RemoveAll(r => r != null && r.id == "stairs");
-                _roomButtons.Add(stairsRoom);
-            }
-
-            if (elevatorRoom != null && !_roomButtons.Contains(elevatorRoom))
-            {
-                _roomButtons.RemoveAll(r => r != null && r.id == "elevator_normal");
-                _roomButtons.Add(elevatorRoom);
-            }
-
-            if (expressElevatorRoom != null && !_roomButtons.Contains(expressElevatorRoom))
-            {
-                _roomButtons.RemoveAll(r => r != null && r.id == "elevator_express");
-                _roomButtons.Add(expressElevatorRoom);
-            }
-
-            if (serviceElevatorRoom != null && !_roomButtons.Contains(serviceElevatorRoom))
-            {
-                _roomButtons.RemoveAll(r => r != null && r.id == "elevator_service");
-                _roomButtons.Add(serviceElevatorRoom);
-            }
-
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoStudio"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoAlcove"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoBase"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoMidStandard"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoMidLoft"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoMidFamily"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoUpperStandard"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoUpperCorner"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/CondoUpperPenthouse"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelBase"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelAccessible"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelMidStandard"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelMidExtended"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelStudio"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelJuniorSuite"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelUpperStandard"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelUpperKing"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/HotelUpperSuite"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeMicro"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeStudio"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeBase"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeMidStandard"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeMidClinic"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeMidTeam"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeUpperStandard"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeUpperCorner"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/OfficeUpperFloor"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopFastFood"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopRestaurant"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopRetail"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopFineDining"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopTacoCounter"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopChickenShack"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopMexicanRestaurant"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopGagGifts"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopShoeStore"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ShopDepartmentStore"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/Housekeeping"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/Maintenance"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/SecurityPost"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ResearchLab"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/Conference"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/EventHall"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ParkingUnderground"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/Valet"));
-            AddRoomButton(Resources.Load<RoomTypeSO>("Rooms/ParkingRamp"));
+            CollectMenuRoomButtons(
+                _roomButtons,
+                placeableRooms,
+                stairsRoom,
+                elevatorRoom,
+                expressElevatorRoom,
+                serviceElevatorRoom);
             _catalog = BuildCatalog.Group(_roomButtons);
         }
 
-        void AddRoomButton(RoomTypeSO room)
+        /// <summary>Builds the HUD menu catalog the same way as <see cref="EnsureElevatorAndCatalog"/>.</summary>
+        public static List<BuildCatalogFamily> BuildMenuCatalogForTests(IEnumerable<RoomTypeSO> scenePlaceableRooms)
         {
-            if (room != null && !room.isLobby && !_roomButtons.Contains(room))
-                _roomButtons.Add(room);
+            var stairs = Resources.Load<RoomTypeSO>("Rooms/Stairs");
+            var elevator = Resources.Load<RoomTypeSO>("Rooms/ElevatorNormal");
+            var express = Resources.Load<RoomTypeSO>("Rooms/ElevatorExpress") ?? RoomTypeSO.CreateRuntimeElevator(
+                "elevator_express", "Express Elevator", ElevatorShaftKind.Express, requiredStars: 3, buildCost: 12000);
+            var service = Resources.Load<RoomTypeSO>("Rooms/ElevatorService") ?? RoomTypeSO.CreateRuntimeElevator(
+                "elevator_service", "Service Elevator", ElevatorShaftKind.Service, requiredStars: 4, buildCost: 9000);
+            var buttons = new List<RoomTypeSO>();
+            CollectMenuRoomButtons(buttons, scenePlaceableRooms, stairs, elevator, express, service);
+            return BuildCatalog.Group(buttons);
         }
+
+        static void CollectMenuRoomButtons(
+            List<RoomTypeSO> buttons,
+            IEnumerable<RoomTypeSO> scenePlaceableRooms,
+            RoomTypeSO stairs,
+            RoomTypeSO elevator,
+            RoomTypeSO expressElevator,
+            RoomTypeSO serviceElevator)
+        {
+            foreach (var room in scenePlaceableRooms)
+            {
+                if (IsLegacyMenuRoom(room)) continue;
+                TryAddRoomButton(buttons, room);
+            }
+
+            if (stairs != null && !buttons.Contains(stairs))
+            {
+                buttons.RemoveAll(r => r != null && r.id == "stairs");
+                buttons.Add(stairs);
+            }
+
+            if (elevator != null && !buttons.Contains(elevator))
+            {
+                buttons.RemoveAll(r => r != null && r.id == "elevator_normal");
+                buttons.Add(elevator);
+            }
+
+            if (expressElevator != null && !buttons.Contains(expressElevator))
+            {
+                buttons.RemoveAll(r => r != null && r.id == "elevator_express");
+                buttons.Add(expressElevator);
+            }
+
+            if (serviceElevator != null && !buttons.Contains(serviceElevator))
+            {
+                buttons.RemoveAll(r => r != null && r.id == "elevator_service");
+                buttons.Add(serviceElevator);
+            }
+
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/CondoStudio"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/CondoAlcove"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/CondoBase"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/CondoMidStandard"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/CondoMidLoft"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/CondoMidFamily"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/CondoUpperStandard"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/CondoUpperCorner"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/CondoUpperPenthouse"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/HotelBase"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/HotelAccessible"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/HotelMidStandard"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/HotelMidExtended"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/HotelStudio"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/HotelJuniorSuite"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/HotelUpperStandard"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/HotelUpperKing"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/HotelUpperSuite"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/OfficeMicro"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/OfficeStudio"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/OfficeBase"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/OfficeMidStandard"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/OfficeMidClinic"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/OfficeMidTeam"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/OfficeUpperStandard"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/OfficeUpperCorner"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/OfficeUpperFloor"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ShopFastFood"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ShopRestaurant"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ShopRetail"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ShopFineDining"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ShopTacoCounter"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ShopChickenShack"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ShopMexicanRestaurant"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ShopGagGifts"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ShopShoeStore"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ShopDepartmentStore"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/Housekeeping"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/Maintenance"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/SecurityPost"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ResearchLab"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/Conference"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/EventHall"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ParkingUnderground"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/Valet"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ParkingRamp"));
+        }
+
+        static void TryAddRoomButton(List<RoomTypeSO> buttons, RoomTypeSO room)
+        {
+            if (room != null && !room.isLobby && !IsLegacyMenuRoom(room) && !buttons.Contains(room))
+                buttons.Add(room);
+        }
+
+        void AddRoomButton(RoomTypeSO room) => TryAddRoomButton(_roomButtons, room);
 
         void OnGUI()
         {
