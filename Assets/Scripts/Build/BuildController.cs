@@ -59,10 +59,13 @@ namespace BuildATower
                 gameObject.AddComponent<TowerSimulation>();
             if (GetComponent<TowerMapController>() == null)
                 gameObject.AddComponent<TowerMapController>();
+            TowerAudioDriver.Ensure(this);
             EnsureDayNightSkyOnMainCamera();
             ParallaxBackdrop.EnsureInScene();
             GridChanged += RefreshBuildingShell;
         }
+
+        static void PlayBuildPlaceSfx() => TowerAudio.Ensure().PlayBuildSfx();
 
         static void EnsureDayNightSkyOnMainCamera()
         {
@@ -228,6 +231,7 @@ namespace BuildATower
 
             if (view != null)
                 view.PaintRoom(room);
+            PlayBuildPlaceSfx();
             NotifyGridChanged();
             StateChanged?.Invoke();
             return true;
@@ -419,6 +423,7 @@ namespace BuildATower
             ClearFloorOneHintIfNeeded();
             view.PaintRoom(room);
             SelectedRoomType = null;
+            PlayBuildPlaceSfx();
             RefreshHelpText();
             NotifyGridChanged();
             StateChanged?.Invoke();
@@ -492,6 +497,7 @@ namespace BuildATower
 
             view.PaintRoom(room);
             SelectedRoomType = null;
+            PlayBuildPlaceSfx();
             RefreshHelpText();
             NotifyGridChanged();
             StateChanged?.Invoke();
@@ -566,6 +572,7 @@ namespace BuildATower
             // Transit sits on the rooms layer; keep it visible over rooms built behind.
             PaintRoomKeepingTransitOnTop(room);
 
+            PlayBuildPlaceSfx();
             RefreshHelpText();
             NotifyGridChanged();
             StateChanged?.Invoke();
@@ -606,6 +613,7 @@ namespace BuildATower
             if (SelectedRoom != null && SelectedRoom.InstanceId == instanceId)
                 ReselectById(instanceId);
 
+            PlayBuildPlaceSfx();
             RefreshHelpText();
             NotifyGridChanged();
             StateChanged?.Invoke();
