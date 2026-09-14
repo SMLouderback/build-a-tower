@@ -34,6 +34,7 @@ namespace BuildATower
         public ElevatorCarState State;
         public readonly List<int> PassengerIds = new();
 
-        internal float StateMinutes;
+        /// <summary>Elapsed minutes in the current <see cref="State"/> (tests and tick logic).</summary>
+        public float StateMinutes;
     }
 }
