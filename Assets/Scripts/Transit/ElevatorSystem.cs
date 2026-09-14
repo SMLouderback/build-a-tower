@@ -16,6 +16,12 @@ namespace BuildATower
 
         public IReadOnlyList<ElevatorShaftRuntime> Shafts => _shafts;
 
+        /// <summary>
+        /// Fired once when a car transitions Moving → DoorsOpen (arrival stop).
+        /// Idle same-floor door opens do not raise this.
+        /// </summary>
+        public static Action<ElevatorShaftRuntime> CarArrivedFromMoving;
+
         public int PassengersToday
         {
             get
@@ -718,6 +724,7 @@ namespace BuildATower
 
         void OpenDoors(ElevatorShaftRuntime shaft)
         {
+            var previous = shaft.Car.State;
             shaft.Car.State = ElevatorCarState.DoorsOpen;
             shaft.Car.StateMinutes = 0f;
             Alight(shaft);
@@ -725,6 +732,15 @@ namespace BuildATower
             var boardingDirection = ChooseBoardingDirection(shaft);
             shaft.Car.Direction = boardingDirection;
             Board(shaft, boardingDirection);
+
+            if (TowerAudio.ShouldPlayElevatorArrivalSfx(previous))
+                NotifyCarArrivedFromMoving(shaft);
+        }
+
+        static void NotifyCarArrivedFromMoving(ElevatorShaftRuntime shaft)
+        {
+            CarArrivedFromMoving?.Invoke(shaft);
+            TowerAudio.Instance?.PlayElevatorArrival(shaft.RoomInstanceId);
         }
 
         void Alight(ElevatorShaftRuntime shaft)

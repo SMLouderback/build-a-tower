@@ -10,6 +10,8 @@ namespace BuildATower
     public sealed class TowerAudio : MonoBehaviour
     {
         public const float BuildSfxCooldownSeconds = 0.12f;
+        /// <summary>Light per-shaft rate limit so rapid reopen edges do not stack ping/door.</summary>
+        public const float ElevatorArrivalCooldownSeconds = 0.2f;
         public const int AmbienceVoiceCount = 4;
 
         public const string SfxBuildPlacePath = "Audio/Sfx/build_place";
@@ -48,6 +50,7 @@ namespace BuildATower
         AudioClip _elevatorDoor;
 
         float _lastBuildSfxTime = float.NegativeInfinity;
+        readonly Dictionary<int, float> _lastElevatorArrivalByShaft = new();
         SoundProfile _selectedProfile = SoundProfile.None;
         RoomInstance _selectedRoom;
 
@@ -55,6 +58,20 @@ namespace BuildATower
         public RoomInstance SelectedRoom => _selectedRoom;
 
         public static bool CanPlayBuildSfx(float now, float last, float cooldown = BuildSfxCooldownSeconds)
+        {
+            return now - last >= cooldown;
+        }
+
+        /// <summary>True only on Moving → DoorsOpen (not Idle same-floor open).</summary>
+        public static bool ShouldPlayElevatorArrivalSfx(ElevatorCarState previousState)
+        {
+            return previousState == ElevatorCarState.Moving;
+        }
+
+        public static bool CanPlayElevatorArrivalSfx(
+            float now,
+            float last,
+            float cooldown = ElevatorArrivalCooldownSeconds)
         {
             return now - last >= cooldown;
         }
@@ -133,6 +150,22 @@ namespace BuildATower
         public void PlayElevatorDoor()
         {
             PlayOneShot(_elevatorDoor, SfxElevatorDoorPath, _sfxSecondary != null ? _sfxSecondary : _sfxPrimary);
+        }
+
+        /// <summary>
+        /// Ping + door once per stop, rate-limited per shaft id.
+        /// </summary>
+        public void PlayElevatorArrival(int shaftId)
+        {
+            var now = Time.unscaledTime;
+            if (!_lastElevatorArrivalByShaft.TryGetValue(shaftId, out var last))
+                last = float.NegativeInfinity;
+            if (!CanPlayElevatorArrivalSfx(now, last))
+                return;
+
+            PlayElevatorPing();
+            PlayElevatorDoor();
+            _lastElevatorArrivalByShaft[shaftId] = now;
         }
 
         /// <summary>
