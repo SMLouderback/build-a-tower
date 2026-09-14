@@ -39,5 +39,25 @@ namespace BuildATower.Tests
             Assert.AreEqual("Audio/Sfx/elevator_ping", TowerAudio.SfxElevatorPingPath);
             Assert.AreEqual("Audio/Sfx/elevator_door", TowerAudio.SfxElevatorDoorPath);
         }
+
+        [Test]
+        public void RescaleAmbienceVoice_zeros_when_new_gain_is_zero()
+        {
+            Assert.AreEqual(0f, TowerAudio.RescaleAmbienceVoice(0.35f, previousGain: 0.7f, newGain: 0f));
+        }
+
+        [Test]
+        public void RescaleAmbienceVoice_scales_by_gain_ratio()
+        {
+            // Voice was 0.4 at gain 0.8 → half master/ambience should become 0.2
+            Assert.AreEqual(0.2f, TowerAudio.RescaleAmbienceVoice(0.4f, previousGain: 0.8f, newGain: 0.4f), 1e-5f);
+        }
+
+        [Test]
+        public void RescaleAmbienceVoice_keeps_volume_when_previous_gain_was_zero()
+        {
+            // Cannot reconstruct mix until next TickAmbient; leave as-is.
+            Assert.AreEqual(0.15f, TowerAudio.RescaleAmbienceVoice(0.15f, previousGain: 0f, newGain: 0.7f));
+        }
     }
 }

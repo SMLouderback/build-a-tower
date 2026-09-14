@@ -51,6 +51,7 @@ namespace BuildATower
 
         float _lastBuildSfxTime = float.NegativeInfinity;
         readonly Dictionary<int, float> _lastElevatorArrivalByShaft = new();
+        float _lastAmbienceGain;
         SoundProfile _selectedProfile = SoundProfile.None;
         RoomInstance _selectedRoom;
 
@@ -79,6 +80,17 @@ namespace BuildATower
         public static string AmbienceResourcePath(SoundProfile profile)
         {
             return "Audio/Ambience/" + profile.ToString().ToLowerInvariant();
+        }
+
+        /// <summary>
+        /// Rescale a looping ambience voice when bus levels change between TickAmbient calls.
+        /// Zero new gain silences immediately; zero previous gain leaves volume until next tick.
+        /// </summary>
+        public static float RescaleAmbienceVoice(float voiceVolume, float previousGain, float newGain)
+        {
+            if (newGain <= 0f) return 0f;
+            if (previousGain <= 1e-6f) return voiceVolume;
+            return voiceVolume * (newGain / previousGain);
         }
 
         /// <summary>
@@ -169,6 +181,26 @@ namespace BuildATower
         }
 
         /// <summary>
+        /// Immediately refresh ambience voice volumes after Options bus edits (mute/sliders).
+        /// SFX one-shots already read <see cref="AudioBuses.Effective"/> at play time.
+        /// </summary>
+        public void ApplyVolumes()
+        {
+            EnsureSources();
+            if (_ambienceSources == null) return;
+
+            float newGain = Buses != null ? Buses.Effective(AudioBus.Ambience) : 0f;
+            for (int i = 0; i < _ambienceSources.Length; i++)
+            {
+                var source = _ambienceSources[i];
+                if (source == null) continue;
+                source.volume = RescaleAmbienceVoice(source.volume, _lastAmbienceGain, newGain);
+            }
+
+            _lastAmbienceGain = newGain;
+        }
+
+        /// <summary>
         /// Assign ranked profile beds to the 4-voice pool.
         /// Volume = Buses.Effective(Ambience) × weight / sum(weights).
         /// </summary>
@@ -225,6 +257,8 @@ namespace BuildATower
 
                 source.volume = ambGain * normalized;
             }
+
+            _lastAmbienceGain = ambGain;
         }
 
         void EnsureSources()

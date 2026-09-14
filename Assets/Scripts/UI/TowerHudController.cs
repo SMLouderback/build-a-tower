@@ -131,6 +131,7 @@ namespace BuildATower
         {
             Playing,
             Paused,
+            Options,
             ConfirmQuit
         }
 
@@ -195,6 +196,12 @@ namespace BuildATower
                 return;
 
             if (_pauseUi == PauseUiState.ConfirmQuit)
+            {
+                _pauseUi = PauseUiState.Paused;
+                return;
+            }
+
+            if (_pauseUi == PauseUiState.Options)
             {
                 _pauseUi = PauseUiState.Paused;
                 return;
@@ -650,7 +657,12 @@ namespace BuildATower
 
             GUI.Box(new Rect(0, 0, Screen.width, Screen.height), GUIContent.none);
             var panelW = 360f;
-            var panelH = _pauseUi == PauseUiState.ConfirmQuit ? 160f : 140f;
+            float panelH = _pauseUi switch
+            {
+                PauseUiState.ConfirmQuit => 160f,
+                PauseUiState.Options => 320f,
+                _ => 188f
+            };
             var panel = new Rect(
                 (Screen.width - panelW) * 0.5f,
                 (Screen.height - panelH) * 0.5f,
@@ -674,13 +686,94 @@ namespace BuildATower
                 return;
             }
 
+            if (_pauseUi == PauseUiState.Options)
+            {
+                DrawPauseOptions(cx, cy, inner, btnH, title, label);
+                return;
+            }
+
             GUI.Label(new Rect(cx, cy, inner, 28f), "Paused", title);
             cy += 36f;
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Resume"))
                 ResumeFromPause();
             cy += btnH + 8f;
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Options"))
+                _pauseUi = PauseUiState.Options;
+            cy += btnH + 8f;
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Main Menu"))
                 _pauseUi = PauseUiState.ConfirmQuit;
+        }
+
+        void DrawPauseOptions(float cx, float cy, float inner, float btnH, GUIStyle title, GUIStyle label)
+        {
+            GUI.Label(new Rect(cx, cy, inner, 28f), "Options", title);
+            cy += 36f;
+
+            var audio = TowerAudio.Ensure();
+            var buses = audio.Buses;
+            if (buses == null)
+            {
+                if (GUI.Button(new Rect(cx, cy, inner, btnH), "Back"))
+                    _pauseUi = PauseUiState.Paused;
+                return;
+            }
+
+            bool mute = GUI.Toggle(new Rect(cx, cy, inner, 22f), buses.MasterMute, " Master Mute", label);
+            if (mute != buses.MasterMute)
+            {
+                buses.MasterMute = mute;
+                PersistAudioBuses(audio);
+            }
+
+            cy += 28f;
+            cy = DrawVolumeSlider(cx, cy, inner, "Master", buses.Master, label, v =>
+            {
+                buses.Master = v;
+                PersistAudioBuses(audio);
+            });
+            cy = DrawVolumeSlider(cx, cy, inner, "SFX", buses.Sfx, label, v =>
+            {
+                buses.Sfx = v;
+                PersistAudioBuses(audio);
+            });
+            cy = DrawVolumeSlider(cx, cy, inner, "Ambience", buses.Ambience, label, v =>
+            {
+                buses.Ambience = v;
+                PersistAudioBuses(audio);
+            });
+            cy = DrawVolumeSlider(cx, cy, inner, "Music", buses.Music, label, v =>
+            {
+                buses.Music = v;
+                PersistAudioBuses(audio);
+            });
+
+            cy += 8f;
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Back"))
+                _pauseUi = PauseUiState.Paused;
+        }
+
+        static float DrawVolumeSlider(
+            float cx,
+            float cy,
+            float inner,
+            string caption,
+            float value,
+            GUIStyle label,
+            System.Action<float> onChanged)
+        {
+            GUI.Label(new Rect(cx, cy, inner, 18f), $"{caption}: {Mathf.RoundToInt(value * 100f)}%", label);
+            cy += 18f;
+            float next = GUI.HorizontalSlider(new Rect(cx, cy, inner, 16f), value, 0f, 1f);
+            if (!Mathf.Approximately(next, value))
+                onChanged(next);
+            return cy + 22f;
+        }
+
+        static void PersistAudioBuses(TowerAudio audio)
+        {
+            if (audio?.Buses == null) return;
+            audio.Buses.Save();
+            audio.ApplyVolumes();
         }
 
         /// <summary>
