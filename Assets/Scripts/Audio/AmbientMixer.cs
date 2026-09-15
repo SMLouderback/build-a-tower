@@ -7,13 +7,14 @@ namespace BuildATower
     {
         public const float SelectionBoostMultiplier = 2.75f;
 
-        /// <summary>Full outdoor bed weight when the tower contributes no ambience.</summary>
-        public const float OutdoorFullWeight = 1f;
+        /// <summary>Soft outdoor bed weight when the tower contributes no ambience.</summary>
+        public const float OutdoorFullWeight = 0.42f;
 
         /// <summary>
         /// When aggregated room weight reaches this, outdoor ambience is fully faded out.
+        /// Lower = birds/breeze duck sooner as rooms appear.
         /// </summary>
-        public const float OutdoorFadeAtTowerEnergy = 2.5f;
+        public const float OutdoorFadeAtTowerEnergy = 1.15f;
 
         public static float ProfileBias(SoundProfile profile) => profile switch
         {
@@ -22,7 +23,8 @@ namespace BuildATower
             SoundProfile.Elevator => 1.25f,
             SoundProfile.Stairs => 0.6f,
             SoundProfile.Utility => 0.65f,
-            SoundProfile.Outdoor => 1f,
+            // Keep outdoor from competing with interior beds once both are present.
+            SoundProfile.Outdoor => 0.55f,
             _ => 1f
         };
 
@@ -32,7 +34,7 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Birds/breeze bed fades as interior room energy rises.
+        /// Birds/breeze bed fades quickly as interior room energy rises.
         /// </summary>
         public static float OutdoorWeight(float towerEnergy)
         {
@@ -41,9 +43,9 @@ namespace BuildATower
             var t = towerEnergy / OutdoorFadeAtTowerEnergy;
             if (t >= 1f)
                 return 0f;
-            // Smooth fade: keep outdoor audible early, then drop off.
+            // Cubic falloff: still hear distant birds early, then nearly gone.
             var remain = 1f - t;
-            return OutdoorFullWeight * remain * remain;
+            return OutdoorFullWeight * remain * remain * remain;
         }
 
         public static float SumWeights(IEnumerable<(SoundProfile profile, float weight)> roomWeights)

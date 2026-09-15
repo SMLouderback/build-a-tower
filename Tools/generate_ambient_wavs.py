@@ -203,38 +203,69 @@ def sfx_elevator_door() -> list[float]:
     return normalize(buf, 0.4)
 
 
-def outdoor_bed(seconds: float = 10.0, seed: int = 7) -> list[float]:
-    """Light breeze + sparse bird chirps (short sweeps, not sustained tones)."""
-    rng = random.Random(seed)
-    n = int(seconds * SR)
-    # Very soft breeze — low and quiet so it does not read as highway/static.
-    breeze = brown_noise(n, rng, leak=0.9985)
-    breeze = one_pole_lp(breeze, 280)
-    breeze = [0.045 * v for v in breeze]
+def soft_peak_limit(buf: list[float], peak: float) -> list[float]:
+    """Cap peaks without boosting quiet material (avoids lifting breeze into focus)."""
+    m = max(abs(v) for v in buf) or 1.0
+    if m <= peak:
+        return buf
+    scale = peak / m
+    return [v * scale for v in buf]
 
-    buf = breeze[:]
-    # Bird chirps: short rising/falling sine sweeps with noise grain.
-    t = rng.uniform(0.4, 1.2)
-    while t < seconds - 0.35:
-        chirp_len = rng.uniform(0.08, 0.22)
-        f0 = rng.uniform(1800, 3200)
-        f1 = f0 + rng.uniform(400, 1400) * rng.choice([-1, 1])
-        amp = rng.uniform(0.045, 0.09)
-        start = int(t * SR)
+
+def add_distant_chirp(buf: list[float], start: int, rng: random.Random) -> None:
+    """Short muffled chirplet — distant bird, not a foreground whistle."""
+    n = len(buf)
+    # 1–3 quick notes in a phrase
+    notes = rng.randint(1, 3)
+    pos = start
+    base_f = rng.uniform(2200, 4800)
+    for note in range(notes):
+        chirp_len = rng.uniform(0.035, 0.09)
+        f0 = base_f * rng.uniform(0.92, 1.08)
+        f1 = f0 * rng.uniform(0.88, 1.18)
+        amp = rng.uniform(0.012, 0.028)  # distant
         length = int(chirp_len * SR)
         for i in range(length):
-            if start + i >= n:
+            idx = pos + i
+            if idx >= n:
                 break
             u = i / max(1, length - 1)
-            env = math.sin(math.pi * u) ** 1.2
+            env = (math.sin(math.pi * u) ** 1.6) * (0.7 + 0.3 * (1.0 - note * 0.15))
             freq = f0 + (f1 - f0) * u
             tone = math.sin(2 * math.pi * freq * (i / SR))
-            grain = 0.15 * rng.uniform(-1, 1)
-            buf[start + i] += amp * env * (0.85 * tone + grain)
-        t += rng.uniform(0.55, 1.8)
+            # tiny grain, then we'll LP the whole bed for distance
+            buf[idx] += amp * env * tone
+        pos += length + int(rng.uniform(0.02, 0.07) * SR)
 
-    buf = crossfade_loop(buf, fade=int(0.2 * SR))
-    return normalize(buf, 0.16)
+
+def outdoor_bed(seconds: float = 12.0, seed: int = 19) -> list[float]:
+    """Nearly subliminal breeze + infrequent distant multi-bird chirps."""
+    rng = random.Random(seed)
+    n = int(seconds * SR)
+
+    # Breeze: extremely quiet, very dark — felt more than heard.
+    breeze = brown_noise(n, rng, leak=0.999)
+    breeze = one_pole_lp(breeze, 160)
+    breeze = [0.008 * v for v in breeze]
+
+    buf = breeze[:]
+
+    # Multiple sparse "birds" with different timing offsets (farther / less whistly).
+    for bird in range(4):
+        bird_rng = random.Random(seed * 17 + bird * 91)
+        t = bird_rng.uniform(0.8, 2.5 + bird * 0.4)
+        # Rare phrases: ~one every 2.5–5.5s per bird
+        while t < seconds - 0.5:
+            add_distant_chirp(buf, int(t * SR), bird_rng)
+            # occasional double call from same bird
+            if bird_rng.random() < 0.22:
+                add_distant_chirp(buf, int((t + bird_rng.uniform(0.15, 0.35)) * SR), bird_rng)
+            t += bird_rng.uniform(2.6, 5.5)
+
+    # Distance muffling — cuts whistle edge, keeps chirps soft.
+    buf = one_pole_lp(buf, 3200)
+    buf = crossfade_loop(buf, fade=int(0.25 * SR))
+    return soft_peak_limit(buf, 0.09)
 
 
 PROFILES = {

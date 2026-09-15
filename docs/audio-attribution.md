@@ -9,7 +9,7 @@ file when assets change.
 
 | File | Profile | Source | License | Notes |
 |------|---------|--------|---------|-------|
-| `outdoor.wav` | Outdoor | Generated light breeze + bird chirps | N/A (procedural) | ~10s loop; default bed, fades as tower rooms add ambience |
+| `outdoor.wav` | Outdoor | Generated near-silent breeze + infrequent distant multi-bird chirps | N/A (procedural) | ~12s loop; ducks quickly as tower rooms add ambience |
 | `office.wav` | Office | Generated room tone + soft clicks | N/A (procedural) | ~6s loop |
 | `restaurant.wav` | Restaurant | Generated busier mid bed | N/A (procedural) | ~6s loop |
 | `retail.wav` | Retail | Generated soft shop bed | N/A (procedural) | ~6s loop |

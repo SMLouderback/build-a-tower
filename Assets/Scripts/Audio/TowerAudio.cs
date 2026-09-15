@@ -14,6 +14,12 @@ namespace BuildATower
         public const float ElevatorArrivalCooldownSeconds = 0.2f;
         public const int AmbienceVoiceCount = 4;
 
+        /// <summary>
+        /// Even when outdoor is the only voice, never fill the whole ambience bus —
+        /// breeze/birds stay background, not the focus.
+        /// </summary>
+        public const float OutdoorPresenceGain = 0.34f;
+
         public const string SfxBuildPlacePath = "Audio/Sfx/build_place";
         public const string SfxElevatorPingPath = "Audio/Sfx/elevator_ping";
         public const string SfxElevatorDoorPath = "Audio/Sfx/elevator_door";
@@ -244,6 +250,7 @@ namespace BuildATower
                 }
 
                 float normalized = weight / sum;
+                float presence = profile == SoundProfile.Outdoor ? OutdoorPresenceGain : 1f;
                 if (source.clip != clip)
                 {
                     source.clip = clip;
@@ -256,7 +263,7 @@ namespace BuildATower
                     source.Play();
                 }
 
-                source.volume = ambGain * normalized;
+                source.volume = ambGain * normalized * presence;
             }
 
             _lastAmbienceGain = ambGain;
