@@ -10,7 +10,7 @@ namespace BuildATower
     {
         public const float TickIntervalSeconds = 0.1f;
         public const float ViewportExpand = 0.08f;
-        public const float ElevatorMovingActivityFloor = 0.8f;
+        public const float ElevatorMovingActivityFloor = 0.35f;
         public const int ActivityAgentCap = 3;
 
         BuildController _build;

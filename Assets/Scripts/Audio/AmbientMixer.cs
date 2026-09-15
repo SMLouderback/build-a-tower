@@ -20,7 +20,7 @@ namespace BuildATower
         {
             SoundProfile.Parking => 1.3f,
             SoundProfile.Restaurant => 1.3f,
-            SoundProfile.Elevator => 1.25f,
+            SoundProfile.Elevator => 0.4f,
             SoundProfile.Stairs => 0.6f,
             SoundProfile.Utility => 0.65f,
             // Keep outdoor from competing with interior beds once both are present.

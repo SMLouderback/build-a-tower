@@ -116,47 +116,157 @@ def normalize(buf: list[float], peak: float = AMP) -> list[float]:
     return [v * scale for v in buf]
 
 
-def bed(
+def bandpass_noise(n: int, rng: random.Random, low_hz: float, high_hz: float) -> list[float]:
+    src = [rng.uniform(-1.0, 1.0) for _ in range(n)]
+    src = one_pole_hp(src, low_hz)
+    src = one_pole_lp(src, high_hz)
+    peak = max(abs(v) for v in src) or 1.0
+    return [v / peak for v in src]
+
+
+def add_chatter_syllable(buf: list[float], start: int, rng: random.Random, amp: float) -> None:
+    """Short speech-ish noise burst (formant-ish band), not a musical tone."""
+    n = len(buf)
+    dur = rng.uniform(0.05, 0.16)
+    length = int(dur * SR)
+    f_lo = rng.uniform(220, 420)
+    f_hi = rng.uniform(1400, 2800)
+    for i in range(length):
+        idx = start + i
+        if idx >= n:
+            break
+        u = i / max(1, length - 1)
+        env = math.sin(math.pi * u) ** 1.35
+        # cheap moving band: mix two filtered noise samples
+        noise = rng.uniform(-1.0, 1.0)
+        # soft AM so it doesn't read as static hiss
+        am = 0.65 + 0.35 * math.sin(2 * math.pi * (f_lo * 0.02) * (i / SR))
+        buf[idx] += amp * env * am * noise
+    # local blur toward speech band
+    end = min(n, start + length)
+    if end - start > 8:
+        segment = buf[start:end]
+        segment = one_pole_hp(segment, f_lo)
+        segment = one_pole_lp(segment, f_hi)
+        for i, v in enumerate(segment):
+            # blend filtered back
+            buf[start + i] = 0.35 * buf[start + i] + 0.65 * v
+
+
+def chatter_bed(
     seconds: float,
     seed: int,
     *,
-    brown_mix: float,
-    pink_mix: float,
-    lp_hz: float,
-    hp_hz: float,
-    click_rate: float,
-    click_amp: float,
-    whoosh_rate: float,
-    whoosh_amp: float,
-    whoosh_len: float,
+    density: float,
+    amp: float,
+    room_tone: float,
+    accent_rate: float,
+    accent_amp: float,
 ) -> list[float]:
+    """Quiet room tone + overlapping random chatter syllables."""
     rng = random.Random(seed)
     n = int(seconds * SR)
-    b = brown_noise(n, rng)
-    p = pinkish(n, rng)
-    mix = [brown_mix * b[i] + pink_mix * p[i] for i in range(n)]
-    if hp_hz > 0:
-        mix = one_pole_hp(mix, hp_hz)
-    mix = one_pole_lp(mix, lp_hz)
+    tone = brown_noise(n, rng, leak=0.998)
+    tone = one_pole_lp(tone, 500)
+    buf = [room_tone * v for v in tone]
 
-    # sparse accents
-    if click_rate > 0:
-        interval = max(1, int(SR / click_rate))
+    # Several overlapping talkers
+    talkers = max(2, int(3 * density))
+    for t_i in range(talkers):
+        tr = random.Random(seed * 31 + t_i * 97)
+        t = tr.uniform(0.2, 1.0)
+        while t < seconds - 0.2:
+            # burst of 2–6 syllables
+            count = tr.randint(2, 6)
+            pos = int(t * SR)
+            for _ in range(count):
+                add_chatter_syllable(buf, pos, tr, amp * tr.uniform(0.7, 1.15))
+                pos += int(tr.uniform(0.07, 0.18) * SR)
+            t += tr.uniform(0.55 / density, 1.8 / density)
+
+    if accent_rate > 0:
+        interval = max(1, int(SR / accent_rate))
         t = rng.randint(interval // 3, interval)
         while t < n - 200:
-            soft_impulse(mix, t, width=rng.randint(40, 120), amp=click_amp, rng=rng)
-            t += rng.randint(interval // 2, interval * 2)
+            soft_impulse(buf, t, width=rng.randint(30, 90), amp=accent_amp, rng=rng)
+            t += rng.randint(interval, interval * 3)
 
-    if whoosh_rate > 0:
-        interval = max(1, int(SR / whoosh_rate))
-        t = rng.randint(interval // 2, interval)
-        wlen = int(whoosh_len * SR)
-        while t < n - wlen - 10:
-            rumble_whoosh(mix, t, wlen, whoosh_amp, rng)
-            t += rng.randint(interval, int(interval * 2.5))
+    buf = one_pole_lp(buf, 3400)
+    buf = crossfade_loop(buf, fade=int(0.15 * SR))
+    return soft_peak_limit(normalize(buf, 0.14), 0.14)
 
-    mix = crossfade_loop(mix, fade=int(0.12 * SR))
-    return normalize(mix, AMP)
+
+def motor_whir_bed(seconds: float = 6.0, seed: int = 88) -> list[float]:
+    """Quiet electric motor: soft tonal whir + tiny hiss, easy to ignore."""
+    rng = random.Random(seed)
+    n = int(seconds * SR)
+    buf = [0.0] * n
+    f0 = 118.0
+    for i in range(n):
+        t = i / SR
+        # slight RPM flutter
+        flutter = 1.0 + 0.012 * math.sin(2 * math.pi * 0.35 * t)
+        whir = (
+            0.55 * math.sin(2 * math.pi * f0 * flutter * t)
+            + 0.22 * math.sin(2 * math.pi * (2.0 * f0) * flutter * t)
+            + 0.08 * math.sin(2 * math.pi * (3.0 * f0) * flutter * t)
+        )
+        hiss = 0.04 * rng.uniform(-1.0, 1.0)
+        buf[i] = 0.035 * whir + hiss
+    buf = one_pole_lp(buf, 900)
+    buf = one_pole_hp(buf, 60)
+    buf = crossfade_loop(buf, fade=int(0.2 * SR))
+    return soft_peak_limit(buf, 0.05)
+
+
+def parking_bed(seconds: float = 7.0, seed: int = 99) -> list[float]:
+    """Distant garage — quieter rumble, sparse pass-bys (not brown wall)."""
+    rng = random.Random(seed)
+    n = int(seconds * SR)
+    base = brown_noise(n, rng, leak=0.9988)
+    base = one_pole_lp(base, 350)
+    buf = [0.025 * v for v in base]
+    t = rng.uniform(0.8, 2.0)
+    while t < seconds - 1.2:
+        rumble_whoosh(buf, int(t * SR), int(rng.uniform(0.8, 1.5) * SR), 0.05, rng)
+        t += rng.uniform(2.2, 4.0)
+    buf = crossfade_loop(buf, fade=int(0.2 * SR))
+    return soft_peak_limit(buf, 0.08)
+
+
+def utility_bed(seconds: float = 5.0, seed: int = 111) -> list[float]:
+    rng = random.Random(seed)
+    n = int(seconds * SR)
+    base = brown_noise(n, rng, leak=0.999)
+    base = one_pole_lp(base, 280)
+    buf = [0.02 * v for v in base]
+    t = rng.uniform(0.5, 1.5)
+    while t < seconds - 0.3:
+        soft_impulse(buf, int(t * SR), width=rng.randint(40, 100), amp=0.03, rng=rng)
+        t += rng.uniform(1.2, 2.8)
+    buf = crossfade_loop(buf, fade=int(0.15 * SR))
+    return soft_peak_limit(buf, 0.06)
+
+
+def stairs_bed(seconds: float = 5.0, seed: int = 133) -> list[float]:
+    rng = random.Random(seed)
+    n = int(seconds * SR)
+    buf = [0.0] * n
+    t = rng.uniform(0.4, 1.0)
+    while t < seconds - 0.2:
+        soft_impulse(buf, int(t * SR), width=rng.randint(50, 110), amp=0.06, rng=rng)
+        t += rng.uniform(0.35, 0.9)
+    buf = one_pole_lp(buf, 1200)
+    buf = crossfade_loop(buf, fade=int(0.12 * SR))
+    return soft_peak_limit(normalize(buf, 0.08), 0.08)
+
+
+def soft_peak_limit(buf: list[float], peak: float) -> list[float]:
+    m = max(abs(v) for v in buf) or 1.0
+    if m <= peak:
+        return buf
+    scale = peak / m
+    return [v * scale for v in buf]
 
 
 def sfx_build_place() -> list[float]:
@@ -172,14 +282,12 @@ def sfx_build_place() -> list[float]:
 
 
 def sfx_elevator_ping() -> list[float]:
-    """Soft mechanical ding: very short decaying partials buried in noise (not sustained tone)."""
     rng = random.Random(202)
     n = int(0.28 * SR)
     buf = [0.0] * n
     for i in range(n):
         t = i / SR
         env = math.exp(-14.0 * t)
-        # brief inharmonic partials that die fast — ding, not held note
         ding = (
             0.45 * math.sin(2 * math.pi * 880 * t)
             + 0.22 * math.sin(2 * math.pi * 1320 * t)
@@ -188,7 +296,7 @@ def sfx_elevator_ping() -> list[float]:
         body = 0.25 * rng.uniform(-1, 1)
         buf[i] = env * (ding + body)
     buf = one_pole_lp(buf, 4200)
-    return normalize(buf, 0.35)
+    return normalize(buf, 0.28)
 
 
 def sfx_elevator_door() -> list[float]:
@@ -200,22 +308,11 @@ def sfx_elevator_door() -> list[float]:
     soft_impulse(buf, int(0.42 * SR), 110, 0.4, rng)
     buf = one_pole_lp(buf, 900)
     buf = one_pole_hp(buf, 80)
-    return normalize(buf, 0.4)
-
-
-def soft_peak_limit(buf: list[float], peak: float) -> list[float]:
-    """Cap peaks without boosting quiet material (avoids lifting breeze into focus)."""
-    m = max(abs(v) for v in buf) or 1.0
-    if m <= peak:
-        return buf
-    scale = peak / m
-    return [v * scale for v in buf]
+    return normalize(buf, 0.32)
 
 
 def add_distant_chirp(buf: list[float], start: int, rng: random.Random) -> None:
-    """Short muffled chirplet — distant bird, not a foreground whistle."""
     n = len(buf)
-    # 1–3 quick notes in a phrase
     notes = rng.randint(1, 3)
     pos = start
     base_f = rng.uniform(2200, 4800)
@@ -223,7 +320,7 @@ def add_distant_chirp(buf: list[float], start: int, rng: random.Random) -> None:
         chirp_len = rng.uniform(0.035, 0.09)
         f0 = base_f * rng.uniform(0.92, 1.08)
         f1 = f0 * rng.uniform(0.88, 1.18)
-        amp = rng.uniform(0.012, 0.028)  # distant
+        amp = rng.uniform(0.012, 0.028)
         length = int(chirp_len * SR)
         for i in range(length):
             idx = pos + i
@@ -233,68 +330,39 @@ def add_distant_chirp(buf: list[float], start: int, rng: random.Random) -> None:
             env = (math.sin(math.pi * u) ** 1.6) * (0.7 + 0.3 * (1.0 - note * 0.15))
             freq = f0 + (f1 - f0) * u
             tone = math.sin(2 * math.pi * freq * (i / SR))
-            # tiny grain, then we'll LP the whole bed for distance
             buf[idx] += amp * env * tone
         pos += length + int(rng.uniform(0.02, 0.07) * SR)
 
 
 def outdoor_bed(seconds: float = 12.0, seed: int = 19) -> list[float]:
-    """Nearly subliminal breeze + infrequent distant multi-bird chirps."""
     rng = random.Random(seed)
     n = int(seconds * SR)
-
-    # Breeze: extremely quiet, very dark — felt more than heard.
     breeze = brown_noise(n, rng, leak=0.999)
     breeze = one_pole_lp(breeze, 160)
     breeze = [0.008 * v for v in breeze]
-
     buf = breeze[:]
-
-    # Multiple sparse "birds" with different timing offsets (farther / less whistly).
     for bird in range(4):
         bird_rng = random.Random(seed * 17 + bird * 91)
         t = bird_rng.uniform(0.8, 2.5 + bird * 0.4)
-        # Rare phrases: ~one every 2.5–5.5s per bird
         while t < seconds - 0.5:
             add_distant_chirp(buf, int(t * SR), bird_rng)
-            # occasional double call from same bird
             if bird_rng.random() < 0.22:
                 add_distant_chirp(buf, int((t + bird_rng.uniform(0.15, 0.35)) * SR), bird_rng)
             t += bird_rng.uniform(2.6, 5.5)
-
-    # Distance muffling — cuts whistle edge, keeps chirps soft.
     buf = one_pole_lp(buf, 3200)
     buf = crossfade_loop(buf, fade=int(0.25 * SR))
     return soft_peak_limit(buf, 0.09)
 
 
-PROFILES = {
-    # quiet office murmur + sparse key clicks
-    "office": dict(seconds=6.0, seed=11, brown_mix=0.55, pink_mix=0.45, lp_hz=1400, hp_hz=80,
-                   click_rate=4.5, click_amp=0.12, whoosh_rate=0.15, whoosh_amp=0.04, whoosh_len=0.4),
-    # busier midrange + more activity
-    "restaurant": dict(seconds=6.0, seed=22, brown_mix=0.35, pink_mix=0.65, lp_hz=2200, hp_hz=100,
-                       click_rate=6.0, click_amp=0.10, whoosh_rate=0.8, whoosh_amp=0.08, whoosh_len=0.25),
-    "retail": dict(seconds=6.0, seed=33, brown_mix=0.45, pink_mix=0.55, lp_hz=1800, hp_hz=90,
-                   click_rate=2.0, click_amp=0.07, whoosh_rate=0.35, whoosh_amp=0.05, whoosh_len=0.35),
-    "condo": dict(seconds=7.0, seed=44, brown_mix=0.65, pink_mix=0.35, lp_hz=1100, hp_hz=60,
-                  click_rate=0.8, click_amp=0.05, whoosh_rate=0.2, whoosh_amp=0.06, whoosh_len=0.6),
-    "hotel": dict(seconds=7.0, seed=55, brown_mix=0.7, pink_mix=0.3, lp_hz=900, hp_hz=50,
-                  click_rate=0.35, click_amp=0.04, whoosh_rate=0.12, whoosh_amp=0.05, whoosh_len=0.8),
-    "conference": dict(seconds=6.0, seed=66, brown_mix=0.5, pink_mix=0.5, lp_hz=1600, hp_hz=90,
-                       click_rate=1.2, click_amp=0.06, whoosh_rate=0.25, whoosh_amp=0.05, whoosh_len=0.5),
-    "event": dict(seconds=6.0, seed=77, brown_mix=0.3, pink_mix=0.7, lp_hz=2400, hp_hz=80,
-                  click_rate=1.5, click_amp=0.05, whoosh_rate=1.0, whoosh_amp=0.1, whoosh_len=0.35),
-    "elevator": dict(seconds=5.0, seed=88, brown_mix=0.8, pink_mix=0.2, lp_hz=700, hp_hz=40,
-                     click_rate=0.2, click_amp=0.03, whoosh_rate=0.45, whoosh_amp=0.12, whoosh_len=1.2),
-    "parking": dict(seconds=7.0, seed=99, brown_mix=0.75, pink_mix=0.25, lp_hz=800, hp_hz=35,
-                    click_rate=0.15, click_amp=0.08, whoosh_rate=0.55, whoosh_amp=0.14, whoosh_len=1.4),
-    "utility": dict(seconds=5.0, seed=111, brown_mix=0.85, pink_mix=0.15, lp_hz=600, hp_hz=45,
-                    click_rate=0.4, click_amp=0.05, whoosh_rate=0.3, whoosh_amp=0.07, whoosh_len=0.9),
-    "lobby": dict(seconds=6.0, seed=122, brown_mix=0.55, pink_mix=0.45, lp_hz=1500, hp_hz=70,
-                  click_rate=1.0, click_amp=0.05, whoosh_rate=0.4, whoosh_amp=0.06, whoosh_len=0.45),
-    "stairs": dict(seconds=5.0, seed=133, brown_mix=0.6, pink_mix=0.4, lp_hz=1200, hp_hz=100,
-                   click_rate=2.2, click_amp=0.14, whoosh_rate=0.05, whoosh_amp=0.03, whoosh_len=0.3),
+CHATTER_PROFILES = {
+    "office": dict(seconds=7.0, seed=11, density=1.0, amp=0.045, room_tone=0.012, accent_rate=2.5, accent_amp=0.035),
+    "restaurant": dict(seconds=7.0, seed=22, density=1.6, amp=0.055, room_tone=0.014, accent_rate=1.2, accent_amp=0.03),
+    "retail": dict(seconds=7.0, seed=33, density=0.9, amp=0.04, room_tone=0.012, accent_rate=1.0, accent_amp=0.025),
+    "condo": dict(seconds=8.0, seed=44, density=0.7, amp=0.035, room_tone=0.01, accent_rate=0.4, accent_amp=0.02),
+    "hotel": dict(seconds=8.0, seed=55, density=0.35, amp=0.025, room_tone=0.01, accent_rate=0.25, accent_amp=0.015),
+    "conference": dict(seconds=7.0, seed=66, density=0.85, amp=0.04, room_tone=0.012, accent_rate=0.5, accent_amp=0.02),
+    "event": dict(seconds=7.0, seed=77, density=1.8, amp=0.05, room_tone=0.015, accent_rate=0.6, accent_amp=0.025),
+    "lobby": dict(seconds=7.0, seed=122, density=1.1, amp=0.04, room_tone=0.012, accent_rate=0.8, accent_amp=0.02),
 }
 
 
@@ -307,11 +375,19 @@ def main() -> None:
     write_wav(amb / "outdoor.wav", outdoor)
     print(f"wrote outdoor.wav ({len(outdoor)/SR:.1f}s)")
 
-    for name, kwargs in PROFILES.items():
-        samples = bed(**kwargs)
-        out = amb / f"{name}.wav"
-        write_wav(out, samples)
-        print(f"wrote {out} ({len(samples)/SR:.1f}s)")
+    for name, kwargs in CHATTER_PROFILES.items():
+        samples = chatter_bed(**kwargs)
+        write_wav(amb / f"{name}.wav", samples)
+        print(f"wrote {name}.wav chatter ({len(samples)/SR:.1f}s)")
+
+    write_wav(amb / "elevator.wav", motor_whir_bed())
+    print("wrote elevator.wav motor whir")
+    write_wav(amb / "parking.wav", parking_bed())
+    print("wrote parking.wav")
+    write_wav(amb / "utility.wav", utility_bed())
+    print("wrote utility.wav")
+    write_wav(amb / "stairs.wav", stairs_bed())
+    print("wrote stairs.wav")
 
     write_wav(sfx / "build_place.wav", sfx_build_place())
     write_wav(sfx / "elevator_ping.wav", sfx_elevator_ping())

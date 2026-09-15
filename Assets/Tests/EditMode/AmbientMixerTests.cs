@@ -29,6 +29,7 @@ namespace BuildATower.Tests
         public void ProfileBias_marks_loud_and_quiet_types()
         {
             Assert.Greater(AmbientMixer.ProfileBias(SoundProfile.Parking), 1.1f);
+            Assert.Less(AmbientMixer.ProfileBias(SoundProfile.Elevator), 0.7f);
             Assert.Less(AmbientMixer.ProfileBias(SoundProfile.Stairs), 0.8f);
         }
 

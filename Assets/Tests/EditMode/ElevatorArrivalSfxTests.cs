@@ -45,17 +45,37 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void ShouldEmitElevatorArrivalSfx_selected_always_when_from_Moving()
+        {
+            Assert.IsTrue(TowerAudio.ShouldEmitElevatorArrivalSfx(
+                ElevatorCarState.Moving, shaftSelected: true, random01: 0.99f));
+            Assert.IsFalse(TowerAudio.ShouldEmitElevatorArrivalSfx(
+                ElevatorCarState.Idle, shaftSelected: true, random01: 0f));
+        }
+
+        [Test]
+        public void ShouldEmitElevatorArrivalSfx_random_only_below_chance()
+        {
+            Assert.IsTrue(TowerAudio.ShouldEmitElevatorArrivalSfx(
+                ElevatorCarState.Moving, shaftSelected: false, random01: 0f));
+            Assert.IsFalse(TowerAudio.ShouldEmitElevatorArrivalSfx(
+                ElevatorCarState.Moving,
+                shaftSelected: false,
+                random01: TowerAudio.ElevatorArrivalChance));
+        }
+
+        [Test]
         public void CanPlayElevatorArrivalSfx_blocks_within_cooldown()
         {
-            Assert.IsFalse(TowerAudio.CanPlayElevatorArrivalSfx(1.05f, 1.00f, 0.2f));
-            Assert.IsFalse(TowerAudio.CanPlayElevatorArrivalSfx(1.199f, 1.00f, 0.2f));
+            Assert.IsFalse(TowerAudio.CanPlayElevatorArrivalSfx(1.05f, 1.00f, 5f));
+            Assert.IsFalse(TowerAudio.CanPlayElevatorArrivalSfx(5.99f, 1.00f, 5f));
         }
 
         [Test]
         public void CanPlayElevatorArrivalSfx_allows_after_cooldown()
         {
-            Assert.IsTrue(TowerAudio.CanPlayElevatorArrivalSfx(1.20f, 1.00f, 0.2f));
-            Assert.IsTrue(TowerAudio.CanPlayElevatorArrivalSfx(2.00f, 1.00f, 0.2f));
+            Assert.IsTrue(TowerAudio.CanPlayElevatorArrivalSfx(6.00f, 1.00f, 5f));
+            Assert.IsTrue(TowerAudio.CanPlayElevatorArrivalSfx(10.00f, 1.00f, 5f));
         }
 
         [Test]

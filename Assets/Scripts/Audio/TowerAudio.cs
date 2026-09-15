@@ -10,8 +10,15 @@ namespace BuildATower
     public sealed class TowerAudio : MonoBehaviour
     {
         public const float BuildSfxCooldownSeconds = 0.12f;
-        /// <summary>Light per-shaft rate limit so rapid reopen edges do not stack ping/door.</summary>
-        public const float ElevatorArrivalCooldownSeconds = 0.2f;
+        /// <summary>
+        /// Rare ambient ping chance when a car arrives and the shaft is not selected.
+        /// Uses unscaled wall time so high sim speed does not machine-gun SFX.
+        /// </summary>
+        public const float ElevatorArrivalChance = 0.08f;
+        public const float ElevatorArrivalCooldownSeconds = 5f;
+
+        /// <summary>Quiet motor bed — never dominate the ambience bus.</summary>
+        public const float ElevatorPresenceGain = 0.22f;
         public const int AmbienceVoiceCount = 4;
 
         /// <summary>
@@ -74,6 +81,21 @@ namespace BuildATower
         public static bool ShouldPlayElevatorArrivalSfx(ElevatorCarState previousState)
         {
             return previousState == ElevatorCarState.Moving;
+        }
+
+        /// <summary>
+        /// Selected shafts always ping (after cooldown). Otherwise rare random ambient ping.
+        /// </summary>
+        public static bool ShouldEmitElevatorArrivalSfx(
+            ElevatorCarState previousState,
+            bool shaftSelected,
+            float random01)
+        {
+            if (!ShouldPlayElevatorArrivalSfx(previousState))
+                return false;
+            if (shaftSelected)
+                return true;
+            return random01 < ElevatorArrivalChance;
         }
 
         public static bool CanPlayElevatorArrivalSfx(
@@ -172,19 +194,34 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Ping + door once per stop, rate-limited per shaft id.
+        /// Occasional ping/door on arrival — always when this shaft is selected, else rare random.
+        /// Cooldown is wall-clock so fast sim does not spam re-rolls.
         /// </summary>
         public void PlayElevatorArrival(int shaftId)
         {
             var now = Time.unscaledTime;
             if (!_lastElevatorArrivalByShaft.TryGetValue(shaftId, out var last))
                 last = float.NegativeInfinity;
-            if (!CanPlayElevatorArrivalSfx(now, last))
+
+            var selected = _selectedRoom != null &&
+                           _selectedRoom.InstanceId == shaftId &&
+                           _selectedProfile == SoundProfile.Elevator;
+            var cooldown = selected ? 1.25f : ElevatorArrivalCooldownSeconds;
+            if (!CanPlayElevatorArrivalSfx(now, last, cooldown))
+                return;
+
+            // Mark the window even when we skip the sound so high sim speed cannot
+            // re-roll Random every door open until a ping lands.
+            _lastElevatorArrivalByShaft[shaftId] = now;
+
+            if (!ShouldEmitElevatorArrivalSfx(
+                    ElevatorCarState.Moving,
+                    selected,
+                    UnityEngine.Random.value))
                 return;
 
             PlayElevatorPing();
             PlayElevatorDoor();
-            _lastElevatorArrivalByShaft[shaftId] = now;
         }
 
         /// <summary>
@@ -250,11 +287,17 @@ namespace BuildATower
                 }
 
                 float normalized = weight / sum;
-                float presence = profile == SoundProfile.Outdoor ? OutdoorPresenceGain : 1f;
+                float presence = profile switch
+                {
+                    SoundProfile.Outdoor => OutdoorPresenceGain,
+                    SoundProfile.Elevator => ElevatorPresenceGain,
+                    _ => 1f
+                };
                 if (source.clip != clip)
                 {
                     source.clip = clip;
                     source.loop = true;
+                    source.pitch = 1f;
                     if (!source.isPlaying)
                         source.Play();
                 }
@@ -263,6 +306,7 @@ namespace BuildATower
                     source.Play();
                 }
 
+                source.pitch = 1f;
                 source.volume = ambGain * normalized * presence;
             }
 
@@ -283,6 +327,7 @@ namespace BuildATower
                 var src = child.AddComponent<AudioSource>();
                 src.playOnAwake = false;
                 src.loop = true;
+                src.pitch = 1f;
                 src.spatialBlend = 0f;
                 _ambienceSources[i] = src;
             }
