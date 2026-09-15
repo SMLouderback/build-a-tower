@@ -3,6 +3,7 @@ namespace BuildATower
     public enum SoundProfile
     {
         None,
+        Outdoor,
         Office,
         Restaurant,
         Retail,

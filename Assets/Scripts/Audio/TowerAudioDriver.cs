@@ -57,15 +57,16 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Empty rooms whisper at 0.25; 1–3+ agents lerp toward 1.0 (cap at 3).
+        /// Empty rooms are nearly silent so outdoor birds/breeze can lead;
+        /// 1–3+ agents lerp toward 1.0 (cap at 3).
         /// </summary>
         public static float ActivityFromAgentCount(int agentCount)
         {
             if (agentCount <= 0)
-                return 0.25f;
+                return 0.08f;
 
             float t = Mathf.Clamp01(agentCount / (float)ActivityAgentCap);
-            return Mathf.Lerp(0.5f, 1f, t);
+            return Mathf.Lerp(0.45f, 1f, t);
         }
 
         /// <summary>
@@ -133,7 +134,10 @@ namespace BuildATower
             var audio = TowerAudio.Ensure();
             if (_build?.Grid == null)
             {
-                audio.TickAmbient(null);
+                audio.TickAmbient(new List<(SoundProfile, float)>
+                {
+                    (SoundProfile.Outdoor, AmbientMixer.OutdoorFullWeight)
+                });
                 return;
             }
 
@@ -167,7 +171,9 @@ namespace BuildATower
                     continue;
 
                 var profile = SoundProfileMap.ForRoom(room.Type);
-                if (profile == SoundProfile.None || profile == SoundProfile.Build)
+                if (profile == SoundProfile.None ||
+                    profile == SoundProfile.Build ||
+                    profile == SoundProfile.Outdoor)
                     continue;
 
                 float visibility = ComputeRoomVisibility(cam, room);
@@ -189,8 +195,15 @@ namespace BuildATower
                     _roomWeights.Add((profile, score));
             }
 
+            // Empty / early tower: birds + breeze. Fades as interior beds take over.
+            var towerEnergy = AmbientMixer.SumWeights(_roomWeights);
+            var outdoor = AmbientMixer.OutdoorWeight(towerEnergy);
+            if (outdoor > 0.01f)
+                _roomWeights.Add((SoundProfile.Outdoor, outdoor));
+
             SoundProfile? selectedBoost = null;
-            if (audio.SelectedProfile != SoundProfile.None)
+            if (audio.SelectedProfile != SoundProfile.None &&
+                audio.SelectedProfile != SoundProfile.Outdoor)
                 selectedBoost = audio.SelectedProfile;
 
             var ranked = AmbientMixer.RankProfiles(_roomWeights, selectedBoost);

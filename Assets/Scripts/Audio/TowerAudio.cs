@@ -20,6 +20,7 @@ namespace BuildATower
 
         static readonly SoundProfile[] AmbienceProfiles =
         {
+            SoundProfile.Outdoor,
             SoundProfile.Office,
             SoundProfile.Restaurant,
             SoundProfile.Retail,

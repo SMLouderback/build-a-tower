@@ -203,6 +203,40 @@ def sfx_elevator_door() -> list[float]:
     return normalize(buf, 0.4)
 
 
+def outdoor_bed(seconds: float = 10.0, seed: int = 7) -> list[float]:
+    """Light breeze + sparse bird chirps (short sweeps, not sustained tones)."""
+    rng = random.Random(seed)
+    n = int(seconds * SR)
+    # Very soft breeze — low and quiet so it does not read as highway/static.
+    breeze = brown_noise(n, rng, leak=0.9985)
+    breeze = one_pole_lp(breeze, 280)
+    breeze = [0.045 * v for v in breeze]
+
+    buf = breeze[:]
+    # Bird chirps: short rising/falling sine sweeps with noise grain.
+    t = rng.uniform(0.4, 1.2)
+    while t < seconds - 0.35:
+        chirp_len = rng.uniform(0.08, 0.22)
+        f0 = rng.uniform(1800, 3200)
+        f1 = f0 + rng.uniform(400, 1400) * rng.choice([-1, 1])
+        amp = rng.uniform(0.045, 0.09)
+        start = int(t * SR)
+        length = int(chirp_len * SR)
+        for i in range(length):
+            if start + i >= n:
+                break
+            u = i / max(1, length - 1)
+            env = math.sin(math.pi * u) ** 1.2
+            freq = f0 + (f1 - f0) * u
+            tone = math.sin(2 * math.pi * freq * (i / SR))
+            grain = 0.15 * rng.uniform(-1, 1)
+            buf[start + i] += amp * env * (0.85 * tone + grain)
+        t += rng.uniform(0.55, 1.8)
+
+    buf = crossfade_loop(buf, fade=int(0.2 * SR))
+    return normalize(buf, 0.16)
+
+
 PROFILES = {
     # quiet office murmur + sparse key clicks
     "office": dict(seconds=6.0, seed=11, brown_mix=0.55, pink_mix=0.45, lp_hz=1400, hp_hz=80,
@@ -237,6 +271,10 @@ def main() -> None:
     root = Path(__file__).resolve().parents[1]
     amb = root / "Assets" / "Resources" / "Audio" / "Ambience"
     sfx = root / "Assets" / "Resources" / "Audio" / "Sfx"
+
+    outdoor = outdoor_bed()
+    write_wav(amb / "outdoor.wav", outdoor)
+    print(f"wrote outdoor.wav ({len(outdoor)/SR:.1f}s)")
 
     for name, kwargs in PROFILES.items():
         samples = bed(**kwargs)

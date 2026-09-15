@@ -29,6 +29,7 @@ namespace BuildATower.Tests
         public void AmbienceResourcePath_uses_lowercase_profile_name()
         {
             Assert.AreEqual("Audio/Ambience/office", TowerAudio.AmbienceResourcePath(SoundProfile.Office));
+            Assert.AreEqual("Audio/Ambience/outdoor", TowerAudio.AmbienceResourcePath(SoundProfile.Outdoor));
             Assert.AreEqual("Audio/Ambience/parking", TowerAudio.AmbienceResourcePath(SoundProfile.Parking));
         }
 

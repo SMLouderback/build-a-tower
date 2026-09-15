@@ -40,6 +40,30 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void OutdoorWeight_is_full_when_tower_is_empty_and_fades_with_energy()
+        {
+            Assert.AreEqual(AmbientMixer.OutdoorFullWeight, AmbientMixer.OutdoorWeight(0f), 0.0001f);
+            Assert.Greater(AmbientMixer.OutdoorWeight(0.5f), 0f);
+            Assert.Less(AmbientMixer.OutdoorWeight(0.5f), AmbientMixer.OutdoorFullWeight);
+            Assert.AreEqual(0f, AmbientMixer.OutdoorWeight(AmbientMixer.OutdoorFadeAtTowerEnergy), 0.0001f);
+            Assert.AreEqual(0f, AmbientMixer.OutdoorWeight(99f), 0.0001f);
+        }
+
+        [Test]
+        public void SumWeights_ignores_outdoor_and_non_positive()
+        {
+            var sum = AmbientMixer.SumWeights(new[]
+            {
+                (SoundProfile.Office, 1.2f),
+                (SoundProfile.Outdoor, 9f),
+                (SoundProfile.Build, 3f),
+                (SoundProfile.None, 2f),
+                (SoundProfile.Hotel, 0f),
+            });
+            Assert.AreEqual(1.2f, sum, 0.0001f);
+        }
+
+        [Test]
         public void RankProfiles_aggregates_same_profile_before_ranking()
         {
             var rooms = new[]
