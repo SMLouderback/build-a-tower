@@ -177,7 +177,7 @@ namespace BuildATower
             };
             if (!decoded.LoadImage(png, false))
             {
-                Object.Destroy(decoded);
+                UnityEngine.Object.Destroy(decoded);
                 return null;
             }
 
@@ -212,7 +212,7 @@ namespace BuildATower
             if (maxX < minX || maxY < minY)
             {
                 if (destroySource)
-                    Object.Destroy(source);
+                    UnityEngine.Object.Destroy(source);
                 return null;
             }
 
@@ -236,7 +236,7 @@ namespace BuildATower
             tex.Apply(false, false);
 
             if (destroySource)
-                Object.Destroy(source);
+                UnityEngine.Object.Destroy(source);
             return tex;
         }
 
