@@ -24,16 +24,25 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void IsShop_only_for_traffic_variable()
+        public void IsShop_only_for_traffic_shops()
         {
             var shop = ScriptableObject.CreateInstance<RoomTypeSO>();
             shop.incomeModel = IncomeModel.TrafficVariable;
+            shop.buildFamily = BuildFamily.Shops;
+            shop.buildSubgroup = BuildSubgroup.Food;
+            var leisure = ScriptableObject.CreateInstance<RoomTypeSO>();
+            leisure.incomeModel = IncomeModel.TrafficVariable;
+            leisure.buildFamily = BuildFamily.Leisure;
+            leisure.id = "leisure_gym";
             var office = ScriptableObject.CreateInstance<RoomTypeSO>();
             office.incomeModel = IncomeModel.QuarterlyRent;
 
             Assert.IsTrue(ShopVisitRules.IsShop(shop));
+            Assert.IsTrue(ShopVisitRules.IsTrafficVenue(leisure));
+            Assert.IsFalse(ShopVisitRules.IsShop(leisure));
             Assert.IsFalse(ShopVisitRules.IsShop(office));
             Assert.IsFalse(ShopVisitRules.IsShop(null));
+            Assert.IsFalse(ShopVisitRules.IsTrafficVenue(null));
         }
 
         [Test]
@@ -221,6 +230,7 @@ namespace BuildATower.Tests
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
             so.id = id;
             so.category = RoomCategory.Commercial;
+            so.buildFamily = BuildFamily.Shops;
             so.incomeModel = IncomeModel.TrafficVariable;
             so.streetVisitWeight = streetVisitWeight;
             so.size = Vector2Int.one;

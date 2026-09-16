@@ -1155,7 +1155,7 @@ namespace BuildATower
                 // Use `is null` (not ==) so net8 hosts can use uninitialized RoomTypeSO fixtures.
                 if (room is null || room.Type is null) continue;
                 var isTarget =
-                    ShopVisitRules.IsShop(room.Type) ||
+                    ShopVisitRules.IsTrafficVenue(room.Type) ||
                     room.Type.category == RoomCategory.Hotel;
                 if (!isTarget) continue;
                 var minY = room.Origin.y;
@@ -1789,7 +1789,8 @@ namespace BuildATower
             agent.VisitDwellRemaining = ShopVisitRules.PickDwellMinutes(shop.Type, _rng);
             if (BeginTrip(agent, agent.Cell, ShopEntryCell(shop), AgentPhase.VisitingShop, grid))
             {
-                _shopDemand?.TryConsume(shop.Type, wealth);
+                if (shop.Type?.ResolvedBuildFamily() != BuildFamily.Leisure)
+                    _shopDemand?.TryConsume(shop.Type, wealth);
                 return true;
             }
 
@@ -1843,7 +1844,7 @@ namespace BuildATower
             foreach (var room in grid.Rooms)
             {
                 if (room?.Type == null) continue;
-                if (!ShopVisitRules.IsShop(room.Type)) continue;
+                if (!ShopVisitRules.IsTrafficVenue(room.Type)) continue;
                 if (!ShopVisitRules.IsOpen(room.Type, minuteOfDay)) continue;
                 if (room.ConcurrentVisitors >= ShopVisitRules.SlotCount(room.Type)) continue;
                 if (disposableRemaining.HasValue &&
@@ -1865,9 +1866,17 @@ namespace BuildATower
             bool streetOrigin)
         {
             var eligible = FindOpenShops(grid, minuteOfDay, disposableRemaining);
+            if (eligible.Count == 0) return null;
+
+            var leisure = new List<RoomInstance>();
+            foreach (var venue in eligible)
+            {
+                if (venue.Type?.ResolvedBuildFamily() == BuildFamily.Leisure)
+                    leisure.Add(venue);
+            }
+
             if (_shopDemand == null)
             {
-                if (eligible.Count == 0) return null;
                 return streetOrigin
                     ? ShopVisitRules.PickWeightedShop(eligible, _rng)
                     : eligible[_rng.Next(eligible.Count)];
@@ -1880,6 +1889,8 @@ namespace BuildATower
             var retailSpill = new List<RoomInstance>();
             foreach (var shop in eligible)
             {
+                if (shop.Type?.ResolvedBuildFamily() == BuildFamily.Leisure)
+                    continue;
                 if (!_shopDemand.CanServe(shop.Type, wealth))
                     continue;
 
@@ -1910,9 +1921,20 @@ namespace BuildATower
                 foodAvailable,
                 retailAvailable,
                 _rng.NextDouble());
-            if (!familyChoice.HasValue) return null;
 
-            var candidates = familyChoice.Value == ShopDemandFamily.Food ? food : retail;
+            List<RoomInstance> candidates;
+            if (!familyChoice.HasValue)
+            {
+                if (leisure.Count == 0) return null;
+                candidates = leisure;
+            }
+            else
+            {
+                candidates = familyChoice.Value == ShopDemandFamily.Food ? food : retail;
+                candidates.AddRange(leisure);
+            }
+
+            if (candidates.Count == 0) return null;
             return ShopVisitRules.PickDemandWeightedShop(candidates, _rng, streetOrigin);
         }
 
@@ -2010,7 +2032,8 @@ namespace BuildATower
             agent.ReturnCell = DepartureExitCell(agent, grid, shopCell.x);
             if (BeginTrip(agent, spawn, shopCell, AgentPhase.VisitingShop, grid))
             {
-                _shopDemand?.TryConsume(shop.Type, WealthBand.Street);
+                if (shop.Type?.ResolvedBuildFamily() != BuildFamily.Leisure)
+                    _shopDemand?.TryConsume(shop.Type, WealthBand.Street);
                 return true;
             }
 

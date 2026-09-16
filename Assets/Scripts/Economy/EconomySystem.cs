@@ -105,7 +105,7 @@ namespace BuildATower
                     room.RecordLifetimeIncome(amount);
                 }
 
-                if (ShopVisitRules.IsShop(room.Type))
+                if (ShopVisitRules.IsTrafficVenue(room.Type))
                 {
                     var creditedRevenue = 0;
                     if (!incomeBlocked && room.ShopEarningsToday > 0)

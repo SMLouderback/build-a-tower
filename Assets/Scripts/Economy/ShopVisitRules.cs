@@ -6,12 +6,15 @@ namespace BuildATower
 {
     public static class ShopVisitRules
     {
-        public static bool IsShop(RoomTypeSO type) =>
+        public static bool IsTrafficVenue(RoomTypeSO type) =>
             type != null && type.incomeModel == IncomeModel.TrafficVariable;
+
+        public static bool IsShop(RoomTypeSO type) =>
+            IsTrafficVenue(type) && type.ResolvedBuildFamily() == BuildFamily.Shops;
 
         public static bool IsOpen(RoomTypeSO type, int minuteOfDay)
         {
-            if (!IsShop(type)) return false;
+            if (!IsTrafficVenue(type)) return false;
             if (!type.hasActiveHours) return true;
             var m = ((minuteOfDay % (24 * 60)) + 24 * 60) % (24 * 60);
             if (type.activeHoursStart <= type.activeHoursEnd)
@@ -117,6 +120,16 @@ namespace BuildATower
                     return (25, 40);
                 if (id.IndexOf("retail", StringComparison.OrdinalIgnoreCase) >= 0)
                     return (20, 40);
+                if (id.StartsWith("leisure_gym", StringComparison.OrdinalIgnoreCase))
+                    return (30, 50);
+                if (id.StartsWith("leisure_spa", StringComparison.OrdinalIgnoreCase))
+                    return (45, 75);
+                if (id.StartsWith("leisure_pool", StringComparison.OrdinalIgnoreCase))
+                    return (40, 70);
+                if (id.StartsWith("leisure_bowling", StringComparison.OrdinalIgnoreCase))
+                    return (50, 80);
+                if (id.StartsWith("leisure_theater", StringComparison.OrdinalIgnoreCase))
+                    return (90, 130);
             }
 
             if (type != null)

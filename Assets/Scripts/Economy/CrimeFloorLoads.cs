@@ -11,7 +11,7 @@ namespace BuildATower
 
             foreach (var room in grid.Rooms)
             {
-                if (!ShopVisitRules.IsShop(room.Type)) continue;
+                if (!ShopVisitRules.IsTrafficVenue(room.Type)) continue;
                 if (room.ConcurrentVisitors <= 0) continue;
 
                 var visitors = (float)room.ConcurrentVisitors;
