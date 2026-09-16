@@ -65,6 +65,11 @@ namespace BuildATower
             ["service_event_hall"] = "event_hall_12x2",
             ["parking_underground"] = "underground_parking_6x1",
             ["service_valet"] = "valet_3x1",
+            ["leisure_gym"] = "gym_6x1",
+            ["leisure_spa"] = "spa_6x1",
+            ["leisure_pool"] = "pool_8x2",
+            ["leisure_bowling"] = "bowling_10x1",
+            ["leisure_theater"] = "theater_8x2",
         };
 
         static readonly Dictionary<string, Sprite> SpriteCache = new();
