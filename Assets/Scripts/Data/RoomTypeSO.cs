@@ -45,6 +45,9 @@ namespace BuildATower
                  id == ParkingStalls.ValetId ||
                  id == ParkingStalls.RampId))
                 return BuildFamily.Transit;
+            if (!string.IsNullOrEmpty(id) &&
+                id.StartsWith("leisure_", System.StringComparison.Ordinal))
+                return BuildFamily.Leisure;
             return category switch
             {
                 RoomCategory.Office => BuildFamily.Office,
