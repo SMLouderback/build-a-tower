@@ -16,6 +16,10 @@ namespace BuildATower
                 return SoundProfile.Parking;
             if (type.id == "service_conference") return SoundProfile.Conference;
             if (type.id == "service_event_hall") return SoundProfile.Event;
+            if (type.id == "leisure_spa" || type.id == "leisure_gym" || type.id == "leisure_pool")
+                return SoundProfile.Hotel;
+            if (type.id == "leisure_bowling" || type.id == "leisure_theater")
+                return SoundProfile.Event;
             return type.ResolvedBuildFamily() switch
             {
                 BuildFamily.Office => SoundProfile.Office,
@@ -25,6 +29,7 @@ namespace BuildATower
                     ? SoundProfile.Restaurant
                     : SoundProfile.Retail,
                 BuildFamily.Utility => SoundProfile.Utility,
+                BuildFamily.Leisure => SoundProfile.Hotel,
                 _ => SoundProfile.None
             };
         }

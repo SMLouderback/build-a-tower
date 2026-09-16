@@ -21,6 +21,20 @@ namespace BuildATower.Tests
             Assert.AreEqual(SoundProfile.Stairs, SoundProfileMap.ForRoom(Stairs()));
             Assert.AreEqual(SoundProfile.Utility, SoundProfileMap.ForRoom(Room("security_post", RoomCategory.Service)));
             Assert.AreEqual(SoundProfile.Lobby, SoundProfileMap.ForRoom(Lobby()));
+            Assert.AreEqual(SoundProfile.Hotel, SoundProfileMap.ForRoom(Leisure("leisure_gym")));
+            Assert.AreEqual(SoundProfile.Hotel, SoundProfileMap.ForRoom(Leisure("leisure_spa")));
+            Assert.AreEqual(SoundProfile.Hotel, SoundProfileMap.ForRoom(Leisure("leisure_pool")));
+            Assert.AreEqual(SoundProfile.Event, SoundProfileMap.ForRoom(Leisure("leisure_bowling")));
+            Assert.AreEqual(SoundProfile.Event, SoundProfileMap.ForRoom(Leisure("leisure_theater")));
+        }
+
+        static RoomTypeSO Leisure(string id)
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = id;
+            so.category = RoomCategory.Commercial;
+            so.buildFamily = BuildFamily.Leisure;
+            return so;
         }
 
         static RoomTypeSO Room(string id, RoomCategory cat)
