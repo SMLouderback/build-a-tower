@@ -5,8 +5,8 @@ using UnityEngine;
 namespace BuildATower
 {
     /// <summary>
-    /// Whole-room dollhouse interiors. Native PNG pixels are kept as-is; callers
-    /// scale a SpriteRenderer to the room's cell footprint (1 cell = 1 world unit).
+    /// Whole-room dollhouse interiors. Magenta/pink chroma plates are keyed at load;
+    /// callers scale a SpriteRenderer to the room's cell footprint (1 cell = 1 world unit).
     /// </summary>
     public static class RoomDollhouseArt
     {
@@ -162,8 +162,8 @@ namespace BuildATower
                 }
                 catch (UnityException)
                 {
-                    // Imported texture may already be readable enough to sprite.
-                    return SpriteTextureFromImported(srcTex);
+                    var copy = SpriteTextureFromImported(srcTex);
+                    return copy == null ? null : KeyCropMagentaPlate(copy, destroySource: copy != srcTex);
                 }
             }
 
@@ -177,11 +177,161 @@ namespace BuildATower
             };
             if (!decoded.LoadImage(png, false))
             {
-                UnityEngine.Object.Destroy(decoded);
+                Object.Destroy(decoded);
                 return null;
             }
 
-            return decoded;
+            return KeyCropMagentaPlate(decoded, destroySource: true);
+        }
+
+        /// <summary>
+        /// Flood-key hot magenta/pink plates (AI chroma), scrub fringe, crop to opaque bounds.
+        /// Reuses <see cref="MenuIconArt.IsHotMagenta"/> so dollhouse and menu share one detector.
+        /// </summary>
+        public static Texture2D KeyCropMagentaPlate(Texture2D source, bool destroySource)
+        {
+            if (source == null) return null;
+
+            Color[] px;
+            try
+            {
+                px = source.GetPixels();
+            }
+            catch (UnityException)
+            {
+                return source;
+            }
+
+            var w = source.width;
+            var h = source.height;
+            FloodKeyMagentaPlate(px, w, h);
+            KeyHotMagenta(px);
+            ScrubNearMagentaFringe(px, w, h);
+
+            FindOpaqueBounds(px, w, h, out var minX, out var minY, out var maxX, out var maxY);
+            if (maxX < minX || maxY < minY)
+            {
+                if (destroySource)
+                    Object.Destroy(source);
+                return null;
+            }
+
+            var cw = Mathf.Max(1, maxX - minX + 1);
+            var ch = Mathf.Max(1, maxY - minY + 1);
+            var cropped = new Color[cw * ch];
+            for (var y = 0; y < ch; y++)
+            for (var x = 0; x < cw; x++)
+                cropped[y * cw + x] = px[(minY + y) * w + (minX + x)];
+
+            KeyHotMagenta(cropped);
+            ScrubNearMagentaFringe(cropped, cw, ch);
+
+            var tex = new Texture2D(cw, ch, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                name = source.name
+            };
+            tex.SetPixels(cropped);
+            tex.Apply(false, false);
+
+            if (destroySource)
+                Object.Destroy(source);
+            return tex;
+        }
+
+        static void FloodKeyMagentaPlate(Color[] px, int w, int h)
+        {
+            var visit = new bool[w * h];
+            var q = new Queue<int>();
+
+            void TryEnq(int x, int y)
+            {
+                if ((uint)x >= w || (uint)y >= h) return;
+                var i = y * w + x;
+                if (visit[i] || !MenuIconArt.IsHotMagenta(px[i])) return;
+                visit[i] = true;
+                q.Enqueue(i);
+            }
+
+            for (var x = 0; x < w; x++)
+            {
+                TryEnq(x, 0);
+                TryEnq(x, h - 1);
+            }
+            for (var y = 0; y < h; y++)
+            {
+                TryEnq(0, y);
+                TryEnq(w - 1, y);
+            }
+
+            while (q.Count > 0)
+            {
+                var i = q.Dequeue();
+                px[i] = Color.clear;
+                var x = i % w;
+                var y = i / w;
+                TryEnq(x + 1, y);
+                TryEnq(x - 1, y);
+                TryEnq(x, y + 1);
+                TryEnq(x, y - 1);
+            }
+        }
+
+        static void KeyHotMagenta(Color[] px)
+        {
+            for (var i = 0; i < px.Length; i++)
+            {
+                if (MenuIconArt.IsHotMagenta(px[i]))
+                    px[i] = Color.clear;
+            }
+        }
+
+        static void ScrubNearMagentaFringe(Color[] px, int w, int h)
+        {
+            var copy = (Color[])px.Clone();
+            for (var y = 1; y < h - 1; y++)
+            for (var x = 1; x < w - 1; x++)
+            {
+                var i = y * w + x;
+                if (copy[i].a < 0.08f) continue;
+                if (!IsNearMagentaFringe(copy[i])) continue;
+
+                var clearN =
+                    copy[i - 1].a < 0.08f ||
+                    copy[i + 1].a < 0.08f ||
+                    copy[i - w].a < 0.08f ||
+                    copy[i + w].a < 0.08f;
+                if (clearN)
+                    px[i] = Color.clear;
+            }
+        }
+
+        static bool IsNearMagentaFringe(Color c)
+        {
+            if (c.a < 0.08f) return true;
+            if (c.g > 0.40f) return false;
+            if (c.r < 0.45f) return false;
+            return (c.r - c.g) > 0.18f && c.b > 0.22f && (c.b - c.g) > 0.08f;
+        }
+
+        static void FindOpaqueBounds(
+            Color[] px, int w, int h,
+            out int minX, out int minY, out int maxX, out int maxY)
+        {
+            minX = w;
+            minY = h;
+            maxX = -1;
+            maxY = -1;
+            for (var y = 0; y < h; y++)
+            for (var x = 0; x < w; x++)
+            {
+                if (px[y * w + x].a < 0.08f) continue;
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            }
         }
 
         static Texture2D SpriteTextureFromImported(Texture2D srcTex)

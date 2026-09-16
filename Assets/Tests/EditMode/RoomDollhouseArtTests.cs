@@ -100,7 +100,22 @@ namespace BuildATower.Tests
         [Test]
         public void Catalog_count_matches_approved_attachment_list()
         {
-            Assert.AreEqual(45, Catalog.Length);
+            Assert.AreEqual(50, Catalog.Length);
+        }
+
+        [Test]
+        public void TrySprite_keys_magenta_plate_on_leisure_theater()
+        {
+            RoomDollhouseArt.ResetForTests();
+            Assert.IsTrue(RoomDollhouseArt.TrySprite(Room(Type("leisure_theater")), out var sprite));
+            Assert.IsNotNull(sprite);
+            var tex = sprite.texture;
+            Assert.IsNotNull(tex);
+            // Corners of the keyed crop should not be hot magenta plate.
+            Assert.IsFalse(MenuIconArt.IsHotMagenta(tex.GetPixel(0, 0)));
+            Assert.IsFalse(MenuIconArt.IsHotMagenta(tex.GetPixel(tex.width - 1, 0)));
+            Assert.IsFalse(MenuIconArt.IsHotMagenta(tex.GetPixel(0, tex.height - 1)));
+            Assert.IsFalse(MenuIconArt.IsHotMagenta(tex.GetPixel(tex.width - 1, tex.height - 1)));
         }
 
         [Test]
@@ -162,6 +177,11 @@ namespace BuildATower.Tests
             ("service_event_hall", "event_hall_12x2"),
             ("parking_underground", "underground_parking_6x1"),
             ("service_valet", "valet_3x1"),
+            ("leisure_gym", "gym_6x1"),
+            ("leisure_spa", "spa_6x1"),
+            ("leisure_pool", "pool_8x2"),
+            ("leisure_bowling", "bowling_10x1"),
+            ("leisure_theater", "theater_8x2"),
         };
 
         static Sprite DummySprite()
