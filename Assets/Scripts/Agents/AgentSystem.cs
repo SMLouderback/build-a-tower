@@ -719,6 +719,7 @@ namespace BuildATower
                 EnsureDisposable(agent, clock.DayIndex);
                 ApplyLowConditionStress(agent, clock.DayIndex);
                 ApplyCrimeStressDaily(agent, _crime, clock.DayIndex);
+                AmenitySystem.TryApplyDailyRelief(agent, grid, clock.DayIndex);
                 if (agent.Phase == AgentPhase.Working && advanced > 0)
                     agent.WorkedMinutes += advanced;
 

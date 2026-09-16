@@ -96,7 +96,7 @@ namespace BuildATower
                 if (!incomeBlocked &&
                     IsRecurringIncomeRoom(room) &&
                     HasHomeAgent(room, agents) &&
-                    PassesDemand(room, currentStars, climateOffset))
+                    PassesDemand(grid, room, currentStars, climateOffset))
                 {
                     var amount = BuildEconomy.ApplyIncome(
                         PricePricing.ScaledIncome(room.Type.baseIncome, room.PriceTier));
@@ -286,7 +286,11 @@ namespace BuildATower
             return offset;
         }
 
-        public bool PassesDemand(RoomInstance room, int currentStars, int climateOffset = 0)
+        public bool PassesDemand(
+            TowerGrid grid,
+            RoomInstance room,
+            int currentStars,
+            int climateOffset = 0)
         {
             var offset = EffectiveDemandClimateOffset(room?.Type, climateOffset);
             var climateStep = Math.Clamp(
@@ -306,6 +310,9 @@ namespace BuildATower
                 if (floor > chance)
                     chance = floor;
             }
+
+            if (room?.Type != null && room.Type.category == RoomCategory.Hotel && grid != null)
+                chance = UnityEngine.Mathf.Clamp01(chance + AmenitySystem.HotelDemandBonus(grid, room));
 
             if (chance >= 1f) return true;
             if (chance <= 0f) return false;

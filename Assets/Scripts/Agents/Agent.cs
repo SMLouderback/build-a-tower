@@ -101,6 +101,9 @@ namespace BuildATower
         /// <summary>Day index when floor-crime stress was last applied, or -1.</summary>
         public int CrimeStressDay { get; set; } = -1;
 
+        /// <summary>Day index when amenity proximity stress relief was last applied, or -1.</summary>
+        public int AmenityReliefDay { get; set; } = -1;
+
         /// <summary>Hotel/room currently claimed for cleaning or repair, if any.</summary>
         public RoomInstance ServiceTarget { get; set; }
 
@@ -164,5 +167,8 @@ namespace BuildATower
 
         public void AddStress(float amount) =>
             Stress = Mathf.Clamp(Stress + Mathf.Max(0f, amount), 0f, 100f);
+
+        public void RelieveStress(float amount) =>
+            Stress = Mathf.Clamp(Stress - Mathf.Max(0f, amount), 0f, 100f);
     }
 }

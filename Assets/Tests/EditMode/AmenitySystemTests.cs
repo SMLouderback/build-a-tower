@@ -1,0 +1,139 @@
+using BuildATower;
+using NUnit.Framework;
+using UnityEngine;
+
+namespace BuildATower.Tests
+{
+    public class AmenitySystemTests
+    {
+        [Test]
+        public void Spa_relief_stronger_than_bowling()
+        {
+            Assert.Greater(AmenitySystem.ReliefForId("leisure_spa"), AmenitySystem.ReliefForId("leisure_bowling"));
+        }
+
+        [Test]
+        public void In_range_spa_relieves_once_per_day()
+        {
+            var grid = BuildGridWithCondoAndSpa(out var condo, out _);
+            var agent = new Agent(1, AgentRole.CondoResident, condo, condo.Origin)
+            {
+                Stress = 40f,
+                HasMovedIn = true
+            };
+
+            Assert.IsTrue(AmenitySystem.TryApplyDailyRelief(agent, grid, dayIndex: 1));
+            Assert.AreEqual(35f, agent.Stress, 0.001f);
+            Assert.IsFalse(AmenitySystem.TryApplyDailyRelief(agent, grid, dayIndex: 1));
+            Assert.AreEqual(35f, agent.Stress, 0.001f);
+
+            Assert.IsTrue(AmenitySystem.TryApplyDailyRelief(agent, grid, dayIndex: 2));
+            Assert.AreEqual(30f, agent.Stress, 0.001f);
+        }
+
+        [Test]
+        public void Broken_or_out_of_range_amenity_ignored()
+        {
+            var grid = BuildGridWithCondoAndSpa(out var condo, out var spa);
+            spa.Condition = 0;
+            var agent = new Agent(1, AgentRole.CondoResident, condo, condo.Origin)
+            {
+                Stress = 40f,
+                HasMovedIn = true
+            };
+            Assert.IsFalse(AmenitySystem.TryApplyDailyRelief(agent, grid, dayIndex: 1));
+            Assert.AreEqual(40f, agent.Stress, 0.001f);
+
+            Object.DestroyImmediate(spa.Type);
+            var farSpaType = LeisureSo("leisure_spa", new Vector2Int(6, 1));
+            Assert.IsTrue(grid.TryPlace(farSpaType, new Vector2Int(20, 1), out _));
+            Assert.IsFalse(AmenitySystem.TryApplyDailyRelief(agent, grid, dayIndex: 2));
+            Assert.AreEqual(40f, agent.Stress, 0.001f);
+
+            Object.DestroyImmediate(farSpaType);
+        }
+
+        [Test]
+        public void HotelDemandBonus_requires_spa_or_gym_in_range()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(LobbySo(), 0, 40, 0, out _);
+            var hotelType = ScriptableObject.CreateInstance<RoomTypeSO>();
+            hotelType.id = "hotel";
+            hotelType.category = RoomCategory.Hotel;
+            hotelType.size = new Vector2Int(6, 1);
+            hotelType.allowAboveGround = true;
+            hotelType.maxOccupants = 4;
+            Assert.IsTrue(grid.TryPlace(hotelType, new Vector2Int(0, 1), out var hotel));
+
+            Assert.AreEqual(0f, AmenitySystem.HotelDemandBonus(grid, hotel));
+
+            var gymType = LeisureSo("leisure_gym", new Vector2Int(6, 1));
+            Assert.IsTrue(grid.TryPlace(gymType, new Vector2Int(8, 1), out _));
+            Assert.AreEqual(0.08f, AmenitySystem.HotelDemandBonus(grid, hotel));
+
+            Object.DestroyImmediate(hotelType);
+            Object.DestroyImmediate(gymType);
+        }
+
+        [Test]
+        public void MaxReliefInRange_picks_strongest_amenity()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(LobbySo(), 0, 40, 0, out _);
+            var condoType = ScriptableObject.CreateInstance<RoomTypeSO>();
+            condoType.id = "condo";
+            condoType.category = RoomCategory.Condo;
+            condoType.size = new Vector2Int(6, 1);
+            condoType.allowAboveGround = true;
+            Assert.IsTrue(grid.TryPlace(condoType, new Vector2Int(0, 1), out var condo));
+
+            Assert.IsTrue(grid.TryPlace(LeisureSo("leisure_spa", new Vector2Int(6, 1)), new Vector2Int(6, 1), out _));
+            Assert.IsTrue(grid.TryPlace(LeisureSo("leisure_bowling", new Vector2Int(10, 1)), new Vector2Int(12, 1), out _));
+
+            Assert.AreEqual(5f, AmenitySystem.MaxReliefInRange(grid, condo));
+
+            Object.DestroyImmediate(condoType);
+        }
+
+        static TowerGrid BuildGridWithCondoAndSpa(out RoomInstance condo, out RoomInstance spa)
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(LobbySo(), 0, 40, 0, out _);
+            var condoType = ScriptableObject.CreateInstance<RoomTypeSO>();
+            condoType.id = "condo";
+            condoType.category = RoomCategory.Condo;
+            condoType.size = new Vector2Int(6, 1);
+            condoType.allowAboveGround = true;
+            Assert.IsTrue(grid.TryPlace(condoType, new Vector2Int(0, 1), out condo));
+
+            var spaType = LeisureSo("leisure_spa", new Vector2Int(6, 1));
+            Assert.IsTrue(grid.TryPlace(spaType, new Vector2Int(8, 1), out spa));
+
+            Object.DestroyImmediate(condoType);
+            return grid;
+        }
+
+        static RoomTypeSO LobbySo()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "lobby";
+            so.isLobby = true;
+            so.allowAboveGround = true;
+            so.size = Vector2Int.one;
+            return so;
+        }
+
+        static RoomTypeSO LeisureSo(string id, Vector2Int size)
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = id;
+            so.category = RoomCategory.Commercial;
+            so.incomeModel = IncomeModel.TrafficVariable;
+            so.buildFamily = BuildFamily.Leisure;
+            so.size = size;
+            so.allowAboveGround = true;
+            return so;
+        }
+    }
+}
