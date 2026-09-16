@@ -74,10 +74,12 @@ namespace BuildATower
                             : "Status: For sale — no payout yet");
                     break;
                 case IncomeModel.TrafficVariable:
-                    var family = ShopDemandBalance.FamilyFor(type);
-                    var demandTier = ShopDemandBalance.TierForShop(type);
-                    if (demand != null)
+                    if (ShopVisitRules.IsShop(type) && demand != null)
+                    {
+                        var family = ShopDemandBalance.FamilyFor(type);
+                        var demandTier = ShopDemandBalance.TierForShop(type);
                         lines.Add($"Demand: {family} / {demandTier}");
+                    }
                     lines.Add($"Visits today: {room.VisitsToday}");
                     lines.Add($"Visits yesterday: {room.VisitsYesterday}");
                     lines.Add($"Avg visits (7d): {room.AverageVisitsLast7Days:0.#}");
@@ -85,8 +87,10 @@ namespace BuildATower
                     lines.Add($"Yesterday revenue: ${room.ShopRevenueYesterday:N0}");
                     lines.Add($"Daily upkeep: ${ShopDemandBalance.DailyUpkeep(type):N0}");
                     lines.Add($"Yesterday net: {SignedMoney(room.ShopNetYesterday)}");
-                    if (demand != null)
+                    if (ShopVisitRules.IsShop(type) && demand != null)
                     {
+                        var family = ShopDemandBalance.FamilyFor(type);
+                        var demandTier = ShopDemandBalance.TierForShop(type);
                         var pool = demand.Snapshot.Pool(family, demandTier);
                         lines.Add(
                             $"Competition: {ShopDemandFormat.Competition(pool, openShopCountInPool)}");

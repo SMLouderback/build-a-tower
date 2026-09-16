@@ -483,6 +483,7 @@ namespace BuildATower
             if (best == null) return false;
 
             var fill = HotelLuxury.CheckInFillMultiplier(EffectiveHotelLuxuryBand(best.Type), climateStep);
+            fill = Mathf.Clamp01(fill + AmenitySystem.HotelDemandBonus(grid, best));
             if (fill < 1f && rng.NextDouble() >= fill)
                 return false;
 
@@ -1845,6 +1846,7 @@ namespace BuildATower
             foreach (var room in grid.Rooms)
             {
                 if (room?.Type == null) continue;
+                if (room.IsBroken) continue;
                 if (!ShopVisitRules.IsTrafficVenue(room.Type)) continue;
                 if (!ShopVisitRules.IsOpen(room.Type, minuteOfDay)) continue;
                 if (room.ConcurrentVisitors >= ShopVisitRules.SlotCount(room.Type)) continue;

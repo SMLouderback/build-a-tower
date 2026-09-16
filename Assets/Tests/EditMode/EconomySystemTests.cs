@@ -311,7 +311,7 @@ namespace BuildATower.Tests
 
             Assert.IsNotNull(seed);
             var economy = new EconomySystem(seed: seed.Value);
-            Assert.IsTrue(economy.PassesDemand(null, room, currentStars: 1, climateOffset: -2));
+            Assert.IsTrue(economy.PassesDemand(room, currentStars: 1, climateOffset: -2));
         }
 
         [Test]
@@ -357,13 +357,13 @@ namespace BuildATower.Tests
 
             Assert.IsNotNull(seed);
             var economy = new EconomySystem(seed: seed.Value);
-            Assert.IsFalse(economy.PassesDemand(null, room, currentStars: 3, climateOffset: -1));
+            Assert.IsFalse(economy.PassesDemand(room, currentStars: 3, climateOffset: -1));
 
             // Same seed/tier/stars without Upper bias (Base) still clears the 0.4 chance.
             var baseRoom = new RoomInstance(2, HotelBase(), Vector2Int.zero, Vector2Int.one);
             baseRoom.PriceTier = PricePricing.TierHigh;
             var baseEconomy = new EconomySystem(seed: seed.Value);
-            Assert.IsTrue(baseEconomy.PassesDemand(null, baseRoom, currentStars: 3, climateOffset: -1));
+            Assert.IsTrue(baseEconomy.PassesDemand(baseRoom, currentStars: 3, climateOffset: -1));
         }
 
         [Test]
