@@ -56,6 +56,7 @@ namespace BuildATower
             BuildFamily.Hotel => "family_hotel",
             BuildFamily.Condo => "family_condo",
             BuildFamily.Shops => "family_shops",
+            BuildFamily.Leisure => "family_leisure",
             BuildFamily.Utility => "family_utility",
             BuildFamily.Transit => "family_transit",
             _ => null
@@ -333,6 +334,11 @@ namespace BuildATower
             TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ShopGagGifts"));
             TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ShopShoeStore"));
             TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ShopDepartmentStore"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/LeisureGym"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/LeisureSpa"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/LeisurePool"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/LeisureBowling"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/LeisureTheater"));
             TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/Housekeeping"));
             TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/Maintenance"));
             TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/SecurityPost"));
@@ -2305,6 +2311,7 @@ namespace BuildATower
             BuildFamily.Hotel => "Ht",
             BuildFamily.Condo => "Co",
             BuildFamily.Shops => "Sh",
+            BuildFamily.Leisure => "Le",
             BuildFamily.Utility => "Ut",
             BuildFamily.Transit => "Tr",
             _ => "?"
@@ -2323,6 +2330,7 @@ namespace BuildATower
             BuildFamily.Hotel => new Color(0.62f, 0.35f, 0.85f),
             BuildFamily.Condo => new Color(0.35f, 0.75f, 0.45f),
             BuildFamily.Shops => new Color(0.9f, 0.6f, 0.25f),
+            BuildFamily.Leisure => new Color(0.25f, 0.65f, 0.70f),
             BuildFamily.Utility => new Color(0.45f, 0.7f, 0.75f),
             BuildFamily.Transit => new Color(0.7f, 0.7f, 0.35f),
             _ => Color.gray

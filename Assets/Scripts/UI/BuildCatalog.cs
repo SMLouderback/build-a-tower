@@ -29,6 +29,7 @@ namespace BuildATower
             BuildFamily.Hotel,
             BuildFamily.Condo,
             BuildFamily.Shops,
+            BuildFamily.Leisure,
             BuildFamily.Utility,
             BuildFamily.Transit
         };
@@ -105,6 +106,7 @@ namespace BuildATower
             BuildFamily.Hotel => "Hotel",
             BuildFamily.Condo => "Condo",
             BuildFamily.Shops => "Shops",
+            BuildFamily.Leisure => "Leisure",
             BuildFamily.Utility => "Utility",
             BuildFamily.Transit => "Transit",
             _ => "Other"
