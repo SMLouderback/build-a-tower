@@ -48,23 +48,90 @@ namespace BuildATower
         bool _draggingScaffold;
         readonly HashSet<Vector2Int> _scaffoldPaintedThisDrag = new();
         bool _clearedFloorOneHint;
+        bool _gridChangedBound;
         readonly Dictionary<int, (bool dirty, bool broken)> _roomVisualState = new();
 
         void Awake()
         {
+            InitializeTower();
+        }
+
+        public void InitializeTower()
+        {
             GameSession.EnsureDefault();
             Grid = new TowerGrid();
-            Wallet = new FundsWallet(DifficultyProfile.StartingFunds(GameSession.Difficulty));
+
+            var pending = GameSession.PendingLoad;
+            if (pending != null)
+                TryRestorePendingTower(pending);
+            else
+                ApplyCleanNewGameTower(reuseExistingGrid: true);
+
             SelectedRoomType = lobbyType;
             RefreshHelpText();
             if (GetComponent<TowerSimulation>() == null)
                 gameObject.AddComponent<TowerSimulation>();
             if (GetComponent<TowerMapController>() == null)
                 gameObject.AddComponent<TowerMapController>();
-            TowerAudioDriver.Ensure(this);
+            if (Application.isPlaying)
+                TowerAudioDriver.Ensure(this);
             EnsureDayNightSkyOnMainCamera();
             ParallaxBackdrop.EnsureInScene();
-            GridChanged += RefreshBuildingShell;
+            if (!_gridChangedBound)
+            {
+                GridChanged += RefreshBuildingShell;
+                _gridChangedBound = true;
+            }
+        }
+
+        void TryRestorePendingTower(TowerSnapshotV1 pending)
+        {
+            RoomTypeRegistry registry;
+            try
+            {
+                registry = RoomTypeRegistry.Create(this, Grid);
+            }
+            catch (InvalidOperationException)
+            {
+                FallBackToCleanTower(
+                    SessionLoadError.RoomTypeRegistryFailed,
+                    "The room type registry could not be built.");
+                return;
+            }
+
+            var restore = Grid.RestoreRooms(pending.rooms, registry, Time.realtimeSinceStartup);
+            if (!restore.Success)
+            {
+                GameSession.FailLoad(restore.ErrorCode, "The tower could not be restored from the save.");
+                ApplyCleanNewGameTower(reuseExistingGrid: false);
+                return;
+            }
+
+            Wallet = new FundsWallet(DifficultyProfile.StartingFunds(GameSession.Difficulty));
+            try
+            {
+                Wallet.RestoreBalance(pending.walletBalance);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                FallBackToCleanTower(
+                    SessionLoadError.WalletRestoreFailed,
+                    "The saved wallet could not be restored.");
+            }
+        }
+
+        void FallBackToCleanTower(SessionLoadError error, string errorMessage)
+        {
+            GameSession.FailLoad(error, errorMessage);
+            ApplyCleanNewGameTower(reuseExistingGrid: false);
+        }
+
+        void ApplyCleanNewGameTower(bool reuseExistingGrid)
+        {
+            GameSession.EnsureDefault();
+            if (!reuseExistingGrid || Grid == null)
+                Grid = new TowerGrid();
+            Wallet = new FundsWallet(DifficultyProfile.StartingFunds(GameSession.Difficulty));
         }
 
         static void PlayBuildPlaceSfx() => TowerAudio.Ensure().PlayBuildSfx();

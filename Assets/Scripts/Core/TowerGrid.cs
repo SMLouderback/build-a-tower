@@ -1,3 +1,4 @@
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -7,7 +8,7 @@ namespace BuildATower
     {
         /// <summary>
         /// Ground / lobby floor. G and "1st floor" are the same level (no separate unused G).
-        /// Floors above are 1, 2, …; basements are -1, -2, ….
+        /// Floors above are 1, 2, â€¦; basements are -1, -2, â€¦.
         /// </summary>
         public const int LobbyFloor = 0;
         public const int MaxNormalElevatorSpan = 32;
@@ -16,6 +17,7 @@ namespace BuildATower
         public const int MaxElevatorSpan = MaxNormalElevatorSpan;
         public const int MinSkyLobbySpacing = 15;
         public const int MinSkyLobbyHeight = 15;
+        public const int MaxRestoredCells = 1_000_000;
 
         readonly Dictionary<Vector2Int, RoomInstance> _cells = new();
         readonly List<RoomInstance> _rooms = new();
@@ -520,7 +522,7 @@ namespace BuildATower
                 var restoredSeen = new HashSet<RoomInstance>();
                 foreach (var vacatedCell in vacated)
                 {
-                    // Stacked stairs/ramps may still cover this landing — keep the chain.
+                    // Stacked stairs/ramps may still cover this landing â€” keep the chain.
                     if (IsStairs(room))
                     {
                         var otherStairs = FindStairsCovering(vacatedCell);
@@ -752,7 +754,7 @@ namespace BuildATower
         /// [3,4] upper floor
         /// [1,2] lower floor
         /// </code>
-        /// Stair run is 1 → 4 (bottom-left to top-right). Role 0 = non-corner.
+        /// Stair run is 1 â†’ 4 (bottom-left to top-right). Role 0 = non-corner.
         /// </summary>
         static int StairsCornerRole(Vector2Int origin, Vector2Int size, Vector2Int cell)
         {
@@ -1230,6 +1232,278 @@ namespace BuildATower
             foreach (var room in _rooms)
                 snapshots.Add(room.CaptureSnapshot(nowRealtime));
             return snapshots;
+        }
+
+        /// <summary>
+        /// Rebuilds the whole grid from a save payload, keeping the exact instance IDs and
+        /// geometry rather than replaying construction. Everything is staged in temporary
+        /// collections, so a corrupt payload leaves this grid exactly as it was.
+        /// </summary>
+        public GridRestoreResult RestoreRooms(
+            IReadOnlyList<RoomSnapshotV1> snapshots,
+            RoomTypeRegistry registry,
+            float nowRealtime)
+        {
+            if (snapshots == null)
+                return GridRestoreResult.Failure(
+                    GridRestoreError.NullSnapshots,
+                    "Restoring a tower grid requires a room snapshot list.");
+            if (registry == null)
+                return GridRestoreResult.Failure(
+                    GridRestoreError.NullRegistry,
+                    "Restoring a tower grid requires a room type registry.");
+
+            var restored = new List<RoomInstance>(snapshots.Count);
+            var usedIds = new HashSet<int>();
+            var highestId = 0;
+            var totalCells = 0L;
+
+            for (var i = 0; i < snapshots.Count; i++)
+            {
+                var snapshot = snapshots[i];
+                if (snapshot == null)
+                    return GridRestoreResult.Failure(
+                        GridRestoreError.NullRoom,
+                        $"Room {i} is missing from the save.");
+                if (snapshot.instanceId <= 0)
+                    return GridRestoreResult.Failure(
+                        GridRestoreError.InvalidInstanceId,
+                        $"Room {i} has non-positive instance ID {snapshot.instanceId}.");
+                if (!usedIds.Add(snapshot.instanceId))
+                    return GridRestoreResult.Failure(
+                        GridRestoreError.DuplicateInstanceId,
+                        $"Instance ID {snapshot.instanceId} appears more than once.");
+                if (string.IsNullOrWhiteSpace(snapshot.roomTypeId))
+                    return GridRestoreResult.Failure(
+                        GridRestoreError.BlankRoomTypeId,
+                        $"Room {snapshot.instanceId} has a blank room type ID.");
+                if (!registry.TryResolve(snapshot.roomTypeId, out var type) || type == null)
+                    return GridRestoreResult.Failure(
+                        GridRestoreError.UnknownRoomTypeId,
+                        $"Room type '{snapshot.roomTypeId}' is not registered.");
+                if (snapshot.width <= 0 || snapshot.height <= 0)
+                    return GridRestoreResult.Failure(
+                        GridRestoreError.InvalidRoomSize,
+                        $"Room {snapshot.instanceId} has non-positive size " +
+                        $"{snapshot.width}x{snapshot.height}.");
+
+                // Widen before multiplying: 65_536x65_536 and int.MaxValue x 2 both look harmless
+                // in 32-bit arithmetic, and this runs before any footprint is walked.
+                var roomCells = checked((long)snapshot.width * snapshot.height);
+                if (roomCells > MaxRestoredCells)
+                    return GridRestoreResult.Failure(
+                        GridRestoreError.RoomFootprintTooLarge,
+                        $"Room {snapshot.instanceId} footprint {snapshot.width}x{snapshot.height} " +
+                        $"exceeds the {MaxRestoredCells}-cell restore budget.");
+
+                totalCells = checked(totalCells + roomCells);
+                if (totalCells > MaxRestoredCells)
+                    return GridRestoreResult.Failure(
+                        GridRestoreError.RestoredFootprintTooLarge,
+                        $"Restored rooms cover {totalCells} cells, over the " +
+                        $"{MaxRestoredCells}-cell restore budget.");
+
+                var size = new Vector2Int(snapshot.width, snapshot.height);
+                if (!GeometryMatchesType(type, size))
+                    return GridRestoreResult.Failure(
+                        GridRestoreError.GeometryMismatch,
+                        $"Room {snapshot.instanceId} size {size.x}x{size.y} is invalid for " +
+                        $"room type '{snapshot.roomTypeId}'.");
+
+                if (snapshot.instanceId > highestId)
+                    highestId = snapshot.instanceId;
+
+                restored.Add(new RoomInstance(
+                    snapshot.instanceId,
+                    type,
+                    new Vector2Int(snapshot.originX, snapshot.originY),
+                    size));
+            }
+
+            if (highestId == int.MaxValue)
+                return GridRestoreResult.Failure(
+                    GridRestoreError.InstanceIdOverflow,
+                    "The highest restored instance ID leaves no room for new rooms.");
+
+            for (var i = 0; i < restored.Count; i++)
+            {
+                try
+                {
+                    restored[i].RestoreSnapshot(snapshots[i], nowRealtime);
+                }
+                catch (ArgumentException error)
+                {
+                    return GridRestoreResult.Failure(
+                        GridRestoreError.RoomStateRestoreFailed,
+                        $"Room {restored[i].InstanceId} state could not be restored: {error.Message}");
+                }
+            }
+
+            RoomInstance groundLobby = null;
+            foreach (var room in restored)
+            {
+                if (room.Type == null || !room.Type.isLobby) continue;
+                if (groundLobby != null)
+                    return GridRestoreResult.Failure(
+                        GridRestoreError.MultipleGroundLobbies,
+                        "A tower may only have one ground lobby.");
+                groundLobby = room;
+            }
+
+            if (groundLobby != null && groundLobby.Origin.y != LobbyFloor)
+                return GridRestoreResult.Failure(
+                    GridRestoreError.GroundLobbyFloorMismatch,
+                    $"The ground lobby must sit on floor {LobbyFloor}, not {groundLobby.Origin.y}.");
+
+            // Stacked flights are legal, but a hand-edited save must not reconstruct a stair run
+            // that CanPlaceStairs would have rejected, so apply the same corner-role rule.
+            //
+            // StairsRolesConflict only ever pairs role 1 (bottom-left) with role 4 (top-right), and
+            // StairsCornerRole can only return those two at a flight's origin and opposite corner.
+            // Keying just those two cells keeps this linear in the number of flights instead of
+            // comparing every flight against every other one.
+            var bottomLeftCorners = new Dictionary<Vector2Int, RoomInstance>();
+            var topRightCorners = new Dictionary<Vector2Int, RoomInstance>();
+            foreach (var room in restored)
+            {
+                if (!IsStairs(room)) continue;
+
+                var bottomLeft = room.Origin;
+                var topRight = new Vector2Int(
+                    room.Origin.x + room.Size.x - 1,
+                    room.Origin.y + room.Size.y - 1);
+
+                if (topRightCorners.TryGetValue(bottomLeft, out var below) &&
+                    StairsRolesConflict(
+                        StairsCornerRole(below.Origin, below.Size, bottomLeft),
+                        StairsCornerRole(room.Origin, room.Size, bottomLeft)))
+                    return StairsRoleFailure(below, room, bottomLeft);
+
+                if (bottomLeftCorners.TryGetValue(topRight, out var above) &&
+                    StairsRolesConflict(
+                        StairsCornerRole(above.Origin, above.Size, topRight),
+                        StairsCornerRole(room.Origin, room.Size, topRight)))
+                    return StairsRoleFailure(above, room, topRight);
+
+                bottomLeftCorners[bottomLeft] = room;
+                topRightCorners[topRight] = room;
+            }
+
+            var cells = new Dictionary<Vector2Int, RoomInstance>();
+            var underStairs = new Dictionary<Vector2Int, RoomInstance>();
+            var underElevator = new Dictionary<Vector2Int, RoomInstance>();
+            var elevatorCells = new HashSet<Vector2Int>();
+            var stairsAndRampCells = new HashSet<Vector2Int>();
+
+            foreach (var room in restored)
+            {
+                if (!IsElevator(room)) continue;
+                foreach (var cell in room.OccupiedCells())
+                {
+                    if (!elevatorCells.Add(cell))
+                        return GridRestoreResult.Failure(
+                            GridRestoreError.TransitOverlap,
+                            $"Two elevator shafts share cell ({cell.x}, {cell.y}).");
+                }
+            }
+
+            foreach (var room in restored)
+            {
+                if (IsLobbyOverlappingTransit(room)) continue;
+                foreach (var cell in room.OccupiedCells())
+                {
+                    if (cells.TryGetValue(cell, out var occupant))
+                        return GridRestoreResult.Failure(
+                            GridRestoreError.RoomOverlap,
+                            $"Rooms {occupant.InstanceId} and {room.InstanceId} both occupy " +
+                            $"cell ({cell.x}, {cell.y}).");
+                    cells[cell] = room;
+                }
+            }
+
+            // Stairs and parking ramps share the under-stairs map and may stack on each other.
+            foreach (var room in restored)
+            {
+                if (!IsStairs(room) && !IsParkingRamp(room)) continue;
+                foreach (var cell in room.OccupiedCells())
+                {
+                    if (elevatorCells.Contains(cell))
+                        return GridRestoreResult.Failure(
+                            GridRestoreError.TransitOverlap,
+                            $"Room {room.InstanceId} overlaps an elevator at ({cell.x}, {cell.y}).");
+
+                    // Stacking onto earlier transit keeps whatever that transit already covered.
+                    if (cells.TryGetValue(cell, out var occupant) &&
+                        !IsStairs(occupant) &&
+                        !IsParkingRamp(occupant))
+                        underStairs[cell] = occupant;
+
+                    cells[cell] = room;
+                    stairsAndRampCells.Add(cell);
+                }
+            }
+
+            foreach (var room in restored)
+            {
+                if (!IsElevator(room)) continue;
+                foreach (var cell in room.OccupiedCells())
+                {
+                    if (stairsAndRampCells.Contains(cell))
+                        return GridRestoreResult.Failure(
+                            GridRestoreError.TransitOverlap,
+                            $"Elevator {room.InstanceId} overlaps stairs or a ramp at " +
+                            $"({cell.x}, {cell.y}).");
+
+                    if (cells.TryGetValue(cell, out var covered))
+                        underElevator[cell] = covered;
+
+                    cells[cell] = room;
+                }
+            }
+
+            _rooms.Clear();
+            _rooms.AddRange(restored);
+            CopyInto(_cells, cells);
+            CopyInto(_underStairs, underStairs);
+            CopyInto(_underElevator, underElevator);
+            HasLobby = groundLobby != null;
+            MinX = groundLobby == null ? 0 : groundLobby.Origin.x;
+            MaxX = groundLobby == null ? 0 : groundLobby.Origin.x + groundLobby.Size.x - 1;
+            _nextId = highestId + 1;
+            return GridRestoreResult.Succeeded();
+        }
+
+        static GridRestoreResult StairsRoleFailure(
+            RoomInstance earlier,
+            RoomInstance later,
+            Vector2Int cell)
+        {
+            return GridRestoreResult.Failure(
+                GridRestoreError.StairsRoleConflict,
+                $"Stairs {earlier.InstanceId} and {later.InstanceId} form an incompatible " +
+                $"run at ({cell.x}, {cell.y}).");
+        }
+
+        /// <summary>
+        /// Saved geometry must match the room type, except for the spans the player controls:
+        /// lobby / sky-lobby width and elevator height.
+        /// </summary>
+        static bool GeometryMatchesType(RoomTypeSO type, Vector2Int size)
+        {
+            if (type.isLobby || type.isSkyLobby)
+                return size.y == 1;
+            if (type.isElevatorShaft)
+                return size.x == type.size.x && size.y >= 2 && size.y <= MaxSpanFloors(type);
+            return size == type.size;
+        }
+
+        static void CopyInto(
+            Dictionary<Vector2Int, RoomInstance> target,
+            Dictionary<Vector2Int, RoomInstance> source)
+        {
+            target.Clear();
+            foreach (var pair in source)
+                target[pair.Key] = pair.Value;
         }
 
         static RoomTypeSO CreateScaffoldingType()

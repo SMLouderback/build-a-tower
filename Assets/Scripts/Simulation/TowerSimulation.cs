@@ -122,28 +122,40 @@ namespace BuildATower
 
         void Awake()
         {
+            InitializeSimulation();
+        }
+
+        public void InitializeSimulation()
+        {
             if (build == null)
-                build = GetComponent<BuildController>() ?? FindAnyObjectByType<BuildController>();
+                build = GetComponent<BuildController>();
+            if (build == null)
+                build = FindAnyObjectByType<BuildController>();
 
             EnsureDayNightSkyController();
             ParallaxBackdrop.EnsureInScene();
 
-            _clock = new GameClock(minutesPerRealSecond, startMinuteOfDay);
-            _elevators = new ElevatorSystem();
-            _pathfinder = new StairsPathfinder();
-            _router = new TransitRouter(_pathfinder, _elevators);
-            _shopDemand = new ShopDemandSystem();
-            _agents = new AgentSystem(_router, shopDemand: _shopDemand);
-            _crime = new CrimeSystem();
-            _economy = new EconomySystem();
-            _research = new ResearchSystem();
-            _conference = new ConferenceSystem();
-            _news = new TowerNews();
-            _stars = new StarSystem();
-            _climate = new MarketClimate();
-            _lastDayIndex = _clock.DayIndex;
-            _clock.DayRolled += OnDayRolled;
-            _clock.MonthRolled += OnMonthRolled;
+            if (_clock == null)
+            {
+                _clock = new GameClock(minutesPerRealSecond, startMinuteOfDay);
+                _elevators = new ElevatorSystem();
+                _pathfinder = new StairsPathfinder();
+                _router = new TransitRouter(_pathfinder, _elevators);
+                _shopDemand = new ShopDemandSystem();
+                _agents = new AgentSystem(_router, shopDemand: _shopDemand);
+                _crime = new CrimeSystem();
+                _economy = new EconomySystem();
+                _research = new ResearchSystem();
+                _conference = new ConferenceSystem();
+                _news = new TowerNews();
+                _stars = new StarSystem();
+                _climate = new MarketClimate();
+                RestorePendingClockAndStars();
+                _lastDayIndex = _clock.DayIndex;
+                _clock.DayRolled += OnDayRolled;
+                _clock.MonthRolled += OnMonthRolled;
+            }
+
             SyncStructureArtToStars();
 
             if (agentView == null)
@@ -163,12 +175,56 @@ namespace BuildATower
             EnsureCelebrationController();
         }
 
+        void RestorePendingClockAndStars()
+        {
+            var pending = GameSession.PendingLoad;
+            if (pending == null)
+                return;
+
+            try
+            {
+                _clock.RestoreSnapshot(pending.clock);
+                _stars.ForceStars(pending.stars);
+            }
+            catch (ArgumentException)
+            {
+                GameSession.FailLoad(
+                    SessionLoadError.SimulationRestoreFailed,
+                    "The tower simulation could not be restored from the save.");
+                if (build != null)
+                    build.InitializeTower();
+            }
+        }
+
         void OnEnable() => TrySubscribe();
 
         void Start()
         {
+            BeginPlay();
+        }
+
+        public void BeginPlay()
+        {
             TrySubscribe();
+            if (GameSession.PendingLoad != null)
+            {
+                RebuildRoutingAndAgents();
+                BeginDailyDemand();
+                if (build != null)
+                    build.RepaintAllRooms();
+                GameSession.CompleteLoad();
+                return;
+            }
+
             OnGridChanged();
+            BeginDailyDemand();
+        }
+
+        void BeginDailyDemand()
+        {
+            if (_shopDemand == null || _agents == null || _stars == null)
+                return;
+
             _shopDemand.BeginDay(
                 _agents.Agents,
                 _stars.CurrentStars,
@@ -271,17 +327,25 @@ namespace BuildATower
 
         void OnGridChanged()
         {
-            if (build?.Grid == null || _router == null || _agents == null) return;
+            RebuildRoutingAndAgents();
+            if (build == null || build.Grid == null || _agents == null) return;
+            _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
+            DrainStarCelebrationsAndSyncArt();
+        }
+
+        void RebuildRoutingAndAgents()
+        {
+            if (build == null || build.Grid == null || _router == null || _agents == null) return;
             _router.Rebuild(build.Grid);
             elevatorView?.SyncFloorLabels(build.Grid);
             _agents.SyncHomes(
                 build.Grid,
-                room => _economy?.TrySellCondo(room, build.Wallet),
+                GameSession.PendingLoad == null
+                    ? room => _economy?.TrySellCondo(room, build.Wallet)
+                    : null,
                 _stars?.CurrentStars ?? 0,
                 _climate?.ComfortTierOffset ?? 0,
                 _crime?.AverageCrime ?? 0f);
-            _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
-            DrainStarCelebrationsAndSyncArt();
         }
 
         void SyncStructureArtToStars()

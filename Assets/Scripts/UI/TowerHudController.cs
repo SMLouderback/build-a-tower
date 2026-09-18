@@ -153,6 +153,9 @@ namespace BuildATower
         PauseUiState _pauseUi = PauseUiState.Playing;
         float _speedBeforePause = 1f;
         bool _clockPausedBeforeMenu;
+        PauseSaveService _pauseSave;
+        bool _gridDirtyBound;
+        string _pauseSaveMessage;
 
         public Rect PanelScreenRect => _panelRect;
         public Rect TopBarScreenRect => _topBarRect;
@@ -160,13 +163,61 @@ namespace BuildATower
         /// <summary>True when the Esc pause / quit confirm overlay is open.</summary>
         public bool IsEscPauseOpen => _pauseUi != PauseUiState.Playing;
 
+        public bool IsLocalSaveDirty => PauseSaveOrNull?.IsDirty ?? true;
+
+        public string LeaveTowerConfirmMessage =>
+            PauseSaveOrNull?.QuitWarning ?? PauseSaveService.DirtyQuitWarning;
+
+        public void ConfigureLocalSave(PauseSaveService pauseSave)
+        {
+            _pauseSave = pauseSave ?? throw new ArgumentNullException(nameof(pauseSave));
+            _pauseSave.SyncFromSession();
+            SubscribeGridDirty();
+        }
+
+        public string SaveFromPause()
+        {
+            var service = EnsurePauseSave();
+            if (service == null)
+            {
+                GameSession.MarkSaveDirty();
+                _pauseSaveMessage = "The tower is not ready to save.";
+                return _pauseSaveMessage;
+            }
+
+            _pauseSaveMessage = service.Save();
+            return _pauseSaveMessage;
+        }
+
+        public void BindPauseSave(SaveCoordinator coordinator)
+        {
+            ConfigureLocalSave(new PauseSaveService(coordinator));
+        }
+
+        public string SavePausedTower() => SaveFromPause();
+
+        public bool IsLatestLocalSaveComplete => !IsLocalSaveDirty;
+
+        public string PauseQuitWarningText => LeaveTowerConfirmMessage;
+
+        public bool HasRestoreFallbackNotice => GameSession.HasRestoreFallbackNotice;
+
+        public string RestoreFallbackNoticeText => GameSession.RestoreFallbackNotice;
+
+        public void DismissRestoreFallbackNotice()
+        {
+            GameSession.ConsumeRestoreFallbackNotice();
+        }
+
         /// <summary>When true, world build input should be ignored.</summary>
         public bool BlocksWorldInput
         {
             get
             {
                 var celeb = ResolveCelebration();
-                return IsEscPauseOpen || (celeb != null && celeb.IsActive);
+                return IsEscPauseOpen
+                       || GameSession.HasRestoreFallbackNotice
+                       || (celeb != null && celeb.IsActive);
             }
         }
 
@@ -179,6 +230,7 @@ namespace BuildATower
 
         /// <summary>True when the GUI point (IMGUI / flipped Y) is over the top bar, info/goals/maps dropdown, graph, or side panel.</summary>
         public bool ContainsGuiPoint(Vector2 guiPoint) =>
+            GameSession.HasRestoreFallbackNotice ||
             _topBarRect.Contains(guiPoint) ||
             _panelRect.Contains(guiPoint) ||
             (_goalsOpen && _goalsDropdownRect.Contains(guiPoint)) ||
@@ -197,6 +249,54 @@ namespace BuildATower
             ResolveCelebration();
             EnsureElevatorAndCatalog();
             GameSession.EnsureDefault();
+            SubscribeGridDirty();
+        }
+
+        void OnEnable()
+        {
+            SubscribeGridDirty();
+        }
+
+        void OnDisable()
+        {
+            if (build != null && _gridDirtyBound)
+            {
+                build.GridChanged -= OnGridChangedForSave;
+                _gridDirtyBound = false;
+            }
+        }
+
+        void SubscribeGridDirty()
+        {
+            if (_gridDirtyBound || build == null) return;
+            build.GridChanged += OnGridChangedForSave;
+            _gridDirtyBound = true;
+        }
+
+        void OnGridChangedForSave()
+        {
+            if (GameSession.PendingLoad != null) return;
+            GameSession.MarkSaveDirty();
+            EnsurePauseSave()?.MarkDirty();
+        }
+
+        PauseSaveService PauseSaveOrNull => _pauseSave;
+
+        PauseSaveService EnsurePauseSave()
+        {
+            if (_pauseSave != null)
+            {
+                SubscribeGridDirty();
+                return _pauseSave;
+            }
+
+            if (build == null || simulation == null)
+                return null;
+
+            _pauseSave = new PauseSaveService(
+                new SaveCoordinator(LocalSaveRepository.CreateDefault(), build, simulation));
+            SubscribeGridDirty();
+            return _pauseSave;
         }
 
         void Update()
@@ -697,7 +797,7 @@ namespace BuildATower
 
             if (_pauseUi == PauseUiState.ConfirmQuit)
             {
-                GUI.Label(new Rect(cx, cy, inner, 48f), "Leave tower? Progress is not saved.", label);
+                GUI.Label(new Rect(cx, cy, inner, 48f), LeaveTowerConfirmMessage, label);
                 cy += 56f;
                 if (GUI.Button(new Rect(cx, cy, (inner - 8f) * 0.5f, btnH), "Yes"))
                     ReturnToMainMenu();
