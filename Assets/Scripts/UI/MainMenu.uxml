@@ -12,6 +12,15 @@
       <ui:Button name="btn-about" text="About" class="menu-button" />
     </ui:VisualElement>
 
+    <ui:VisualElement name="panel-local-saves" class="panel panel-saves hidden">
+      <ui:Label text="Load Game" class="panel-title" />
+      <ui:Label name="local-saves-empty" text="No local saves yet." class="body hidden" />
+      <ui:ScrollView name="local-saves-list" class="saves-scroll">
+        <ui:VisualElement name="local-saves-rows" class="saves-rows" />
+      </ui:ScrollView>
+      <ui:Button name="btn-local-saves-back" text="Back" class="menu-button secondary" />
+    </ui:VisualElement>
+
     <ui:VisualElement name="panel-difficulty" class="panel hidden">
       <ui:Label text="Choose difficulty" class="panel-title" />
       <ui:Button name="btn-diff-sandbox" class="menu-button difficulty-button">

@@ -120,6 +120,50 @@
   z-index: 10;
 }
 
+.panel-saves {
+  width: 520px;
+}
+
+.saves-scroll {
+  max-height: 360px;
+  margin-bottom: 8px;
+}
+
+.saves-rows {
+  align-items: stretch;
+}
+
+.save-row {
+  margin-top: 8px;
+  margin-bottom: 8px;
+  padding: 8px;
+  background-color: rgba(12, 24, 34, 0.9);
+  border-radius: 6px;
+  border-width: 1px;
+  border-color: rgba(242, 214, 140, 0.2);
+}
+
+.save-name {
+  color: rgb(242, 214, 140);
+  font-size: 16px;
+  -unity-font-style: bold;
+  white-space: normal;
+}
+
+.save-meta {
+  color: rgb(180, 198, 210);
+  font-size: 12px;
+  white-space: normal;
+  margin-top: 4px;
+}
+
+.save-status {
+  color: rgb(210, 160, 150);
+  font-size: 12px;
+  white-space: normal;
+  margin-top: 4px;
+}
+
 .hidden {
   display: none;
 }
