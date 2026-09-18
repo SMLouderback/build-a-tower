@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -205,5 +206,88 @@ namespace BuildATower
 
         public void SetStaffedWorkers(int count) =>
             StaffedWorkers = Mathf.Clamp(count, 0, 4);
+
+        public RoomSnapshotV1 CaptureSnapshot(float nowRealtime)
+        {
+            var remaining = IsInBuildGrace(nowRealtime)
+                ? Mathf.Max(0f, PlacedAtRealtime + BuildGraceSeconds - nowRealtime)
+                : 0f;
+
+            return new RoomSnapshotV1
+            {
+                instanceId = InstanceId,
+                roomTypeId = Type == null ? null : Type.id,
+                originX = Origin.x,
+                originY = Origin.y,
+                width = Size.x,
+                height = Size.y,
+                evaluation = Evaluation,
+                condition = Condition,
+                dirty = Dirty,
+                cleanWorkRemaining = CleanWorkRemaining,
+                repairJobsRemaining = RepairJobsRemaining,
+                repairJobMinutes = RepairJobMinutes,
+                staffedWorkers = StaffedWorkers,
+                condoSold = CondoSold,
+                priceTier = PriceTier,
+                artVariant = ArtVariant,
+                buildGraceSecondsRemaining = remaining,
+                constructionSpent = ConstructionSpent,
+                lifetimeIncome = LifetimeIncome,
+                lifetimeExpense = LifetimeExpense,
+                visitsToday = VisitsToday,
+                shopEarningsToday = ShopEarningsToday,
+                shopRevenueYesterday = ShopRevenueYesterday,
+                shopUpkeepYesterday = ShopUpkeepYesterday,
+                visitHistory = _visitHistory.CaptureValues()
+            };
+        }
+
+        public void RestoreSnapshot(RoomSnapshotV1 snapshot, float nowRealtime)
+        {
+            if (snapshot == null)
+                throw new ArgumentNullException(nameof(snapshot));
+
+            var typeId = Type == null ? null : Type.id;
+            if (snapshot.instanceId != InstanceId)
+                throw new ArgumentException("Snapshot instance ID does not match this room.", nameof(snapshot));
+            if (!string.Equals(snapshot.roomTypeId, typeId, StringComparison.Ordinal))
+                throw new ArgumentException("Snapshot room type ID does not match this room.", nameof(snapshot));
+            if (snapshot.originX != Origin.x || snapshot.originY != Origin.y)
+                throw new ArgumentException("Snapshot origin does not match this room.", nameof(snapshot));
+            if (snapshot.width != Size.x || snapshot.height != Size.y)
+                throw new ArgumentException("Snapshot size does not match this room.", nameof(snapshot));
+
+            Evaluation = Mathf.Clamp(snapshot.evaluation, 0, 100);
+            Condition = Mathf.Clamp(snapshot.condition, 0, 100);
+            Dirty = snapshot.dirty;
+            CleanWorkRemaining = Dirty ? Mathf.Max(0f, snapshot.cleanWorkRemaining) : 0f;
+            RepairJobsRemaining = Mathf.Max(0, snapshot.repairJobsRemaining);
+            RepairJobMinutes = RepairJobsRemaining > 0
+                ? Mathf.Max(0f, snapshot.repairJobMinutes)
+                : 0f;
+            StaffedWorkers = Mathf.Clamp(snapshot.staffedWorkers, 0, 4);
+            CondoSold = snapshot.condoSold;
+            PriceTier = PricePricing.ClampTier(snapshot.priceTier);
+            ArtVariant = Mathf.Max(0, snapshot.artVariant);
+
+            var remaining = Mathf.Clamp(
+                snapshot.buildGraceSecondsRemaining,
+                0f,
+                BuildGraceSeconds);
+            PlacedAtRealtime = remaining > 0f
+                ? nowRealtime - (BuildGraceSeconds - remaining)
+                : -1f;
+
+            ConstructionSpent = Mathf.Max(0, snapshot.constructionSpent);
+            LifetimeIncome = Mathf.Max(0, snapshot.lifetimeIncome);
+            LifetimeExpense = Mathf.Max(0, snapshot.lifetimeExpense);
+            VisitsToday = Mathf.Max(0, snapshot.visitsToday);
+            ShopEarningsToday = Mathf.Max(0, snapshot.shopEarningsToday);
+            ConcurrentVisitors = 0;
+            ShopRevenueYesterday = Mathf.Max(0, snapshot.shopRevenueYesterday);
+            ShopUpkeepYesterday = Mathf.Max(0, snapshot.shopUpkeepYesterday);
+            _visitHistory.RestoreValues(snapshot.visitHistory);
+        }
     }
 }

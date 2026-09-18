@@ -28,6 +28,7 @@ namespace BuildATower
         public int MinX { get; private set; }
         public int MaxX { get; private set; }
         public IReadOnlyList<RoomInstance> Rooms => _rooms;
+        public RoomTypeSO ScaffoldingType => _scaffoldingType;
 
         public TowerGrid()
         {
@@ -1221,6 +1222,14 @@ namespace BuildATower
             room = new RoomInstance(_nextId++, _scaffoldingType, cell, Vector2Int.one);
             Register(room);
             return true;
+        }
+
+        public List<RoomSnapshotV1> CaptureRooms(float nowRealtime)
+        {
+            var snapshots = new List<RoomSnapshotV1>(_rooms.Count);
+            foreach (var room in _rooms)
+                snapshots.Add(room.CaptureSnapshot(nowRealtime));
+            return snapshots;
         }
 
         static RoomTypeSO CreateScaffoldingType()

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace BuildATower
 {
     /// <summary>
@@ -48,6 +50,30 @@ namespace BuildATower
             }
 
             return sum;
+        }
+
+        public int[] CaptureValues()
+        {
+            var values = new int[_count];
+            for (var i = 0; i < _count; i++)
+            {
+                var idx = (_next - _count + i + Capacity) % Capacity;
+                values[i] = _days[idx];
+            }
+
+            return values;
+        }
+
+        public void RestoreValues(IReadOnlyList<int> values)
+        {
+            System.Array.Clear(_days, 0, _days.Length);
+            _count = 0;
+            _next = 0;
+
+            if (values == null) return;
+            var start = System.Math.Max(0, values.Count - Capacity);
+            for (var i = start; i < values.Count; i++)
+                Push(values[i]);
         }
     }
 }

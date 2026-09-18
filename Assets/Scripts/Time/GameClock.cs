@@ -45,6 +45,47 @@ namespace BuildATower
         public event Action DayRolled;
         public event Action MonthRolled;
 
+        public ClockSnapshotV1 CaptureSnapshot()
+        {
+            return new ClockSnapshotV1
+            {
+                dayIndex = DayIndex,
+                minuteOfDay = MinuteOfDay,
+                minuteAccumulator = _minuteAccumulator,
+                minutesPerRealSecond = _minutesPerRealSecond,
+                paused = Paused
+            };
+        }
+
+        public void RestoreSnapshot(ClockSnapshotV1 snapshot)
+        {
+            if (snapshot == null)
+                throw new ArgumentNullException(nameof(snapshot));
+            if (snapshot.dayIndex < 0)
+                throw new ArgumentOutOfRangeException(nameof(snapshot), "The restored day index cannot be negative.");
+            if (snapshot.minuteOfDay < 0 || snapshot.minuteOfDay >= MinutesPerDay)
+                throw new ArgumentOutOfRangeException(nameof(snapshot), "The restored minute must be within the day.");
+            if (!IsFinite(snapshot.minuteAccumulator) ||
+                snapshot.minuteAccumulator < 0f ||
+                snapshot.minuteAccumulator >= 1f)
+                throw new ArgumentOutOfRangeException(
+                    nameof(snapshot),
+                    "The restored minute accumulator must be finite and in [0, 1).");
+            if (!IsFinite(snapshot.minutesPerRealSecond) || snapshot.minutesPerRealSecond <= 0f)
+                throw new ArgumentOutOfRangeException(
+                    nameof(snapshot),
+                    "The restored clock speed must be finite and positive.");
+
+            DayIndex = snapshot.dayIndex;
+            MinuteOfDay = snapshot.minuteOfDay;
+            _minuteAccumulator = snapshot.minuteAccumulator;
+            _minutesPerRealSecond = snapshot.minutesPerRealSecond;
+            Paused = snapshot.paused;
+            LastTickGameMinutes = 0f;
+        }
+
+        static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+
         public void Tick(float deltaTimeSeconds)
         {
             LastTickGameMinutes = 0f;

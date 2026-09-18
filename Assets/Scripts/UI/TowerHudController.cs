@@ -28,6 +28,20 @@ namespace BuildATower
         [SerializeField] RoomTypeSO expressElevatorRoom;
         [SerializeField] RoomTypeSO serviceElevatorRoom;
 
+        public IEnumerable<RoomTypeSO> EnumerateKnownRoomTypes()
+        {
+            if (placeableRooms != null)
+            {
+                foreach (var room in placeableRooms)
+                    yield return room;
+            }
+
+            yield return stairsRoom;
+            yield return elevatorRoom;
+            yield return expressElevatorRoom;
+            yield return serviceElevatorRoom;
+        }
+
         [SerializeField] float panelWidth = 280f;
         [SerializeField] float edgeGapPixels = 12f;
 

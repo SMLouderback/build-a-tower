@@ -22,6 +22,8 @@ namespace BuildATower
         public string HelpText { get; private set; }
         public RoomTypeSO LobbyType => lobbyType;
         public RoomTypeSO SkyLobbyType => ResolveSkyLobbyType();
+        public IEnumerable<RoomTypeSO> CatalogRoomTypes =>
+            hud == null ? Array.Empty<RoomTypeSO>() : hud.EnumerateKnownRoomTypes();
         public ElevatorCorrectionWindow ActiveCorrectionWindow { get; private set; }
         public event Action StateChanged;
         public event Action GridChanged;
