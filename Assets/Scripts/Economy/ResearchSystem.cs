@@ -191,6 +191,163 @@ namespace BuildATower
             return (int)Math.Round(etaDays * daily * climateMult);
         }
 
+        public ResearchSnapshotV1 CaptureSnapshot()
+        {
+            PersistActiveProgress();
+
+            var completed = new ResearchCompletedNodeV1[_completed.Count];
+            var completedIndex = 0;
+            foreach (var node in _completed)
+            {
+                completed[completedIndex++] = new ResearchCompletedNodeV1
+                {
+                    branch = node.Branch.ToString(),
+                    level = node.Level
+                };
+            }
+
+            var progress = new ResearchProgressNodeV1[_progress.Count];
+            var progressIndex = 0;
+            foreach (var pair in _progress)
+            {
+                progress[progressIndex++] = new ResearchProgressNodeV1
+                {
+                    branch = pair.Key.Branch.ToString(),
+                    level = pair.Key.Level,
+                    workMinutes = pair.Value
+                };
+            }
+
+            return new ResearchSnapshotV1
+            {
+                completed = completed,
+                progress = progress,
+                activeBranch = _activeBranch.HasValue ? _activeBranch.Value.ToString() : string.Empty,
+                activeLevel = _activeBranch.HasValue ? _activeLevel : 0,
+                paused = _paused
+            };
+        }
+
+        public void RestoreSnapshot(ResearchSnapshotV1 snapshot)
+        {
+            if (snapshot == null)
+                throw new ArgumentNullException(nameof(snapshot));
+            if (!TryValidateSnapshot(snapshot, out var error))
+                throw new ArgumentException(error, nameof(snapshot));
+
+            _completed.Clear();
+            _progress.Clear();
+            _activeBranch = null;
+            _activeLevel = 0;
+            _paused = false;
+
+            if (snapshot.completed != null)
+            {
+                for (var i = 0; i < snapshot.completed.Length; i++)
+                {
+                    var node = snapshot.completed[i];
+                    if (node == null) continue;
+                    Enum.TryParse(node.branch, false, out ResearchBranch branch);
+                    _completed.Add((branch, node.level));
+                }
+            }
+
+            if (snapshot.progress != null)
+            {
+                for (var i = 0; i < snapshot.progress.Length; i++)
+                {
+                    var node = snapshot.progress[i];
+                    if (node == null) continue;
+                    Enum.TryParse(node.branch, false, out ResearchBranch branch);
+                    _progress[(branch, node.level)] = node.workMinutes;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(snapshot.activeBranch)
+                && Enum.TryParse(snapshot.activeBranch, false, out ResearchBranch active))
+            {
+                _activeBranch = active;
+                _activeLevel = snapshot.activeLevel;
+                _paused = snapshot.paused;
+            }
+        }
+
+        public static bool TryValidateSnapshot(ResearchSnapshotV1 snapshot, out string errorMessage)
+        {
+            if (snapshot == null)
+            {
+                errorMessage = "The research snapshot is missing.";
+                return false;
+            }
+
+            if (snapshot.completed != null)
+            {
+                for (var i = 0; i < snapshot.completed.Length; i++)
+                {
+                    var node = snapshot.completed[i];
+                    if (node == null)
+                    {
+                        errorMessage = "A completed research node is missing.";
+                        return false;
+                    }
+
+                    if (!IsNamedBranch(node.branch) || !IsValidLevel(node.level))
+                    {
+                        errorMessage = "A completed research node is invalid.";
+                        return false;
+                    }
+                }
+            }
+
+            if (snapshot.progress != null)
+            {
+                for (var i = 0; i < snapshot.progress.Length; i++)
+                {
+                    var node = snapshot.progress[i];
+                    if (node == null)
+                    {
+                        errorMessage = "A research progress node is missing.";
+                        return false;
+                    }
+
+                    if (!IsNamedBranch(node.branch)
+                        || !IsValidLevel(node.level)
+                        || float.IsNaN(node.workMinutes)
+                        || float.IsInfinity(node.workMinutes)
+                        || node.workMinutes < 0f)
+                    {
+                        errorMessage = "A research progress node is invalid.";
+                        return false;
+                    }
+                }
+            }
+
+            var hasActive = !string.IsNullOrEmpty(snapshot.activeBranch);
+            if (hasActive)
+            {
+                if (!IsNamedBranch(snapshot.activeBranch) || !IsValidLevel(snapshot.activeLevel))
+                {
+                    errorMessage = "The active research project is invalid.";
+                    return false;
+                }
+            }
+            else if (snapshot.activeLevel != 0)
+            {
+                errorMessage = "The active research level must be zero when no branch is active.";
+                return false;
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        static bool IsNamedBranch(string value) =>
+            Enum.TryParse(value, false, out ResearchBranch parsed)
+            && Enum.IsDefined(typeof(ResearchBranch), parsed)
+            && string.Equals(Enum.GetName(typeof(ResearchBranch), parsed), value, StringComparison.Ordinal);
+
+        static bool IsValidLevel(int level) => level >= 1 && level <= ResearchCatalog.MaxLevel;
+
         float GetProgress(ResearchBranch branch, int level) =>
             _progress.TryGetValue((branch, level), out var value) ? value : 0f;
 

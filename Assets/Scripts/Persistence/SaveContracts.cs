@@ -33,7 +33,33 @@ namespace BuildATower
         public int walletBalance;
         public int stars;
         public ClockSnapshotV1 clock;
+        public ResearchSnapshotV1 research;
         public RoomSnapshotV1[] rooms;
+    }
+
+    [Serializable]
+    public sealed class ResearchSnapshotV1
+    {
+        public ResearchCompletedNodeV1[] completed;
+        public ResearchProgressNodeV1[] progress;
+        public string activeBranch;
+        public int activeLevel;
+        public bool paused;
+    }
+
+    [Serializable]
+    public sealed class ResearchCompletedNodeV1
+    {
+        public string branch;
+        public int level;
+    }
+
+    [Serializable]
+    public sealed class ResearchProgressNodeV1
+    {
+        public string branch;
+        public int level;
+        public float workMinutes;
     }
 
     [Serializable]
@@ -137,7 +163,8 @@ namespace BuildATower
         InvalidWalletBalance,
         InvalidClock,
         InvalidStars,
-        NullRooms
+        NullRooms,
+        InvalidResearch
     }
 
     public sealed class SnapshotValidationResult

@@ -280,6 +280,86 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Research_capture_and_restore_round_trips_completed_and_active_progress()
+        {
+            var research = new ResearchSystem();
+            Assert.IsTrue(research.TryStart(ResearchBranch.Marketing, 1));
+            research.TickProgress(700f, researcherPool: 2);
+            Assert.IsTrue(research.TryStart(ResearchBranch.Elevator, 1));
+            research.TickProgress(2000f, researcherPool: 4);
+            Assert.IsTrue(research.IsComplete(ResearchBranch.Elevator, 1));
+            Assert.IsTrue(research.TryStart(ResearchBranch.Elevator, 2));
+            research.TickProgress(100f, researcherPool: 1);
+            research.Pause();
+
+            var snapshot = research.CaptureSnapshot();
+            var restored = new ResearchSystem();
+            restored.RestoreSnapshot(snapshot);
+
+            Assert.IsTrue(restored.IsComplete(ResearchBranch.Elevator, 1));
+            Assert.IsFalse(restored.IsComplete(ResearchBranch.Marketing, 1));
+            Assert.AreEqual(ResearchBranch.Elevator, restored.ActiveBranch);
+            Assert.AreEqual(2, restored.ActiveLevel);
+            Assert.IsTrue(restored.IsPaused);
+            Assert.AreEqual(
+                research.GetNodeProgress(ResearchBranch.Marketing, 1),
+                restored.GetNodeProgress(ResearchBranch.Marketing, 1),
+                0.001f);
+            Assert.AreEqual(
+                research.GetNodeProgress(ResearchBranch.Elevator, 2),
+                restored.GetNodeProgress(ResearchBranch.Elevator, 2),
+                0.001f);
+        }
+
+        [Test]
+        public void Capture_includes_research_progression_from_simulation()
+        {
+            var build = CreateBuild(out var simulation);
+            var research = new ResearchSystem();
+            Assert.IsTrue(research.TryStart(ResearchBranch.Security, 1));
+            research.TickProgress(50f, researcherPool: 1);
+            SetField(simulation, "_research", research);
+
+            var snapshot = TowerSnapshotMapper.Capture("save", "Tower", build, simulation, DateTime.UtcNow);
+
+            Assert.IsNotNull(snapshot.research);
+            Assert.AreEqual(nameof(ResearchBranch.Security), snapshot.research.activeBranch);
+            Assert.AreEqual(1, snapshot.research.activeLevel);
+            Assert.AreEqual(1, snapshot.research.progress.Length);
+            Assert.Greater(snapshot.research.progress[0].workMinutes, 0f);
+        }
+
+        [Test]
+        public void ValidateForRestore_accepts_null_research_for_legacy_saves()
+        {
+            var snapshot = ValidSnapshot();
+            snapshot.research = null;
+
+            var result = TowerSnapshotMapper.ValidateForRestore(snapshot);
+
+            Assert.IsTrue(result.Success, result.ErrorMessage);
+        }
+
+        [Test]
+        public void ValidateForRestore_rejects_invalid_research_active_branch()
+        {
+            var snapshot = ValidSnapshot();
+            snapshot.research = new ResearchSnapshotV1
+            {
+                completed = Array.Empty<ResearchCompletedNodeV1>(),
+                progress = Array.Empty<ResearchProgressNodeV1>(),
+                activeBranch = "NotABranch",
+                activeLevel = 1,
+                paused = false
+            };
+
+            var result = TowerSnapshotMapper.ValidateForRestore(snapshot);
+
+            Assert.IsFalse(result.Success);
+            Assert.AreEqual(SnapshotValidationError.InvalidResearch, result.ErrorCode);
+        }
+
+        [Test]
         public void ValidateForRestore_accepts_zero_offset_round_trip_timestamp()
         {
             var snapshot = ValidSnapshot();

@@ -185,6 +185,8 @@ namespace BuildATower
             {
                 _clock.RestoreSnapshot(pending.clock);
                 _stars.ForceStars(pending.stars);
+                if (pending.research != null)
+                    _research.RestoreSnapshot(pending.research);
             }
             catch (ArgumentException)
             {

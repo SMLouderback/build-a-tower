@@ -48,6 +48,16 @@ namespace BuildATower
                 walletBalance = build.Wallet.Balance,
                 stars = simulation.Stars.CurrentStars,
                 clock = simulation.Clock.CaptureSnapshot(),
+                research = simulation.Research != null
+                    ? simulation.Research.CaptureSnapshot()
+                    : new ResearchSnapshotV1
+                    {
+                        completed = Array.Empty<ResearchCompletedNodeV1>(),
+                        progress = Array.Empty<ResearchProgressNodeV1>(),
+                        activeBranch = string.Empty,
+                        activeLevel = 0,
+                        paused = false
+                    },
                 rooms = build.Grid.CaptureRooms(Time.realtimeSinceStartup).ToArray()
             };
         }
@@ -74,6 +84,9 @@ namespace BuildATower
                 return Failure(SnapshotValidationError.InvalidStars, "The saved star count is outside the supported range.");
             if (snapshot.rooms == null)
                 return Failure(SnapshotValidationError.NullRooms, "The room snapshot list is missing.");
+            if (snapshot.research != null
+                && !ResearchSystem.TryValidateSnapshot(snapshot.research, out _))
+                return Failure(SnapshotValidationError.InvalidResearch, "The saved research state is invalid.");
 
             return SnapshotValidationResult.Succeeded();
         }
