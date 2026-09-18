@@ -567,7 +567,8 @@ namespace BuildATower.Tests
             var hud = build.gameObject.AddComponent<TowerHudController>();
             SetField(hud, "build", build);
             SetField(hud, "simulation", simulation);
-            hud.BindPauseSave(new SaveCoordinator(new LocalSaveRepository(root), build, simulation));
+            var repository = new LocalSaveRepository(root);
+            hud.BindPauseSave(new SaveCoordinator(repository, build, simulation), repository);
 
             Assert.IsTrue(presenter.HasNotice);
             Assert.AreEqual(RestoreFallbackPresenter.PlayerMessage, presenter.Message);

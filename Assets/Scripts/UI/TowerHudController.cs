@@ -147,15 +147,24 @@ namespace BuildATower
             Playing,
             Paused,
             Options,
+            Load,
             ConfirmQuit
         }
+
+        const string TowerSceneName = "TowerSandbox";
 
         PauseUiState _pauseUi = PauseUiState.Playing;
         float _speedBeforePause = 1f;
         bool _clockPausedBeforeMenu;
         PauseSaveService _pauseSave;
+        LocalSaveRepository _localSaves;
         bool _gridDirtyBound;
         string _pauseSaveMessage;
+        string _pauseLoadMessage;
+        Vector2 _pauseLoadScroll;
+        LocalSaveMenuPresenter _pauseLoadPresenter;
+        IReadOnlyList<LocalSaveSummary> _pauseLoadSummaries;
+        Action _loadTowerSceneOverride;
 
         public Rect PanelScreenRect => _panelRect;
         public Rect TopBarScreenRect => _topBarRect;
@@ -175,6 +184,18 @@ namespace BuildATower
             SubscribeGridDirty();
         }
 
+        public void ConfigurePauseLoad(
+            LocalSaveMenuPresenter presenter,
+            LocalSaveRepository repository = null,
+            Action loadTowerScene = null)
+        {
+            _pauseLoadPresenter = presenter ?? throw new ArgumentNullException(nameof(presenter));
+            if (repository != null)
+                _localSaves = repository;
+            if (loadTowerScene != null)
+                _loadTowerSceneOverride = loadTowerScene;
+        }
+
         public string SaveFromPause()
         {
             var service = EnsurePauseSave();
@@ -189,9 +210,17 @@ namespace BuildATower
             return _pauseSaveMessage;
         }
 
-        public void BindPauseSave(SaveCoordinator coordinator)
+        public void BindPauseSave(SaveCoordinator coordinator, LocalSaveRepository repository = null)
         {
+            if (repository != null)
+                _localSaves = repository;
             ConfigureLocalSave(new PauseSaveService(coordinator));
+        }
+
+        public bool TryLoadPausedTower(string saveId, out string errorMessage)
+        {
+            EnsurePauseLoadPresenter();
+            return _pauseLoadPresenter.TryPrepareLoad(saveId, out errorMessage);
         }
 
         public string SavePausedTower() => SaveFromPause();
@@ -294,9 +323,22 @@ namespace BuildATower
                 return null;
 
             _pauseSave = new PauseSaveService(
-                new SaveCoordinator(LocalSaveRepository.CreateDefault(), build, simulation));
+                new SaveCoordinator(_localSaves ??= LocalSaveRepository.CreateDefault(), build, simulation));
             SubscribeGridDirty();
             return _pauseSave;
+        }
+
+        void EnsurePauseLoadPresenter()
+        {
+            if (_pauseLoadPresenter != null) return;
+            var repository = _localSaves ?? LocalSaveRepository.CreateDefault();
+            _localSaves = repository;
+            _pauseLoadPresenter = new LocalSaveMenuPresenter(
+                repository,
+                new SaveCoordinator(repository),
+                _loadTowerSceneOverride
+                ?? (() => UnityEngine.SceneManagement.SceneManager.LoadScene(TowerSceneName)),
+                TimeZoneInfo.Local);
         }
 
         void Update()
@@ -310,14 +352,11 @@ namespace BuildATower
             if (celeb != null && celeb.IsModalOpen)
                 return;
 
-            if (_pauseUi == PauseUiState.ConfirmQuit)
+            if (_pauseUi == PauseUiState.ConfirmQuit
+                || _pauseUi == PauseUiState.Options
+                || _pauseUi == PauseUiState.Load)
             {
-                _pauseUi = PauseUiState.Paused;
-                return;
-            }
-
-            if (_pauseUi == PauseUiState.Options)
-            {
+                _pauseLoadMessage = null;
                 _pauseUi = PauseUiState.Paused;
                 return;
             }
@@ -694,6 +733,7 @@ namespace BuildATower
             GUI.EndScrollView();
 
             DrawHoverTooltip(label);
+            DrawRestoreFallbackOverlay(title, label);
             DrawPauseOverlay(title, label);
         }
 
@@ -714,6 +754,7 @@ namespace BuildATower
             }
 
             simulation?.SetSpeedPreset(_speedBeforePause, paused: true);
+            _pauseSaveMessage = null;
             _pauseUi = PauseUiState.Paused;
         }
 
@@ -723,12 +764,14 @@ namespace BuildATower
                 simulation?.SetSpeedPreset(_speedBeforePause, paused: true);
             else
                 simulation?.SetSpeedPreset(Mathf.Max(0.01f, _speedBeforePause), paused: false);
+            _pauseSaveMessage = null;
             _pauseUi = PauseUiState.Playing;
         }
 
         void ReturnToMainMenu()
         {
             ClearMapsMode();
+            _pauseSaveMessage = null;
             _pauseUi = PauseUiState.Playing;
             UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
         }
@@ -771,17 +814,45 @@ namespace BuildATower
             return celebration;
         }
 
+        void DrawRestoreFallbackOverlay(GUIStyle title, GUIStyle label)
+        {
+            if (!GameSession.HasRestoreFallbackNotice) return;
+
+            GUI.Box(new Rect(0, 0, Screen.width, Screen.height), GUIContent.none);
+            const float panelW = 420f;
+            const float panelH = 200f;
+            var panel = new Rect(
+                (Screen.width - panelW) * 0.5f,
+                (Screen.height - panelH) * 0.5f,
+                panelW,
+                panelH);
+            GUI.Box(panel, GUIContent.none);
+
+            var cx = panel.x + 20f;
+            var cy = panel.y + 16f;
+            var inner = panelW - 40f;
+            GUI.Label(new Rect(cx, cy, inner, 28f), "Could not restore save", title);
+            cy += 36f;
+            GUI.Label(new Rect(cx, cy, inner, 72f), GameSession.RestoreFallbackNotice, label);
+            cy += 84f;
+            if (GUI.Button(new Rect(cx, cy, inner, 32f), "OK"))
+                DismissRestoreFallbackNotice();
+        }
+
         void DrawPauseOverlay(GUIStyle title, GUIStyle label)
         {
             if (_pauseUi == PauseUiState.Playing) return;
+            if (GameSession.HasRestoreFallbackNotice) return;
 
             GUI.Box(new Rect(0, 0, Screen.width, Screen.height), GUIContent.none);
-            var panelW = 360f;
+            var panelW = _pauseUi == PauseUiState.Load ? 440f : 360f;
+            var hasSaveMessage = _pauseUi == PauseUiState.Paused && !string.IsNullOrEmpty(_pauseSaveMessage);
             float panelH = _pauseUi switch
             {
-                PauseUiState.ConfirmQuit => 160f,
+                PauseUiState.ConfirmQuit => 184f,
                 PauseUiState.Options => 320f,
-                _ => 188f
+                PauseUiState.Load => 360f,
+                _ => hasSaveMessage ? 332f : 300f
             };
             var panel = new Rect(
                 (Screen.width - panelW) * 0.5f,
@@ -812,8 +883,26 @@ namespace BuildATower
                 return;
             }
 
+            if (_pauseUi == PauseUiState.Load)
+            {
+                DrawPauseLoad(cx, cy, inner, btnH, title, label);
+                return;
+            }
+
             GUI.Label(new Rect(cx, cy, inner, 28f), "Paused", title);
             cy += 36f;
+            if (hasSaveMessage)
+            {
+                GUI.Label(new Rect(cx, cy, inner, 24f), _pauseSaveMessage, label);
+                cy += 28f;
+            }
+
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Save Game"))
+                SavePausedTower();
+            cy += btnH + 8f;
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Load Game"))
+                OpenPauseLoad();
+            cy += btnH + 8f;
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Resume"))
                 ResumeFromPause();
             cy += btnH + 8f;
@@ -822,6 +911,76 @@ namespace BuildATower
             cy += btnH + 8f;
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Main Menu"))
                 _pauseUi = PauseUiState.ConfirmQuit;
+        }
+
+        void OpenPauseLoad()
+        {
+            _pauseLoadMessage = null;
+            _pauseLoadScroll = Vector2.zero;
+            EnsurePauseLoadPresenter();
+            _pauseLoadSummaries = _pauseLoadPresenter?.RefreshLocalSaves()
+                                  ?? Array.Empty<LocalSaveSummary>();
+            _pauseUi = PauseUiState.Load;
+        }
+
+        void DrawPauseLoad(float cx, float cy, float inner, float btnH, GUIStyle title, GUIStyle label)
+        {
+            GUI.Label(new Rect(cx, cy, inner, 28f), "Load Game", title);
+            cy += 36f;
+
+            if (!string.IsNullOrEmpty(_pauseLoadMessage))
+            {
+                GUI.Label(new Rect(cx, cy, inner, 40f), _pauseLoadMessage, label);
+                cy += 44f;
+            }
+
+            var listH = 180f;
+            var listRect = new Rect(cx, cy, inner, listH);
+            var summaries = _pauseLoadSummaries ?? Array.Empty<LocalSaveSummary>();
+            var contentH = Mathf.Max(listH, summaries.Count * 56f + 8f);
+            _pauseLoadScroll = GUI.BeginScrollView(
+                listRect,
+                _pauseLoadScroll,
+                new Rect(0f, 0f, inner - 20f, contentH));
+            var rowY = 4f;
+            if (summaries.Count == 0)
+            {
+                GUI.Label(new Rect(0f, rowY, inner - 24f, 24f), "No local saves found.", label);
+            }
+            else
+            {
+                for (var i = 0; i < summaries.Count; i++)
+                {
+                    var row = _pauseLoadPresenter.PresentRow(summaries[i]);
+                    var rowRect = new Rect(0f, rowY, inner - 24f, 48f);
+                    var caption = string.IsNullOrEmpty(row.MetaText)
+                        ? row.TowerName + "  " + row.StatusMessage
+                        : row.TowerName + "  " + row.MetaText;
+                    if (row.CanLoadCurrent)
+                    {
+                        if (GUI.Button(rowRect, caption))
+                        {
+                            if (_pauseLoadPresenter.TryPrepareLoad(row.SaveId, out var error))
+                                return;
+                            _pauseLoadMessage = error;
+                        }
+                    }
+                    else
+                    {
+                        GUI.Label(rowRect, caption, label);
+                    }
+
+                    rowY += 52f;
+                }
+            }
+
+            GUI.EndScrollView();
+            cy += listH + 12f;
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Back"))
+            {
+                _pauseLoadMessage = null;
+                _pauseUi = PauseUiState.Paused;
+            }
         }
 
         void DrawPauseOptions(float cx, float cy, float inner, float btnH, GUIStyle title, GUIStyle label)

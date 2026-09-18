@@ -379,7 +379,15 @@ namespace BuildATower
 
             var hud = FindAnyObjectByType<TowerHudController>();
             celebration.Bind(this, hud, build);
-            hud?.BindCelebration(celebration);
+            if (hud != null)
+            {
+                hud.BindCelebration(celebration);
+                if (build != null)
+                {
+                    hud.BindPauseSave(
+                        new SaveCoordinator(LocalSaveRepository.CreateDefault(), build, this));
+                }
+            }
         }
 
         void OnMonthRolled()
@@ -391,6 +399,8 @@ namespace BuildATower
         {
             if (build?.Grid == null || _agents == null || _economy == null || _stars == null)
                 return;
+
+            GameSession.MarkGameplaySaveDirty();
 
             var climateOffset = _climate?.ComfortTierOffset ?? 0;
             var climateSpendMult = _climate?.SpendMultiplier ?? 1f;

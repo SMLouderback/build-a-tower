@@ -866,6 +866,30 @@ namespace BuildATower.Tests
             Assert.AreEqual(SaveId, GameSession.CurrentSaveId);
         }
 
+        [Test]
+        public void Pause_load_prepares_pending_snapshot_and_invokes_tower_scene()
+        {
+            var snapshot = ValidSnapshot(SaveId, "2026-01-01T00:00:00.0000000Z", 44_000);
+            snapshot.towerName = "Dockside";
+            var repository = new LocalSaveRepository(root);
+            Assert.IsTrue(repository.Save(SaveId, snapshot).Success);
+
+            var sceneLoads = 0;
+            var hud = CreateHud(out _, out _);
+            var loadPresenter = new LocalSaveMenuPresenter(
+                repository,
+                new SaveCoordinator(repository),
+                () => sceneLoads++,
+                DisplayZone);
+            hud.ConfigurePauseLoad(loadPresenter, repository, () => sceneLoads++);
+
+            Assert.IsTrue(hud.TryLoadPausedTower(SaveId, out var error), error);
+            Assert.AreEqual(1, sceneLoads);
+            Assert.IsNotNull(GameSession.PendingLoad);
+            Assert.AreEqual(SaveId, GameSession.PendingLoad.saveId);
+            Assert.AreEqual("Dockside", GameSession.PendingLoad.towerName);
+        }
+
         MainMenuController CreateMenu(LocalSaveRepository repository = null)
         {
             repository ??= new LocalSaveRepository(root);
@@ -902,7 +926,7 @@ namespace BuildATower.Tests
             var hud = build.gameObject.AddComponent<TowerHudController>();
             SetField(hud, "build", build);
             SetField(hud, "simulation", simulation);
-            hud.BindPauseSave(new SaveCoordinator(repository, build, simulation));
+            hud.BindPauseSave(new SaveCoordinator(repository, build, simulation), repository);
             return hud;
         }
 
