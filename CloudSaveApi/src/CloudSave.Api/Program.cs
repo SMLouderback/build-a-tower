@@ -1,6 +1,7 @@
 using System.Text;
 using CloudSave.Api.Auth;
 using CloudSave.Api.Data;
+using CloudSave.Api.Invites;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -37,12 +38,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 builder.Services.AddAuthorization();
+builder.Services.AddScoped<InviteService>();
 
 var app = builder.Build();
+if (InviteCli.IsMintInviteCommand(args))
+    return await InviteCli.RunMintInviteAsync(app.Services, args, Console.Out, Console.Error);
+
 app.MapGet("/health", () => Results.Json(new { status = "ok" }));
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapAuthEndpoints();
-app.Run();
+await app.RunAsync();
+return 0;
 
 public partial class Program;

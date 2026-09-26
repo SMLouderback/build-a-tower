@@ -1,4 +1,6 @@
+using System.Data;
 using CloudSave.Api.Data;
+using CloudSave.Api.Invites;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,16 +24,25 @@ public static class AuthEndpoints
         RegisterRequest request,
         UserManager<CloudUser> users,
         AppDbContext db,
+        InviteService invites,
         IConfiguration configuration,
         CancellationToken cancellationToken)
     {
         await EnsureDatabaseAsync(db, cancellationToken);
 
         var publicRegistration = configuration.GetValue<bool>("PublicRegistration");
-        if (!publicRegistration)
+        if (!publicRegistration && string.IsNullOrWhiteSpace(request.InviteCode))
         {
-            var code = string.IsNullOrWhiteSpace(request.InviteCode) ? "invite_required" : "invite_invalid";
-            return Results.Json(new { code }, statusCode: StatusCodes.Status403Forbidden);
+            return InviteError("invite_required");
+        }
+
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+            : null;
+
+        if (!publicRegistration && !await invites.TryConsumeAsync(request.InviteCode!, cancellationToken))
+        {
+            return InviteError("invite_invalid");
         }
 
         var email = request.Email.Trim();
@@ -47,6 +58,9 @@ public static class AuthEndpoints
         {
             return Results.ValidationProblem(ToValidationErrors(result));
         }
+
+        if (transaction is not null)
+            await transaction.CommitAsync(cancellationToken);
 
         return Results.Ok(new RegisterResponse(user.Id, email, user.EmailConfirmed));
     }
@@ -193,6 +207,11 @@ public static class AuthEndpoints
     private static IResult Unauthorized()
     {
         return Results.Json(new { code = "invalid_credentials" }, statusCode: StatusCodes.Status401Unauthorized);
+    }
+
+    private static IResult InviteError(string code)
+    {
+        return Results.Json(new { code }, statusCode: StatusCodes.Status403Forbidden);
     }
 
     private static Dictionary<string, string[]> ToValidationErrors(IdentityResult result)

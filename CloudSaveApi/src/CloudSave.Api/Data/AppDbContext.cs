@@ -1,4 +1,5 @@
 using CloudSave.Api.Auth;
+using CloudSave.Api.Invites;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,10 +13,19 @@ public sealed class AppDbContext : IdentityDbContext<CloudUser>
     }
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<InviteCode> InviteCodes => Set<InviteCode>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        builder.Entity<InviteCode>(entity =>
+        {
+            entity.HasIndex(code => code.CodeHash).IsUnique();
+            entity.Property(code => code.CodeHash).HasMaxLength(64).IsRequired();
+            entity.Property(code => code.RemainingUses).IsRequired();
+            entity.Property(code => code.CreatedUtc).IsRequired();
+        });
 
         builder.Entity<RefreshToken>(entity =>
         {
