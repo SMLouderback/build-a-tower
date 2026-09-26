@@ -1,16 +1,18 @@
 using System.Text;
 using CloudSave.Api.Auth;
 using CloudSave.Api.Data;
+using CloudSave.Api.Email;
 using CloudSave.Api.Invites;
+using CloudSave.Api.Saves;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("CloudSavePostgres")
     ?? "Host=localhost;Port=5432;Database=cloudsave;Username=cloudsave;Password=cloudsave_dev_only";
-var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>() ?? new JwtOptions();
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.AddSingleton(TimeProvider.System);
@@ -23,8 +25,11 @@ builder.Services.AddIdentityCore<CloudUser>(options =>
     .AddDefaultTokenProviders();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+    .AddJwtBearer();
+builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IOptions<JwtOptions>>((options, configuredJwt) =>
     {
+        var jwtOptions = configuredJwt.Value;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -39,6 +44,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 builder.Services.AddScoped<InviteService>();
+builder.Services.AddScoped<EmailTokenService>();
+builder.Services.AddConfiguredEmailSender(builder.Configuration);
 
 var app = builder.Build();
 if (InviteCli.IsMintInviteCommand(args))
@@ -48,6 +55,7 @@ app.MapGet("/health", () => Results.Json(new { status = "ok" }));
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapAuthEndpoints();
+app.MapSaveGateEndpoints();
 await app.RunAsync();
 return 0;
 

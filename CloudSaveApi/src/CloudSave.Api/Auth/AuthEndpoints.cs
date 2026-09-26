@@ -1,5 +1,6 @@
 using System.Data;
 using CloudSave.Api.Data;
+using CloudSave.Api.Email;
 using CloudSave.Api.Invites;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,9 @@ public static class AuthEndpoints
         group.MapPost("/login", Login);
         group.MapPost("/refresh", Refresh);
         group.MapPost("/logout", Logout);
+        group.MapPost("/verify", Verify);
+        group.MapPost("/forgot", Forgot);
+        group.MapPost("/reset", Reset);
 
         return endpoints;
     }
@@ -25,6 +29,8 @@ public static class AuthEndpoints
         UserManager<CloudUser> users,
         AppDbContext db,
         InviteService invites,
+        EmailTokenService emailTokens,
+        IEmailSender emailSender,
         IConfiguration configuration,
         CancellationToken cancellationToken)
     {
@@ -59,8 +65,16 @@ public static class AuthEndpoints
             return Results.ValidationProblem(ToValidationErrors(result));
         }
 
+        var verifyToken = await emailTokens.IssueAsync(user.Id, EmailTokenService.VerifyPurpose, cancellationToken);
+
         if (transaction is not null)
             await transaction.CommitAsync(cancellationToken);
+
+        await emailSender.SendAsync(
+            email,
+            "Verify your Build-A-Tower email",
+            $"Use this verification token: {verifyToken}",
+            cancellationToken);
 
         return Results.Ok(new RegisterResponse(user.Id, email, user.EmailConfirmed));
     }
@@ -151,6 +165,84 @@ public static class AuthEndpoints
         return Results.Ok(new { status = "ok" });
     }
 
+    private static async Task<IResult> Verify(
+        VerifyEmailRequest request,
+        UserManager<CloudUser> users,
+        AppDbContext db,
+        EmailTokenService emailTokens,
+        CancellationToken cancellationToken)
+    {
+        await EnsureDatabaseAsync(db, cancellationToken);
+
+        var user = await users.FindByEmailAsync(request.Email.Trim());
+        if (user is null ||
+            !await emailTokens.TryConsumeAsync(user.Id, EmailTokenService.VerifyPurpose, request.Token, cancellationToken))
+        {
+            return InvalidToken();
+        }
+
+        user.EmailConfirmed = true;
+        var result = await users.UpdateAsync(user);
+        if (!result.Succeeded)
+            return Results.ValidationProblem(ToValidationErrors(result));
+
+        return Results.Ok(new { status = "ok" });
+    }
+
+    private static async Task<IResult> Forgot(
+        ForgotPasswordRequest request,
+        UserManager<CloudUser> users,
+        AppDbContext db,
+        EmailTokenService emailTokens,
+        IEmailSender emailSender,
+        CancellationToken cancellationToken)
+    {
+        await EnsureDatabaseAsync(db, cancellationToken);
+
+        var email = request.Email.Trim();
+        var user = await users.FindByEmailAsync(email);
+        if (user is not null)
+        {
+            var resetToken = await emailTokens.IssueAsync(user.Id, EmailTokenService.ResetPurpose, cancellationToken);
+            await emailSender.SendAsync(
+                email,
+                "Reset your Build-A-Tower password",
+                $"Use this password reset token: {resetToken}",
+                cancellationToken);
+        }
+
+        return Results.Ok(new { status = "ok" });
+    }
+
+    private static async Task<IResult> Reset(
+        ResetPasswordRequest request,
+        UserManager<CloudUser> users,
+        AppDbContext db,
+        EmailTokenService emailTokens,
+        CancellationToken cancellationToken)
+    {
+        await EnsureDatabaseAsync(db, cancellationToken);
+
+        var user = await users.FindByEmailAsync(request.Email.Trim());
+        if (user is null ||
+            !await emailTokens.TryConsumeAsync(user.Id, EmailTokenService.ResetPurpose, request.Token, cancellationToken))
+        {
+            return InvalidToken();
+        }
+
+        var passwordValidation = await ValidatePasswordAsync(users, user, request.NewPassword);
+        if (!passwordValidation.Succeeded)
+            return Results.ValidationProblem(ToValidationErrors(passwordValidation));
+
+        user.PasswordHash = users.PasswordHasher.HashPassword(user, request.NewPassword);
+        user.SecurityStamp = Guid.NewGuid().ToString("N");
+        var result = await users.UpdateAsync(user);
+        if (!result.Succeeded)
+            return Results.ValidationProblem(ToValidationErrors(result));
+
+        return Results.Ok(new { status = "ok" });
+    }
+
     private static async Task<string> AddRefreshToken(
         AppDbContext db,
         string userId,
@@ -214,6 +306,26 @@ public static class AuthEndpoints
         return Results.Json(new { code }, statusCode: StatusCodes.Status403Forbidden);
     }
 
+    private static IResult InvalidToken()
+    {
+        return Results.Json(new { code = "invalid_token" }, statusCode: StatusCodes.Status400BadRequest);
+    }
+
+    private static async Task<IdentityResult> ValidatePasswordAsync(
+        UserManager<CloudUser> users,
+        CloudUser user,
+        string password)
+    {
+        foreach (var validator in users.PasswordValidators)
+        {
+            var result = await validator.ValidateAsync(users, user, password);
+            if (!result.Succeeded)
+                return result;
+        }
+
+        return IdentityResult.Success;
+    }
+
     private static Dictionary<string, string[]> ToValidationErrors(IdentityResult result)
     {
         return result.Errors
@@ -227,5 +339,8 @@ public static class AuthEndpoints
 public sealed record RegisterRequest(string Email, string Password, string? InviteCode);
 public sealed record LoginRequest(string Email, string Password);
 public sealed record RefreshRequest(string RefreshToken);
+public sealed record VerifyEmailRequest(string Email, string Token);
+public sealed record ForgotPasswordRequest(string Email);
+public sealed record ResetPasswordRequest(string Email, string Token, string NewPassword);
 public sealed record RegisterResponse(string UserId, string Email, bool EmailConfirmed);
 public sealed record AuthResponse(string AccessToken, string RefreshToken, int ExpiresIn);
