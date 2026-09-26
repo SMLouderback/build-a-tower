@@ -4,11 +4,13 @@ using CloudSave.Api.Data;
 using CloudSave.Api.Email;
 using CloudSave.Api.Invites;
 using CloudSave.Api.Saves;
+using CloudSave.Api.Account;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("CloudSavePostgres")
@@ -46,6 +48,38 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<InviteService>();
 builder.Services.AddScoped<EmailTokenService>();
 builder.Services.AddConfiguredEmailSender(builder.Configuration);
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        await context.HttpContext.Response.WriteAsJsonAsync(new { code = "rate_limited" }, cancellationToken);
+    };
+
+    options.AddPolicy("auth", httpContext =>
+    {
+        var remoteIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(remoteIp, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        });
+    });
+
+    options.AddPolicy("save-put", httpContext =>
+    {
+        var userId = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous";
+        return RateLimitPartition.GetFixedWindowLimiter(userId, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        });
+    });
+});
 
 var app = builder.Build();
 if (InviteCli.IsMintInviteCommand(args))
@@ -54,8 +88,10 @@ if (InviteCli.IsMintInviteCommand(args))
 app.MapGet("/health", () => Results.Json(new { status = "ok" }));
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapAuthEndpoints();
 app.MapSaveEndpoints();
+app.MapAccountEndpoints();
 await app.RunAsync();
 return 0;
 

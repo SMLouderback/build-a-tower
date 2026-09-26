@@ -18,6 +18,7 @@ public sealed class AppDbContext : IdentityDbContext<CloudUser>
     public DbSet<InviteCode> InviteCodes => Set<InviteCode>();
     public DbSet<EmailToken> EmailTokens => Set<EmailToken>();
     public DbSet<SlotRecord> SaveSlots => Set<SlotRecord>();
+    public DbSet<RevisionArchive> RevisionArchives => Set<RevisionArchive>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -70,6 +71,22 @@ public sealed class AppDbContext : IdentityDbContext<CloudUser>
             entity.HasOne(slot => slot.CloudUser)
                 .WithMany()
                 .HasForeignKey(slot => slot.CloudUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<RevisionArchive>(entity =>
+        {
+            entity.HasIndex(archive => new { archive.CloudUserId, archive.SlotId, archive.KeepUntil });
+            entity.Property(archive => archive.TowerName).HasMaxLength(160).IsRequired();
+            entity.Property(archive => archive.Checksum).HasMaxLength(64).IsRequired();
+            entity.Property(archive => archive.DeviceName).HasMaxLength(120);
+            entity.Property(archive => archive.GameVersion).HasMaxLength(64);
+            entity.Property(archive => archive.ClientInstallId).HasMaxLength(64);
+            entity.Property(archive => archive.Payload).IsRequired();
+
+            entity.HasOne(archive => archive.CloudUser)
+                .WithMany()
+                .HasForeignKey(archive => archive.CloudUserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

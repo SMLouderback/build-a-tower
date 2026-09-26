@@ -21,6 +21,11 @@ public static class SaveEndpoints
         endpoints.MapGet("/v1/saves/{slotId:int}", GetSave)
             .RequireAuthorization();
         endpoints.MapPut("/v1/saves/{slotId:int}", PutSave)
+            .RequireAuthorization()
+            .RequireRateLimiting("save-put");
+        endpoints.MapGet("/v1/saves/{slotId:int}/revisions", GetRevisions)
+            .RequireAuthorization();
+        endpoints.MapPost("/v1/saves/{slotId:int}/restore/{revisionId:guid}", RestoreRevision)
             .RequireAuthorization();
 
         return endpoints;
@@ -116,6 +121,100 @@ public static class SaveEndpoints
             cancellationToken);
     }
 
+    private static async Task<IResult> GetRevisions(
+        [FromRoute] int slotId,
+        ClaimsPrincipal principal,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        if (!IsValidSlot(slotId))
+            return Results.NotFound();
+
+        var gate = await GetVerifiedUserId(principal, db, cancellationToken);
+        if (gate.Result is not null)
+            return gate.Result;
+
+        var now = timeProvider.GetUtcNow();
+        var revisions = await db.RevisionArchives
+            .Where(archive => archive.CloudUserId == gate.UserId && archive.SlotId == slotId && archive.KeepUntil > now)
+            .OrderByDescending(archive => archive.Revision)
+            .Select(archive => new ArchivedRevisionSummary(
+                archive.Id,
+                archive.Revision,
+                archive.TowerName,
+                archive.DeviceName,
+                archive.PlayMinutes,
+                archive.ModifiedUtc,
+                archive.KeepUntil))
+            .ToListAsync(cancellationToken);
+
+        return Results.Ok(new RevisionListResponse(revisions));
+    }
+
+    private static async Task<IResult> RestoreRevision(
+        [FromRoute] int slotId,
+        [FromRoute] Guid revisionId,
+        ClaimsPrincipal principal,
+        AppDbContext db,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        if (!IsValidSlot(slotId))
+            return Results.NotFound();
+
+        var gate = await GetVerifiedUserId(principal, db, cancellationToken);
+        if (gate.Result is not null)
+            return gate.Result;
+
+        var now = timeProvider.GetUtcNow();
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
+        var archive = await db.RevisionArchives
+            .SingleOrDefaultAsync(candidate =>
+                candidate.Id == revisionId &&
+                candidate.CloudUserId == gate.UserId &&
+                candidate.SlotId == slotId &&
+                candidate.KeepUntil > now,
+                cancellationToken);
+        if (archive is null)
+            return Results.NotFound();
+
+        var current = await db.SaveSlots
+            .SingleOrDefaultAsync(slot => slot.CloudUserId == gate.UserId && slot.SlotId == slotId, cancellationToken);
+        if (current is null)
+        {
+            db.SaveSlots.Add(CreateRecordFromArchive(slotId, gate.UserId!, archive, now, revision: 1));
+            await db.SaveChangesAsync(cancellationToken);
+            if (transaction is not null)
+                await transaction.CommitAsync(cancellationToken);
+            return Results.Ok(new RevisionResponse(1));
+        }
+
+        db.RevisionArchives.Add(CreateArchive(current, now));
+        var nextRevision = current.Revision + 1;
+        current.Revision = nextRevision;
+        current.TowerName = archive.TowerName;
+        current.SchemaVersion = archive.SchemaVersion;
+        current.Payload = archive.Payload;
+        current.Checksum = archive.Checksum;
+        current.ModifiedUtc = now;
+        current.DeviceName = archive.DeviceName;
+        current.PlayMinutes = archive.PlayMinutes;
+        current.GameVersion = archive.GameVersion;
+        current.ClientInstallId = archive.ClientInstallId;
+        current.CompressedBytes = archive.CompressedBytes;
+        current.DecompressedBytes = archive.DecompressedBytes;
+
+        await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+            await transaction.CommitAsync(cancellationToken);
+
+        return Results.Ok(new RevisionResponse(nextRevision));
+    }
+
     private static async Task<IResult> PutSaveRelational(
         int slotId,
         string userId,
@@ -159,7 +258,11 @@ public static class SaveEndpoints
                 cancellationToken);
 
         if (rows == 1)
+        {
+            db.RevisionArchives.Add(CreateArchive(existing, now));
+            await db.SaveChangesAsync(cancellationToken);
             return Results.Ok(new RevisionResponse(nextRevision));
+        }
 
         var current = await db.SaveSlots
             .AsNoTracking()
@@ -193,6 +296,7 @@ public static class SaveEndpoints
         if (existing.Revision != request.ExpectedRevision)
             return Conflict(existing);
 
+        db.RevisionArchives.Add(CreateArchive(existing, now));
         existing.Revision++;
         existing.TowerName = request.TowerName;
         existing.SchemaVersion = request.SchemaVersion;
@@ -208,6 +312,30 @@ public static class SaveEndpoints
 
         await db.SaveChangesAsync(cancellationToken);
         return Results.Ok(new RevisionResponse(existing.Revision));
+    }
+
+    private static RevisionArchive CreateArchive(SlotRecord record, DateTimeOffset archivedUtc)
+    {
+        return new RevisionArchive
+        {
+            Id = Guid.NewGuid(),
+            CloudUserId = record.CloudUserId,
+            SlotId = record.SlotId,
+            Revision = record.Revision,
+            TowerName = record.TowerName,
+            SchemaVersion = record.SchemaVersion,
+            Payload = record.Payload,
+            Checksum = record.Checksum,
+            ModifiedUtc = record.ModifiedUtc,
+            ArchivedUtc = archivedUtc,
+            KeepUntil = archivedUtc.AddDays(30),
+            DeviceName = record.DeviceName,
+            PlayMinutes = record.PlayMinutes,
+            GameVersion = record.GameVersion,
+            ClientInstallId = record.ClientInstallId,
+            CompressedBytes = record.CompressedBytes,
+            DecompressedBytes = record.DecompressedBytes
+        };
     }
 
     private static SlotRecord CreateRecord(
@@ -236,6 +364,33 @@ public static class SaveEndpoints
             ClientInstallId = request.ClientInstallId,
             CompressedBytes = payload.LongLength,
             DecompressedBytes = decompressedBytes
+        };
+    }
+
+    private static SlotRecord CreateRecordFromArchive(
+        int slotId,
+        string userId,
+        RevisionArchive archive,
+        DateTimeOffset now,
+        long revision)
+    {
+        return new SlotRecord
+        {
+            Id = Guid.NewGuid(),
+            CloudUserId = userId,
+            SlotId = slotId,
+            Revision = revision,
+            TowerName = archive.TowerName,
+            SchemaVersion = archive.SchemaVersion,
+            Payload = archive.Payload,
+            Checksum = archive.Checksum,
+            ModifiedUtc = now,
+            DeviceName = archive.DeviceName,
+            PlayMinutes = archive.PlayMinutes,
+            GameVersion = archive.GameVersion,
+            ClientInstallId = archive.ClientInstallId,
+            CompressedBytes = archive.CompressedBytes,
+            DecompressedBytes = archive.DecompressedBytes
         };
     }
 
@@ -354,6 +509,16 @@ public sealed record SaveUploadRequest(
 
 public sealed record RevisionResponse(long Revision);
 public sealed record SlotListResponse(IReadOnlyList<SlotSummary> Slots);
+public sealed record RevisionListResponse(IReadOnlyList<ArchivedRevisionSummary> Revisions);
+
+public sealed record ArchivedRevisionSummary(
+    Guid RevisionId,
+    long Revision,
+    string TowerName,
+    string? DeviceName,
+    int? PlayMinutes,
+    DateTimeOffset ModifiedUtc,
+    DateTimeOffset KeepUntil);
 
 public sealed record SlotSummary(
     int SlotId,

@@ -13,8 +13,10 @@ public static class AuthEndpoints
     {
         var group = endpoints.MapGroup("/v1/auth");
 
-        group.MapPost("/register", Register);
-        group.MapPost("/login", Login);
+        group.MapPost("/register", Register)
+            .RequireRateLimiting("auth");
+        group.MapPost("/login", Login)
+            .RequireRateLimiting("auth");
         group.MapPost("/refresh", Refresh);
         group.MapPost("/logout", Logout);
         group.MapPost("/verify", Verify);
