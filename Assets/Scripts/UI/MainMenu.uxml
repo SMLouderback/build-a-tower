@@ -8,6 +8,7 @@
       <ui:Button name="btn-new-game" text="New Game" class="menu-button" />
       <ui:Button name="btn-save-game" text="Save Game" class="menu-button" />
       <ui:Button name="btn-load-game" text="Load Game" class="menu-button" />
+      <ui:Button name="btn-account" text="Account" class="menu-button" />
       <ui:Button name="btn-contact" text="Contact Us" class="menu-button" />
       <ui:Button name="btn-about" text="About" class="menu-button" />
     </ui:VisualElement>
@@ -19,6 +20,20 @@
         <ui:VisualElement name="local-saves-rows" class="saves-rows" />
       </ui:ScrollView>
       <ui:Button name="btn-local-saves-back" text="Back" class="menu-button secondary" />
+    </ui:VisualElement>
+
+    <ui:VisualElement name="panel-account" class="panel panel-account hidden">
+      <ui:Label text="Account" class="panel-title" />
+      <ui:Label name="account-status" text="Sign in to use three cloud save slots. Local saves still work offline." class="body account-status" />
+      <ui:TextField name="account-email" label="Email" class="account-field" />
+      <ui:TextField name="account-password" label="Password" password="true" class="account-field" />
+      <ui:TextField name="account-invite" label="Invite code" class="account-field" />
+      <ui:TextField name="account-verify-token" label="Verify code" class="account-field" />
+      <ui:Button name="btn-account-login" text="Log In" class="menu-button" />
+      <ui:Button name="btn-account-register" text="Register" class="menu-button" />
+      <ui:Button name="btn-account-verify" text="Verify Email" class="menu-button" />
+      <ui:Button name="btn-account-forgot" text="Forgot Password" class="menu-button secondary" />
+      <ui:Button name="btn-account-back" text="Back" class="menu-button secondary" />
     </ui:VisualElement>
 
     <ui:VisualElement name="panel-difficulty" class="panel hidden">

@@ -1,7 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
+using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using UnityEngine;
 
 namespace BuildATower
 {
@@ -22,6 +28,15 @@ namespace BuildATower
         public string ModifiedLocalText { get; set; }
         public string GameDateText { get; set; }
         public string MetaText { get; set; }
+    }
+
+    public sealed class CloudSaveRowPresentation
+    {
+        public int SlotId { get; set; }
+        public string TowerName { get; set; }
+        public string MetaText { get; set; }
+        public bool CanLoad { get; set; }
+        public string StatusMessage { get; set; }
     }
 
     public sealed class LocalRecoveryChoice
@@ -251,6 +266,8 @@ namespace BuildATower
         readonly SaveCoordinator _coordinator;
         readonly Action _loadTowerScene;
         readonly TimeZoneInfo _displayTimeZone;
+        ICloudSlotSource _cloudSlots;
+        IReadOnlyList<CloudSlotSummary> _lastCloudSlots = Array.Empty<CloudSlotSummary>();
 
         public LocalSaveMenuPresenter(
             LocalSaveRepository repository,
@@ -264,10 +281,33 @@ namespace BuildATower
             _displayTimeZone = displayTimeZone ?? TimeZoneInfo.Local;
         }
 
+        public void ConfigureCloudSlots(ICloudSlotSource cloudSlots)
+        {
+            _cloudSlots = cloudSlots;
+        }
+
         public IReadOnlyList<LocalSaveSummary> RefreshLocalSaves()
         {
             return _repository.List();
         }
+
+        public async Task<IReadOnlyList<CloudSlotSummary>> RefreshCloudSlots(
+            CancellationToken cancellationToken = default)
+        {
+            if (_cloudSlots == null || string.IsNullOrWhiteSpace(GameSession.CurrentAccountId))
+            {
+                _lastCloudSlots = Array.Empty<CloudSlotSummary>();
+                return _lastCloudSlots;
+            }
+
+            var result = await _cloudSlots.ListSlots(cancellationToken);
+            _lastCloudSlots = result.Success
+                ? result.Slots
+                : Array.Empty<CloudSlotSummary>();
+            return _lastCloudSlots;
+        }
+
+        public IReadOnlyList<CloudSlotSummary> LastCloudSlots => _lastCloudSlots;
 
         public bool TryPrepareLoad(string saveId, out string errorMessage)
         {
@@ -369,6 +409,94 @@ namespace BuildATower
             return row;
         }
 
+        public CloudSaveRowPresentation PresentCloudRow(CloudSlotSummary summary)
+        {
+            if (summary == null)
+                throw new ArgumentNullException(nameof(summary));
+
+            if (!summary.Occupied)
+            {
+                return new CloudSaveRowPresentation
+                {
+                    SlotId = summary.SlotId,
+                    TowerName = "Cloud slot " + summary.SlotId.ToString(CultureInfo.InvariantCulture),
+                    MetaText = "Empty cloud slot",
+                    CanLoad = false,
+                    StatusMessage = "Empty"
+                };
+            }
+
+            var modified = summary.ModifiedUtc.Ticks == 0
+                ? "unknown time"
+                : LocalSavePresentation.FormatModifiedLocal(summary.ModifiedUtc, _displayTimeZone);
+            var device = string.IsNullOrWhiteSpace(summary.DeviceName) ? "unknown device" : summary.DeviceName;
+            return new CloudSaveRowPresentation
+            {
+                SlotId = summary.SlotId,
+                TowerName = summary.TowerName,
+                MetaText = "Cloud slot "
+                           + summary.SlotId.ToString(CultureInfo.InvariantCulture)
+                           + "  "
+                           + device
+                           + "  "
+                           + modified
+                           + "  rev "
+                           + summary.Revision.ToString(CultureInfo.InvariantCulture),
+                CanLoad = true,
+                StatusMessage = string.Empty
+            };
+        }
+
+        public async Task<bool> TryPrepareCloudLoad(
+            int slotId,
+            CancellationToken cancellationToken,
+            Action<string> onError)
+        {
+            if (_cloudSlots == null)
+            {
+                onError?.Invoke("Cloud saves are not available.");
+                return false;
+            }
+
+            var download = await _cloudSlots.DownloadSlot(slotId, cancellationToken);
+            if (!download.Success)
+            {
+                onError?.Invoke(string.IsNullOrEmpty(download.ErrorMessage)
+                    ? "Cloud save could not be downloaded."
+                    : download.ErrorMessage);
+                return false;
+            }
+
+            TowerSnapshotV1 snapshot;
+            try
+            {
+                snapshot = DecodeCloudDownload(download.Download);
+            }
+            catch (Exception exception) when (exception is ArgumentException
+                                             || exception is FormatException
+                                             || exception is IOException)
+            {
+                onError?.Invoke("Cloud save could not be read.");
+                return false;
+            }
+
+            snapshot.accountId = GameSession.CurrentAccountId;
+            snapshot.slotId = download.Download.slotId;
+            snapshot.cloudRevision = download.Download.revision;
+
+            var prepared = GameSession.PrepareLoad(snapshot);
+            if (!prepared.Success)
+            {
+                onError?.Invoke(prepared.Error == SessionLoadError.LoadAlreadyPending
+                    ? "A load is already pending."
+                    : "Cloud save could not be restored.");
+                return false;
+            }
+
+            return FinishPreparation(SaveReadResult.Succeeded(snapshot), out var error)
+                   || ReportError(error, onError);
+        }
+
         bool FinishPreparation(SaveReadResult result, out string errorMessage)
         {
             if (result == null || !result.Success)
@@ -389,6 +517,63 @@ namespace BuildATower
             errorMessage = string.Empty;
             _loadTowerScene();
             return true;
+        }
+
+        static bool ReportError(string error, Action<string> onError)
+        {
+            onError?.Invoke(error);
+            return false;
+        }
+
+        static TowerSnapshotV1 DecodeCloudDownload(CloudSlotDownload download)
+        {
+            if (download == null)
+                throw new InvalidDataException("The cloud download is missing.");
+
+            var compressedPayload = Convert.FromBase64String(download.payloadBase64);
+            if (!ConstantTimeEquals(ComputeChecksum(compressedPayload), download.checksum))
+                throw new InvalidDataException("The cloud payload checksum does not match.");
+
+            using (var input = new MemoryStream(compressedPayload, false))
+            using (var gzip = new GZipStream(input, CompressionMode.Decompress))
+            using (var output = new MemoryStream())
+            {
+                gzip.CopyTo(output);
+                var snapshot = JsonUtility.FromJson<TowerSnapshotV1>(
+                    Encoding.UTF8.GetString(output.ToArray()));
+                if (snapshot == null)
+                    throw new InvalidDataException("The cloud payload is empty.");
+
+                snapshot.clientInstallId = download.clientInstallId;
+                snapshot.deviceName = download.deviceName;
+                snapshot.gameVersion = download.gameVersion;
+                return snapshot;
+            }
+        }
+
+        static string ComputeChecksum(byte[] payload)
+        {
+            using (var sha256 = SHA256.Create())
+            {
+                var hash = sha256.ComputeHash(payload);
+                var builder = new StringBuilder(hash.Length * 2);
+                foreach (var value in hash)
+                    builder.Append(value.ToString("x2"));
+
+                return builder.ToString();
+            }
+        }
+
+        static bool ConstantTimeEquals(string left, string right)
+        {
+            if (left == null || right == null || left.Length != right.Length)
+                return false;
+
+            var difference = 0;
+            for (var index = 0; index < left.Length; index++)
+                difference |= left[index] ^ right[index];
+
+            return difference == 0;
         }
     }
 }

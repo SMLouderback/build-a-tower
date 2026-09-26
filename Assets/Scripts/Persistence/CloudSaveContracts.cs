@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 
 namespace BuildATower
@@ -132,6 +133,85 @@ namespace BuildATower
         System.Threading.Tasks.Task<CloudSlotDownloadResult> DownloadSlot(
             int slotId,
             System.Threading.CancellationToken cancellationToken);
+    }
+
+    public interface ICloudSlotSource
+    {
+        System.Threading.Tasks.Task<CloudSlotListResult> ListSlots(
+            System.Threading.CancellationToken cancellationToken = default);
+
+        System.Threading.Tasks.Task<CloudSlotDownloadResult> DownloadSlot(
+            int slotId,
+            System.Threading.CancellationToken cancellationToken = default);
+    }
+
+    public sealed class CloudSlotSummary
+    {
+        private CloudSlotSummary(
+            int slotId,
+            bool occupied,
+            string towerName,
+            long revision,
+            DateTime modifiedUtc,
+            string deviceName,
+            int playMinutes)
+        {
+            SlotId = slotId;
+            Occupied = occupied;
+            TowerName = towerName ?? string.Empty;
+            Revision = revision;
+            ModifiedUtc = DateTime.SpecifyKind(modifiedUtc, DateTimeKind.Utc);
+            DeviceName = deviceName ?? string.Empty;
+            PlayMinutes = playMinutes;
+        }
+
+        public int SlotId { get; }
+        public bool Occupied { get; }
+        public string TowerName { get; }
+        public long Revision { get; }
+        public DateTime ModifiedUtc { get; }
+        public string DeviceName { get; }
+        public int PlayMinutes { get; }
+
+        public static CloudSlotSummary Empty(int slotId)
+        {
+            return new CloudSlotSummary(slotId, false, string.Empty, 0, new DateTime(0L, DateTimeKind.Utc), string.Empty, 0);
+        }
+
+        public static CloudSlotSummary OccupiedSlot(
+            int slotId,
+            string towerName,
+            long revision,
+            DateTime modifiedUtc,
+            string deviceName,
+            int playMinutes)
+        {
+            return new CloudSlotSummary(slotId, true, towerName, revision, modifiedUtc, deviceName, playMinutes);
+        }
+    }
+
+    public sealed class CloudSlotListResult : CloudResult
+    {
+        CloudSlotListResult(CloudError error, string errorMessage, IReadOnlyList<CloudSlotSummary> slots)
+            : base(error, errorMessage)
+        {
+            Slots = slots ?? Array.Empty<CloudSlotSummary>();
+        }
+
+        public IReadOnlyList<CloudSlotSummary> Slots { get; }
+
+        public static CloudSlotListResult Succeeded(IReadOnlyList<CloudSlotSummary> slots)
+        {
+            return new CloudSlotListResult(CloudError.None, string.Empty, slots);
+        }
+
+        public new static CloudSlotListResult Failed(CloudError error, string errorMessage)
+        {
+            if (error == CloudError.None)
+                throw new ArgumentException("A failed cloud slot list must have an error.", nameof(error));
+
+            return new CloudSlotListResult(error, errorMessage, Array.Empty<CloudSlotSummary>());
+        }
     }
 
     public sealed class CloudSlotUploadResult

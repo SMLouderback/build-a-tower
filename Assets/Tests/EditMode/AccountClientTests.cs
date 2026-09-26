@@ -145,6 +145,36 @@ namespace BuildATower.Tests
             Assert.AreEqual(CloudError.Offline, result.Error);
         }
 
+        [Test]
+        public async Task List_slots_gets_authorized_cloud_slot_summaries()
+        {
+            var handler = new StubHandler(request =>
+            {
+                if (request.RequestUri.AbsolutePath == "/v1/auth/login")
+                    return Json(HttpStatusCode.OK, AuthJson(LoginAccessToken, RefreshToken));
+
+                Assert.AreEqual(HttpMethod.Get, request.Method);
+                Assert.AreEqual("/v1/saves", request.RequestUri.AbsolutePath);
+                Assert.AreEqual(LoginAccessToken, request.Headers.Authorization.Parameter);
+                return Json(
+                    HttpStatusCode.OK,
+                    "{\"slots\":[{\"slotId\":1,\"occupied\":true,\"revision\":7,\"towerName\":\"Cloud Harbor\",\"modifiedUtc\":\"2026-09-26T16:00:00Z\",\"deviceName\":\"Studio PC\",\"playMinutes\":42},{\"slotId\":2,\"occupied\":false}]}");
+            });
+            var client = CreateClient(handler);
+            Assert.IsTrue((await client.Login("player@example.com", "password")).Success);
+
+            var result = await client.ListSlots();
+
+            Assert.IsTrue(result.Success, result.ErrorMessage);
+            Assert.AreEqual(2, result.Slots.Count);
+            Assert.IsTrue(result.Slots[0].Occupied);
+            Assert.AreEqual(1, result.Slots[0].SlotId);
+            Assert.AreEqual("Cloud Harbor", result.Slots[0].TowerName);
+            Assert.AreEqual(7, result.Slots[0].Revision);
+            Assert.AreEqual("Studio PC", result.Slots[0].DeviceName);
+            Assert.IsFalse(result.Slots[1].Occupied);
+        }
+
         AccountClient CreateClient(HttpMessageHandler handler)
         {
             return new AccountClient(

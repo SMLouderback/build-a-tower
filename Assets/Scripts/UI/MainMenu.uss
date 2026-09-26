@@ -124,6 +124,25 @@
   width: 520px;
 }
 
+.panel-account {
+  width: 480px;
+}
+
+.account-status {
+  color: rgb(180, 198, 210);
+  padding: 8px;
+  background-color: rgba(36, 58, 72, 0.45);
+  border-radius: 6px;
+  border-width: 1px;
+  border-color: rgba(242, 214, 140, 0.22);
+}
+
+.account-field {
+  margin-top: 4px;
+  margin-bottom: 4px;
+  color: rgb(236, 242, 248);
+}
+
 .saves-scroll {
   max-height: 360px;
   margin-bottom: 8px;
@@ -141,6 +160,11 @@
   border-radius: 6px;
   border-width: 1px;
   border-color: rgba(242, 214, 140, 0.2);
+}
+
+.cloud-save-row {
+  background-color: rgba(42, 46, 38, 0.92);
+  border-color: rgba(242, 214, 140, 0.28);
 }
 
 .save-name {

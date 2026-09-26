@@ -147,6 +147,7 @@ namespace BuildATower
             Playing,
             Paused,
             Options,
+            Account,
             Load,
             ConfirmQuit
         }
@@ -161,9 +162,13 @@ namespace BuildATower
         bool _gridDirtyBound;
         string _pauseSaveMessage;
         string _pauseLoadMessage;
+        string _pauseAccountMessage;
         Vector2 _pauseLoadScroll;
         LocalSaveMenuPresenter _pauseLoadPresenter;
         IReadOnlyList<LocalSaveSummary> _pauseLoadSummaries;
+        IReadOnlyList<CloudSlotSummary> _pauseCloudSlots = Array.Empty<CloudSlotSummary>();
+        ICloudSlotSource _cloudSlots;
+        Func<SyncStatus> _syncStatusProvider;
         Action _loadTowerSceneOverride;
 
         public Rect PanelScreenRect => _panelRect;
@@ -190,10 +195,33 @@ namespace BuildATower
             Action loadTowerScene = null)
         {
             _pauseLoadPresenter = presenter ?? throw new ArgumentNullException(nameof(presenter));
+            if (_cloudSlots != null)
+                _pauseLoadPresenter.ConfigureCloudSlots(_cloudSlots);
             if (repository != null)
                 _localSaves = repository;
             if (loadTowerScene != null)
                 _loadTowerSceneOverride = loadTowerScene;
+        }
+
+        public void ConfigureCloudSlots(ICloudSlotSource cloudSlots)
+        {
+            _cloudSlots = cloudSlots;
+            if (_pauseLoadPresenter != null)
+                _pauseLoadPresenter.ConfigureCloudSlots(cloudSlots);
+        }
+
+        public void ConfigureSyncStatus(Func<SyncStatus> syncStatusProvider)
+        {
+            _syncStatusProvider = syncStatusProvider;
+        }
+
+        public IReadOnlyList<CloudSlotSummary> PauseCloudSlots => _pauseCloudSlots;
+
+        public async System.Threading.Tasks.Task<IReadOnlyList<CloudSlotSummary>> RefreshPauseCloudSlots()
+        {
+            EnsurePauseLoadPresenter();
+            _pauseCloudSlots = await _pauseLoadPresenter.RefreshCloudSlots();
+            return _pauseCloudSlots;
         }
 
         public string SaveFromPause()
@@ -339,6 +367,8 @@ namespace BuildATower
                 _loadTowerSceneOverride
                 ?? (() => UnityEngine.SceneManagement.SceneManager.LoadScene(TowerSceneName)),
                 TimeZoneInfo.Local);
+            if (_cloudSlots != null)
+                _pauseLoadPresenter.ConfigureCloudSlots(_cloudSlots);
         }
 
         void Update()
@@ -354,7 +384,8 @@ namespace BuildATower
 
             if (_pauseUi == PauseUiState.ConfirmQuit
                 || _pauseUi == PauseUiState.Options
-                || _pauseUi == PauseUiState.Load)
+                || _pauseUi == PauseUiState.Load
+                || _pauseUi == PauseUiState.Account)
             {
                 _pauseLoadMessage = null;
                 _pauseUi = PauseUiState.Paused;
@@ -851,8 +882,9 @@ namespace BuildATower
             {
                 PauseUiState.ConfirmQuit => 184f,
                 PauseUiState.Options => 320f,
+                PauseUiState.Account => 260f,
                 PauseUiState.Load => 360f,
-                _ => hasSaveMessage ? 332f : 300f
+                _ => hasSaveMessage ? 372f : 340f
             };
             var panel = new Rect(
                 (Screen.width - panelW) * 0.5f,
@@ -889,8 +921,16 @@ namespace BuildATower
                 return;
             }
 
+            if (_pauseUi == PauseUiState.Account)
+            {
+                DrawPauseAccount(cx, cy, inner, btnH, title, label);
+                return;
+            }
+
             GUI.Label(new Rect(cx, cy, inner, 28f), "Paused", title);
             cy += 36f;
+            GUI.Label(new Rect(cx, cy, inner, 24f), "Cloud: " + CurrentSyncStatusText(), label);
+            cy += 28f;
             if (hasSaveMessage)
             {
                 GUI.Label(new Rect(cx, cy, inner, 24f), _pauseSaveMessage, label);
@@ -902,6 +942,9 @@ namespace BuildATower
             cy += btnH + 8f;
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Load Game"))
                 OpenPauseLoad();
+            cy += btnH + 8f;
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Account"))
+                _pauseUi = PauseUiState.Account;
             cy += btnH + 8f;
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Resume"))
                 ResumeFromPause();
@@ -920,6 +963,7 @@ namespace BuildATower
             EnsurePauseLoadPresenter();
             _pauseLoadSummaries = _pauseLoadPresenter?.RefreshLocalSaves()
                                   ?? Array.Empty<LocalSaveSummary>();
+            _ = RefreshPauseCloudSlots();
             _pauseUi = PauseUiState.Load;
         }
 
@@ -937,13 +981,18 @@ namespace BuildATower
             var listH = 180f;
             var listRect = new Rect(cx, cy, inner, listH);
             var summaries = _pauseLoadSummaries ?? Array.Empty<LocalSaveSummary>();
-            var contentH = Mathf.Max(listH, summaries.Count * 56f + 8f);
+            var cloudSlots = _pauseCloudSlots ?? Array.Empty<CloudSlotSummary>();
+            var visibleCloudCount = 0;
+            for (var i = 0; i < cloudSlots.Count; i++)
+                if (cloudSlots[i] != null && cloudSlots[i].Occupied)
+                    visibleCloudCount++;
+            var contentH = Mathf.Max(listH, (summaries.Count + visibleCloudCount) * 56f + 8f);
             _pauseLoadScroll = GUI.BeginScrollView(
                 listRect,
                 _pauseLoadScroll,
                 new Rect(0f, 0f, inner - 20f, contentH));
             var rowY = 4f;
-            if (summaries.Count == 0)
+            if (summaries.Count == 0 && visibleCloudCount == 0)
             {
                 GUI.Label(new Rect(0f, rowY, inner - 24f, 24f), "No local saves found.", label);
             }
@@ -972,6 +1021,24 @@ namespace BuildATower
 
                     rowY += 52f;
                 }
+
+                for (var i = 0; i < cloudSlots.Count; i++)
+                {
+                    var slot = cloudSlots[i];
+                    if (slot == null || !slot.Occupied)
+                        continue;
+
+                    var row = _pauseLoadPresenter.PresentCloudRow(slot);
+                    var caption = row.TowerName + "  " + row.MetaText;
+                    if (GUI.Button(new Rect(0f, rowY, inner - 24f, 48f), caption))
+                    {
+                        _pauseLoadMessage = "Cloud slot "
+                                            + slot.SlotId
+                                            + " will replace the current tower after loading. Save locally first if needed.";
+                    }
+
+                    rowY += 52f;
+                }
             }
 
             GUI.EndScrollView();
@@ -981,6 +1048,37 @@ namespace BuildATower
                 _pauseLoadMessage = null;
                 _pauseUi = PauseUiState.Paused;
             }
+        }
+
+        void DrawPauseAccount(float cx, float cy, float inner, float btnH, GUIStyle title, GUIStyle label)
+        {
+            GUI.Label(new Rect(cx, cy, inner, 28f), "Account", title);
+            cy += 36f;
+            var signedIn = !string.IsNullOrWhiteSpace(GameSession.CurrentAccountId);
+            var account = signedIn
+                ? "Signed in. Cloud slots are available after email verification."
+                : "Sign in from the main menu to use three cloud save slots.";
+            GUI.Label(new Rect(cx, cy, inner, 48f), account, label);
+            cy += 56f;
+            GUI.Label(new Rect(cx, cy, inner, 28f), "Cloud: " + CurrentSyncStatusText(), label);
+            cy += 36f;
+            if (!string.IsNullOrEmpty(_pauseAccountMessage))
+            {
+                GUI.Label(new Rect(cx, cy, inner, 36f), _pauseAccountMessage, label);
+                cy += 44f;
+            }
+
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Back"))
+            {
+                _pauseAccountMessage = null;
+                _pauseUi = PauseUiState.Paused;
+            }
+        }
+
+        string CurrentSyncStatusText()
+        {
+            var status = _syncStatusProvider == null ? SyncStatus.Synced : _syncStatusProvider();
+            return status.ToString();
         }
 
         void DrawPauseOptions(float cx, float cy, float inner, float btnH, GUIStyle title, GUIStyle label)

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
@@ -19,6 +21,7 @@ namespace BuildATower
         VisualElement _panelAbout;
         VisualElement _panelDialog;
         VisualElement _panelLocalSaves;
+        VisualElement _panelAccount;
         VisualElement _localSavesRows;
         VisualElement _screen;
         Label _brandTitle;
@@ -26,7 +29,9 @@ namespace BuildATower
         Label _aboutVersion;
         Label _dialogMessage;
         Label _localSavesEmpty;
+        Label _accountStatus;
         LocalSaveMenuPresenter _presenter;
+        ICloudSlotSource _cloudSlots;
         bool _callbacksBound;
 
         public void ConfigureLocalSaves(
@@ -40,6 +45,14 @@ namespace BuildATower
                 coordinator,
                 loadTowerScene,
                 displayTimeZone ?? TimeZoneInfo.Local);
+            if (_cloudSlots != null)
+                _presenter.ConfigureCloudSlots(_cloudSlots);
+        }
+
+        public void ConfigureCloudSlots(ICloudSlotSource cloudSlots)
+        {
+            _cloudSlots = cloudSlots;
+            Presenter.ConfigureCloudSlots(cloudSlots);
         }
 
         public IReadOnlyList<LocalSaveSummary> RefreshLocalSaves()
@@ -83,12 +96,15 @@ namespace BuildATower
             _panelAbout = root.Q<VisualElement>("panel-about");
             _panelDialog = root.Q<VisualElement>("panel-dialog");
             _panelLocalSaves = root.Q<VisualElement>("panel-local-saves");
+            _panelAccount = root.Q<VisualElement>("panel-account");
             _localSavesRows = root.Q<VisualElement>("local-saves-rows");
             _aboutVersion = root.Q<Label>("about-version");
             _dialogMessage = root.Q<Label>("dialog-message");
             _localSavesEmpty = root.Q<Label>("local-saves-empty");
+            _accountStatus = root.Q<Label>("account-status");
             DisableRichText(_dialogMessage);
             DisableRichText(_localSavesEmpty);
+            DisableRichText(_accountStatus);
             var aboutCopyright = root.Q<Label>("about-copyright");
             if (aboutCopyright != null)
                 aboutCopyright.text = CopyrightLine;
@@ -104,6 +120,7 @@ namespace BuildATower
             {
                 root.Q<Button>("btn-new-game")?.RegisterCallback<ClickEvent>(_ => ShowOnly(_panelDifficulty));
                 root.Q<Button>("btn-load-game")?.RegisterCallback<ClickEvent>(_ => ShowLocalSavesPanel());
+                root.Q<Button>("btn-account")?.RegisterCallback<ClickEvent>(_ => ShowAccountPanel());
                 root.Q<Button>("btn-contact")?.RegisterCallback<ClickEvent>(_ => ShowOnly(_panelContact));
                 root.Q<Button>("btn-about")?.RegisterCallback<ClickEvent>(_ => ShowAbout());
 
@@ -119,6 +136,11 @@ namespace BuildATower
                 root.Q<Button>("btn-contact-back")?.RegisterCallback<ClickEvent>(_ => ShowOnly(_panelRoot));
                 root.Q<Button>("btn-about-back")?.RegisterCallback<ClickEvent>(_ => ShowOnly(_panelRoot));
                 root.Q<Button>("btn-local-saves-back")?.RegisterCallback<ClickEvent>(_ => HideLocalSavesPanel());
+                root.Q<Button>("btn-account-back")?.RegisterCallback<ClickEvent>(_ => ShowOnly(_panelRoot));
+                root.Q<Button>("btn-account-login")?.RegisterCallback<ClickEvent>(_ => SetAccountPanelState(null, false, "Account login will contact the cloud API."));
+                root.Q<Button>("btn-account-register")?.RegisterCallback<ClickEvent>(_ => SetAccountPanelState(null, false, "Registration requires a cloud invite code."));
+                root.Q<Button>("btn-account-verify")?.RegisterCallback<ClickEvent>(_ => SetAccountPanelState(null, false, "Enter the verification code from email."));
+                root.Q<Button>("btn-account-forgot")?.RegisterCallback<ClickEvent>(_ => SetAccountPanelState(null, false, "Password reset email request queued."));
                 root.Q<Button>("btn-dialog-ok")?.RegisterCallback<ClickEvent>(_ => HideDialog());
                 _callbacksBound = true;
             }
@@ -129,7 +151,46 @@ namespace BuildATower
         public void ShowLocalSavesPanel()
         {
             RefreshLocalSaves();
+            _ = RefreshCloudSlots();
             ShowOnly(_panelLocalSaves);
+        }
+
+        public void ShowAccountPanel()
+        {
+            if (_accountStatus != null && string.IsNullOrEmpty(_accountStatus.text))
+                SetAccountPanelState(null, true, string.Empty);
+            ShowOnly(_panelAccount);
+        }
+
+        public void SetAccountPanelState(string email, bool emailConfirmed, string message)
+        {
+            if (_accountStatus == null)
+                return;
+
+            if (!string.IsNullOrWhiteSpace(message))
+            {
+                _accountStatus.text = message;
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                _accountStatus.text = string.IsNullOrWhiteSpace(GameSession.CurrentAccountId)
+                    ? "Sign in to use three cloud save slots. Local saves still work offline."
+                    : "Signed in. Cloud slots are available after email verification.";
+                return;
+            }
+
+            _accountStatus.text = emailConfirmed
+                ? "Signed in as " + email + ". Cloud slots are ready."
+                : "Signed in as " + email + ". Verify your email before cloud sync can upload.";
+        }
+
+        public async Task<IReadOnlyList<CloudSlotSummary>> RefreshCloudSlots(CancellationToken cancellationToken = default)
+        {
+            var slots = await Presenter.RefreshCloudSlots(cancellationToken);
+            RebuildCloudRows(slots);
+            return slots;
         }
 
         public void HideLocalSavesPanel()
@@ -174,8 +235,9 @@ namespace BuildATower
             SetVisible(_panelContact, panel == _panelContact);
             SetVisible(_panelAbout, panel == _panelAbout);
             SetVisible(_panelLocalSaves, panel == _panelLocalSaves);
+            SetVisible(_panelAccount, panel == _panelAccount);
 
-            var compact = panel == _panelDifficulty || panel == _panelLocalSaves;
+            var compact = panel == _panelDifficulty || panel == _panelLocalSaves || panel == _panelAccount;
             _screen?.EnableInClassList("compact-header", compact);
             _brandTitle?.EnableInClassList("brand-compact", compact);
             _subtitle?.EnableInClassList("hidden", compact);
@@ -277,6 +339,44 @@ namespace BuildATower
             }
         }
 
+        void RebuildCloudRows(IReadOnlyList<CloudSlotSummary> slots)
+        {
+            if (_localSavesRows == null || slots == null || slots.Count == 0)
+                return;
+
+            var anyVisibleCloud = false;
+            foreach (var summary in slots)
+            {
+                if (summary == null || !summary.Occupied)
+                    continue;
+
+                anyVisibleCloud = true;
+                var row = Presenter.PresentCloudRow(summary);
+                var rowElement = new VisualElement { name = "cloud-save-row-" + summary.SlotId };
+                rowElement.AddToClassList("save-row");
+                rowElement.AddToClassList("cloud-save-row");
+
+                var name = PlainTextLabel(row.TowerName, "cloud-save-name-" + summary.SlotId);
+                name.AddToClassList("save-name");
+                rowElement.Add(name);
+
+                var meta = PlainTextLabel(row.MetaText, "cloud-save-meta-" + summary.SlotId);
+                meta.AddToClassList("save-meta");
+                rowElement.Add(meta);
+
+                var load = new Button { name = "btn-load-cloud-" + summary.SlotId, text = "Load cloud" };
+                load.AddToClassList("menu-button");
+                load.SetEnabled(row.CanLoad);
+                var slotId = summary.SlotId;
+                load.RegisterCallback<ClickEvent>(_ => ConfirmCloudLoad(slotId));
+                rowElement.Add(load);
+                _localSavesRows.Add(rowElement);
+            }
+
+            if (anyVisibleCloud && _localSavesEmpty != null)
+                SetVisible(_localSavesEmpty, false);
+        }
+
         void TryLoadCurrent(string saveId)
         {
             if (!TryPrepareLoad(saveId, out var error))
@@ -287,6 +387,13 @@ namespace BuildATower
         {
             if (!TryPrepareRecovery(saveId, recoveryIndex, out var error))
                 ShowDialog(error);
+        }
+
+        void ConfirmCloudLoad(int slotId)
+        {
+            ShowDialog("Cloud slot "
+                       + slotId
+                       + " will replace the current tower after loading. Save locally first if needed.");
         }
 
         void ClearSaveRows()

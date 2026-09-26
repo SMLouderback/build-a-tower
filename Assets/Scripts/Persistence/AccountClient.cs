@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -9,7 +11,7 @@ using UnityEngine;
 
 namespace BuildATower
 {
-    public sealed class AccountClient
+    public sealed class AccountClient : ICloudSlotSource
     {
         readonly CloudSaveConfig config;
         readonly ICredentialStore credentials;
@@ -166,6 +168,54 @@ namespace BuildATower
             }
 
             return response;
+        }
+
+        public async Task<CloudSlotListResult> ListSlots(CancellationToken cancellationToken = default)
+        {
+            var result = await SendAuthorized(
+                () => new HttpRequestMessage(HttpMethod.Get, "/v1/saves"),
+                cancellationToken);
+
+            if (!result.Success)
+                return CloudSlotListResult.Failed(result.Error, result.ErrorMessage);
+
+            try
+            {
+                var body = (result.Body ?? string.Empty).Trim();
+                if (body.StartsWith("[", StringComparison.Ordinal))
+                    body = "{\"slots\":" + body + "}";
+
+                var dto = JsonUtility.FromJson<CloudSlotsResponseDto>(body);
+                if (dto?.slots == null)
+                    return CloudSlotListResult.Failed(CloudError.InvalidResponse, "Cloud slot list response was invalid.");
+
+                var slots = new List<CloudSlotSummary>(dto.slots.Length);
+                foreach (var slot in dto.slots)
+                    slots.Add(ToSlotSummary(slot));
+
+                return CloudSlotListResult.Succeeded(slots);
+            }
+            catch (ArgumentException)
+            {
+                return CloudSlotListResult.Failed(CloudError.InvalidResponse, "Cloud slot list response was invalid.");
+            }
+        }
+
+        public async Task<CloudSlotDownloadResult> DownloadSlot(
+            int slotId,
+            CancellationToken cancellationToken = default)
+        {
+            var result = await SendAuthorized(
+                () => new HttpRequestMessage(HttpMethod.Get, "/v1/saves/" + slotId),
+                cancellationToken);
+
+            if (!result.Success)
+                return CloudSlotDownloadResult.Failed(result.Error, result.ErrorMessage);
+
+            var download = JsonUtility.FromJson<CloudSlotDownload>(result.Body);
+            return download == null
+                ? CloudSlotDownloadResult.Failed(CloudError.InvalidResponse, "Cloud save download response was invalid.")
+                : CloudSlotDownloadResult.Succeeded(download);
         }
 
         async Task<CloudRegisterResult> PostRegister<TRequest>(
@@ -373,6 +423,37 @@ namespace BuildATower
             return Convert.FromBase64String(padded);
         }
 
+        static CloudSlotSummary ToSlotSummary(CloudSlotDto slot)
+        {
+            if (slot == null)
+                return CloudSlotSummary.Empty(0);
+
+            var occupied = slot.occupied
+                           || slot.revision > 0
+                           || !string.IsNullOrEmpty(slot.towerName);
+            if (!occupied)
+                return CloudSlotSummary.Empty(slot.slotId);
+
+            var modified = new DateTime(0L, DateTimeKind.Utc);
+            if (!string.IsNullOrWhiteSpace(slot.modifiedUtc)
+                && DateTimeOffset.TryParse(
+                    slot.modifiedUtc,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                    out var parsed))
+            {
+                modified = parsed.UtcDateTime;
+            }
+
+            return CloudSlotSummary.OccupiedSlot(
+                slot.slotId,
+                slot.towerName,
+                slot.revision,
+                modified,
+                slot.deviceName,
+                slot.playMinutes);
+        }
+
         [Serializable]
         sealed class RegisterRequestDto
         {
@@ -435,6 +516,24 @@ namespace BuildATower
         sealed class CloudErrorResponseDto
         {
             public string code;
+        }
+
+        [Serializable]
+        sealed class CloudSlotsResponseDto
+        {
+            public CloudSlotDto[] slots;
+        }
+
+        [Serializable]
+        sealed class CloudSlotDto
+        {
+            public int slotId;
+            public bool occupied;
+            public long revision;
+            public string towerName;
+            public string modifiedUtc;
+            public string deviceName;
+            public int playMinutes;
         }
 
         [Serializable]
