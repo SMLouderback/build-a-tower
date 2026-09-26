@@ -279,7 +279,11 @@ namespace BuildATower
                     if (response.IsSuccessStatusCode)
                         return CloudHttpResult.Succeeded(response.StatusCode, body);
 
-                    return CloudHttpResult.Failed(ToCloudError(response.StatusCode), ErrorMessage(response, body));
+                    return CloudHttpResult.Failed(
+                        ToCloudError(response.StatusCode),
+                        ErrorMessage(response, body),
+                        response.StatusCode,
+                        body);
                 }
             }
             catch (HttpRequestException)

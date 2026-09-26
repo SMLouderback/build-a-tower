@@ -47,6 +47,9 @@ namespace BuildATower
                     .ToString("O", CultureInfo.InvariantCulture),
                 walletBalance = build.Wallet.Balance,
                 stars = simulation.Stars.CurrentStars,
+                accountId = GameSession.CurrentAccountId,
+                deviceName = SystemInfo.deviceName,
+                gameVersion = Application.version,
                 clock = simulation.Clock.CaptureSnapshot(),
                 research = simulation.Research != null
                     ? simulation.Research.CaptureSnapshot()

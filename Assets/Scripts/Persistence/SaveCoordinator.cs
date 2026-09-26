@@ -7,10 +7,17 @@ namespace BuildATower
         readonly LocalSaveRepository _repository;
         readonly BuildController _build;
         readonly TowerSimulation _simulation;
+        readonly SyncCoordinator _sync;
 
         public SaveCoordinator(LocalSaveRepository repository)
         {
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        }
+
+        public SaveCoordinator(LocalSaveRepository repository, SyncCoordinator sync)
+            : this(repository)
+        {
+            _sync = sync ?? throw new ArgumentNullException(nameof(sync));
         }
 
         public SaveCoordinator(
@@ -21,6 +28,16 @@ namespace BuildATower
         {
             _build = build ?? throw new ArgumentNullException(nameof(build));
             _simulation = simulation ?? throw new ArgumentNullException(nameof(simulation));
+        }
+
+        public SaveCoordinator(
+            LocalSaveRepository repository,
+            BuildController build,
+            TowerSimulation simulation,
+            SyncCoordinator sync)
+            : this(repository, build, simulation)
+        {
+            _sync = sync ?? throw new ArgumentNullException(nameof(sync));
         }
 
         public SaveReadResult PrepareLocalLoad(string saveId)
@@ -70,7 +87,26 @@ namespace BuildATower
                     "The tower is not ready to save.");
             }
 
-            return _repository.Save(saveId, snapshot);
+            var cloudSlotId = snapshot.slotId <= 0 ? 1 : snapshot.slotId;
+            var lastSeenRevision = snapshot.cloudRevision;
+            if (_sync != null && lastSeenRevision <= 0)
+                lastSeenRevision = _sync.CloudRevision;
+
+            if (_sync != null)
+            {
+                snapshot.slotId = cloudSlotId;
+                snapshot.cloudRevision = lastSeenRevision;
+            }
+
+            var result = _repository.Save(saveId, snapshot);
+            if (result.Success && _sync != null)
+                _ = _sync.EnqueueUploadAfterLocalSuccess(
+                    result,
+                    cloudSlotId,
+                    snapshot,
+                    lastSeenRevision);
+
+            return result;
         }
 
         SaveReadResult PrepareReadResult(SaveReadResult read)

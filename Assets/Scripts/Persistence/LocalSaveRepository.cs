@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
+using System.Security.Cryptography;
 using System.Security;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -72,9 +73,14 @@ namespace BuildATower
 
         public string RootDirectory { get; }
 
-        public static LocalSaveRepository CreateDefault()
+        public static LocalSaveRepository CreateDefault(string accountId = null)
         {
-            return new LocalSaveRepository(Path.Combine(Application.persistentDataPath, DefaultFolderName));
+            var root = Path.Combine(Application.persistentDataPath, DefaultFolderName);
+            var selectedAccountId = accountId ?? GameSession.CurrentAccountId;
+            if (!string.IsNullOrWhiteSpace(selectedAccountId))
+                root = Path.Combine(root, AccountFolderName(selectedAccountId));
+
+            return new LocalSaveRepository(root);
         }
 
         public SaveWriteResult Save(string saveId, TowerSnapshotV1 snapshot)
@@ -516,6 +522,22 @@ namespace BuildATower
             }
 
             return true;
+        }
+
+        private static string AccountFolderName(string accountId)
+        {
+            if (IsSafeSaveId(accountId))
+                return accountId;
+
+            using (var sha256 = SHA256.Create())
+            {
+                var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(accountId));
+                var builder = new StringBuilder("account-", 72);
+                foreach (var value in hash)
+                    builder.Append(value.ToString("x2", CultureInfo.InvariantCulture));
+
+                return builder.ToString();
+            }
         }
 
         private static bool IsExpectedDataException(Exception exception)

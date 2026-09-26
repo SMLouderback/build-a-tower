@@ -18,6 +18,12 @@ namespace BuildATower
         public int walletBalance;
         public int stars;
         public int dayIndex;
+        public string accountId;
+        public int slotId;
+        public long cloudRevision;
+        public string clientInstallId;
+        public string deviceName;
+        public string gameVersion;
         public string payloadBase64;
         public string payloadChecksum;
     }
@@ -32,6 +38,12 @@ namespace BuildATower
         public string modifiedUtc;
         public int walletBalance;
         public int stars;
+        public string accountId;
+        public int slotId;
+        public long cloudRevision;
+        public string clientInstallId;
+        public string deviceName;
+        public string gameVersion;
         public ClockSnapshotV1 clock;
         public ResearchSnapshotV1 research;
         public RoomSnapshotV1[] rooms;

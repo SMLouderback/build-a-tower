@@ -28,6 +28,12 @@ namespace BuildATower
                 walletBalance = snapshot.walletBalance,
                 stars = snapshot.stars,
                 dayIndex = snapshot.clock != null ? snapshot.clock.dayIndex : 0,
+                accountId = snapshot.accountId,
+                slotId = snapshot.slotId,
+                cloudRevision = snapshot.cloudRevision,
+                clientInstallId = snapshot.clientInstallId,
+                deviceName = snapshot.deviceName,
+                gameVersion = snapshot.gameVersion,
                 payloadBase64 = Convert.ToBase64String(compressedPayload),
                 payloadChecksum = ComputeChecksum(compressedPayload)
             };

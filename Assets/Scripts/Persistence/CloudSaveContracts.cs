@@ -33,6 +33,190 @@ namespace BuildATower
         HttpError
     }
 
+    public enum SyncStatus
+    {
+        Synced,
+        Pending,
+        Offline,
+        Conflict,
+        Error
+    }
+
+    public sealed class SyncResult
+    {
+        private SyncResult(SyncStatus status, string message)
+        {
+            Status = status;
+            Message = message ?? string.Empty;
+        }
+
+        public SyncStatus Status { get; }
+        public string Message { get; }
+
+        public static SyncResult FromStatus(SyncStatus status, string message = null)
+        {
+            return new SyncResult(status, message);
+        }
+    }
+
+    [Serializable]
+    public sealed class CloudSlotUpload
+    {
+        public long expectedRevision;
+        public string towerName;
+        public int schemaVersion;
+        public string checksum;
+        public string payloadBase64;
+        public string deviceName;
+        public int playMinutes;
+        public string gameVersion;
+        public string clientInstallId;
+    }
+
+    [Serializable]
+    public sealed class CloudSlotDownload
+    {
+        public int slotId;
+        public long revision;
+        public string towerName;
+        public int schemaVersion;
+        public string checksum;
+        public string payloadBase64;
+        public string deviceName;
+        public int playMinutes;
+        public string gameVersion;
+        public string clientInstallId;
+        public string modifiedUtc;
+    }
+
+    [Serializable]
+    public sealed class CloudConflictDto
+    {
+        public string code;
+        public long currentRevision;
+        public string towerName;
+        public string modifiedUtc;
+        public string deviceName;
+        public int playMinutes;
+    }
+
+    [Serializable]
+    public sealed class CloudRevisionDto
+    {
+        public long revision;
+    }
+
+    public sealed class CloudConflictInfo
+    {
+        public CloudConflictInfo(long currentRevision, string towerName, string deviceName, int playMinutes)
+        {
+            CurrentRevision = currentRevision;
+            TowerName = towerName;
+            DeviceName = deviceName;
+            PlayMinutes = playMinutes;
+        }
+
+        public long CurrentRevision { get; }
+        public string TowerName { get; }
+        public string DeviceName { get; }
+        public int PlayMinutes { get; }
+    }
+
+    public interface ICloudSaveTransport
+    {
+        System.Threading.Tasks.Task<CloudSlotUploadResult> UploadSlot(
+            int slotId,
+            CloudSlotUpload request,
+            System.Threading.CancellationToken cancellationToken);
+
+        System.Threading.Tasks.Task<CloudSlotDownloadResult> DownloadSlot(
+            int slotId,
+            System.Threading.CancellationToken cancellationToken);
+    }
+
+    public sealed class CloudSlotUploadResult
+    {
+        private CloudSlotUploadResult(
+            CloudError error,
+            string errorMessage,
+            long revision,
+            CloudConflictInfo conflict,
+            bool unverified)
+        {
+            Error = error;
+            ErrorMessage = errorMessage ?? string.Empty;
+            Revision = revision;
+            ConflictInfo = conflict;
+            IsUnverified = unverified;
+        }
+
+        public bool Success => Error == CloudError.None && ConflictInfo == null && !IsUnverified;
+        public CloudError Error { get; }
+        public string ErrorMessage { get; }
+        public long Revision { get; }
+        public CloudConflictInfo ConflictInfo { get; }
+        public bool IsUnverified { get; }
+
+        public static CloudSlotUploadResult Succeeded(long revision)
+        {
+            return new CloudSlotUploadResult(CloudError.None, string.Empty, revision, null, false);
+        }
+
+        public static CloudSlotUploadResult Conflict(CloudConflictInfo conflict)
+        {
+            return new CloudSlotUploadResult(CloudError.None, string.Empty, 0, conflict, false);
+        }
+
+        public static CloudSlotUploadResult Unverified()
+        {
+            return new CloudSlotUploadResult(CloudError.None, string.Empty, 0, null, true);
+        }
+
+        public static CloudSlotUploadResult Failed(CloudError error, string errorMessage)
+        {
+            if (error == CloudError.None)
+                throw new ArgumentException("A failed cloud upload must have an error.", nameof(error));
+
+            return new CloudSlotUploadResult(error, errorMessage, 0, null, false);
+        }
+    }
+
+    public sealed class CloudSlotDownloadResult
+    {
+        private CloudSlotDownloadResult(CloudError error, string errorMessage, CloudSlotDownload download)
+        {
+            Error = error;
+            ErrorMessage = errorMessage ?? string.Empty;
+            Download = download;
+        }
+
+        public bool Success => Error == CloudError.None;
+        public CloudError Error { get; }
+        public string ErrorMessage { get; }
+        public CloudSlotDownload Download { get; }
+
+        public static CloudSlotDownloadResult Succeeded(CloudSlotDownload download)
+        {
+            if (download == null)
+                throw new ArgumentNullException(nameof(download));
+
+            return new CloudSlotDownloadResult(CloudError.None, string.Empty, download);
+        }
+
+        public static CloudSlotDownloadResult Offline(string errorMessage)
+        {
+            return Failed(CloudError.Offline, errorMessage);
+        }
+
+        public static CloudSlotDownloadResult Failed(CloudError error, string errorMessage)
+        {
+            if (error == CloudError.None)
+                throw new ArgumentException("A failed cloud download must have an error.", nameof(error));
+
+            return new CloudSlotDownloadResult(error, errorMessage, null);
+        }
+    }
+
     public class CloudResult
     {
         protected CloudResult(CloudError error, string errorMessage)
@@ -149,10 +333,19 @@ namespace BuildATower
 
         public new static CloudHttpResult Failed(CloudError error, string errorMessage)
         {
+            return Failed(error, errorMessage, 0, string.Empty);
+        }
+
+        public static CloudHttpResult Failed(
+            CloudError error,
+            string errorMessage,
+            HttpStatusCode statusCode,
+            string body)
+        {
             if (error == CloudError.None)
                 throw new ArgumentException("A failed HTTP result must have an error.", nameof(error));
 
-            return new CloudHttpResult(error, errorMessage, 0, string.Empty);
+            return new CloudHttpResult(error, errorMessage, statusCode, body);
         }
     }
 }
