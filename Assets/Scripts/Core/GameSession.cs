@@ -13,6 +13,7 @@ namespace BuildATower
         static SessionLoadResult _lastLoadError;
         static string _currentSaveId;
         static string _currentTowerName;
+        static string _currentAccountId;
         static bool _isSaveDirty;
         static string _restoreFallbackNotice;
 
@@ -44,6 +45,8 @@ namespace BuildATower
         public static string CurrentSaveId => _currentSaveId;
 
         public static string CurrentTowerName => _currentTowerName;
+
+        public static string CurrentAccountId => _currentAccountId;
 
         public static bool IsSaveDirty => _isSaveDirty;
 
@@ -144,6 +147,16 @@ namespace BuildATower
             _isSaveDirty = false;
         }
 
+        public static void SetCurrentAccountId(string accountId)
+        {
+            _currentAccountId = string.IsNullOrWhiteSpace(accountId) ? null : accountId;
+        }
+
+        public static void ClearCurrentAccount()
+        {
+            _currentAccountId = null;
+        }
+
         public static void ResetForTests()
         {
             _hasDifficulty = false;
@@ -151,6 +164,7 @@ namespace BuildATower
             _pendingLoad = null;
             _lastLoadError = null;
             ClearIdentity();
+            ClearCurrentAccount();
             _isSaveDirty = false;
             _restoreFallbackNotice = null;
         }
