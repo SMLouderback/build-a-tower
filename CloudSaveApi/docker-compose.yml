@@ -7,6 +7,7 @@ services:
       - "8080"
     environment:
       ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__CloudSavePostgres: Host=postgres;Port=5432;Database=cloudsave;Username=cloudsave;Password=cloudsave_dev_only
     depends_on:
       - postgres
 
