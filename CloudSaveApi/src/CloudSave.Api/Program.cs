@@ -55,7 +55,7 @@ app.MapGet("/health", () => Results.Json(new { status = "ok" }));
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapAuthEndpoints();
-app.MapSaveGateEndpoints();
+app.MapSaveEndpoints();
 await app.RunAsync();
 return 0;
 

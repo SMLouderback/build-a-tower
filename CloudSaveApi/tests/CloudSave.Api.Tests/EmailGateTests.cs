@@ -1,6 +1,9 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using CloudSave.Api.Data;
 using CloudSave.Api.Email;
@@ -27,8 +30,9 @@ public class EmailGateTests
         await Register(client, email, password);
         var tokens = await Login(client, email, password);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
+        var save = SaveRequest.Valid();
 
-        var beforeVerify = await client.PutAsJsonAsync("/v1/saves/1", new { });
+        var beforeVerify = await client.PutAsJsonAsync("/v1/saves/1", save);
 
         Assert.Equal(HttpStatusCode.Forbidden, beforeVerify.StatusCode);
         var beforeBody = await beforeVerify.Content.ReadFromJsonAsync<ErrorResponse>();
@@ -44,9 +48,9 @@ public class EmailGateTests
         });
         Assert.Equal(HttpStatusCode.OK, verify.StatusCode);
 
-        var afterVerify = await client.PutAsJsonAsync("/v1/saves/1", new { });
+        var afterVerify = await client.PutAsJsonAsync("/v1/saves/1", save);
 
-        Assert.Equal(HttpStatusCode.NoContent, afterVerify.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, afterVerify.StatusCode);
     }
 
     [Fact]
@@ -152,6 +156,40 @@ public class EmailGateTests
 
     private sealed record AuthTokens(string AccessToken, string RefreshToken, int ExpiresIn);
     private sealed record ErrorResponse(string Code);
+
+    private sealed record SaveRequest(
+        long ExpectedRevision,
+        string TowerName,
+        int SchemaVersion,
+        string Checksum,
+        string PayloadBase64,
+        string DeviceName,
+        int PlayMinutes,
+        string GameVersion,
+        string ClientInstallId)
+    {
+        public static SaveRequest Valid()
+        {
+            var payload = Encoding.UTF8.GetBytes("""{"towerName":"Verified Tower"}""");
+            using var output = new MemoryStream();
+            using (var gzip = new GZipStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
+            {
+                gzip.Write(payload, 0, payload.Length);
+            }
+
+            var compressed = output.ToArray();
+            return new SaveRequest(
+                0,
+                "Verified Tower",
+                1,
+                Convert.ToHexString(SHA256.HashData(compressed)).ToLowerInvariant(),
+                Convert.ToBase64String(compressed),
+                "Test Device",
+                3,
+                "0.1-test",
+                Guid.NewGuid().ToString("N"));
+        }
+    }
 
     public sealed record SentEmail(string To, string Subject, string Body);
 

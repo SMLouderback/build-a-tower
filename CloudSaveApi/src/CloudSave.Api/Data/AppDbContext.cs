@@ -1,6 +1,7 @@
 using CloudSave.Api.Auth;
 using CloudSave.Api.Email;
 using CloudSave.Api.Invites;
+using CloudSave.Api.Saves;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,6 +17,7 @@ public sealed class AppDbContext : IdentityDbContext<CloudUser>
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<InviteCode> InviteCodes => Set<InviteCode>();
     public DbSet<EmailToken> EmailTokens => Set<EmailToken>();
+    public DbSet<SlotRecord> SaveSlots => Set<SlotRecord>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -52,6 +54,22 @@ public sealed class AppDbContext : IdentityDbContext<CloudUser>
             entity.HasOne(token => token.CloudUser)
                 .WithMany()
                 .HasForeignKey(token => token.CloudUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<SlotRecord>(entity =>
+        {
+            entity.HasIndex(slot => new { slot.CloudUserId, slot.SlotId }).IsUnique();
+            entity.Property(slot => slot.TowerName).HasMaxLength(160).IsRequired();
+            entity.Property(slot => slot.Checksum).HasMaxLength(64).IsRequired();
+            entity.Property(slot => slot.DeviceName).HasMaxLength(120);
+            entity.Property(slot => slot.GameVersion).HasMaxLength(64);
+            entity.Property(slot => slot.ClientInstallId).HasMaxLength(64);
+            entity.Property(slot => slot.Payload).IsRequired();
+
+            entity.HasOne(slot => slot.CloudUser)
+                .WithMany()
+                .HasForeignKey(slot => slot.CloudUserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
