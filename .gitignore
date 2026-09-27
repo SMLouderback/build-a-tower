@@ -31,9 +31,12 @@ ExportedObj/
 .consulo/
 *.csproj
 !CloudSaveApi/**/*.csproj
+!PlaytestApi/**/*.csproj
 *.unityproj
 *.sln
 !CloudSaveApi/**/*.sln
+!PlaytestApi/**/*.sln
+Build/
 *.suo
 *.tmp
 *.user

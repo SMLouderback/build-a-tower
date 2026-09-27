@@ -1,0 +1,14 @@
+services:
+  playtest-api:
+    build: .
+    image: playtest-api:local
+    container_name: playtest-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5080:8080"
+    env_file:
+      - /opt/playtest/.env
+    environment:
+      Playtest__DataDirectory: /data
+    volumes:
+      - /opt/playtest/data:/data

@@ -1,3 +1,8 @@
 [Bb]in/
 [Oo]bj/
 .vs/
+publish/
+data/
+*.zip
+deploy/unity-win64-build.log
+
