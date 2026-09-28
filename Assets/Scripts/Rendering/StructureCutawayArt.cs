@@ -1130,10 +1130,17 @@ namespace BuildATower
             if (!TryLoadKeyedPng("parking_ramp_3x1", out var px, out var w, out var h))
                 return null;
 
+            FloodKeyMagentaPlate(px, w, h);
+            KeyHotMagenta(px);
+            ScrubNearMagentaFringe(px, w, h);
+
             FindOpaqueContent(px, w, h, out var minX, out var minY, out var maxX, out var maxY);
             var cw = Mathf.Max(1, maxX - minX + 1);
             var ch = Mathf.Max(1, maxY - minY + 1);
             var cropped = CropPixels(px, w, minX, minY, cw, ch);
+            KeyHotMagenta(cropped);
+            ScrubNearMagentaFringe(cropped, cw, ch);
+
             var tex = new Texture2D(cw, ch, TextureFormat.RGBA32, false)
             {
                 filterMode = FilterMode.Bilinear,
@@ -1211,13 +1218,76 @@ namespace BuildATower
             }
         }
 
-        static bool IsHotMagenta(Color c)
+        /// <summary>
+        /// AI structure plates are often hot pink (~R224 G3 B116), not pure #FF00FF.
+        /// Align with <see cref="MenuIconArt.IsHotMagenta"/> so fringe and plates clear.
+        /// </summary>
+        static bool IsHotMagenta(Color c) => MenuIconArt.IsHotMagenta(c);
+
+        static void FloodKeyMagentaPlate(Color[] px, int w, int h)
+        {
+            var visit = new bool[w * h];
+            var q = new System.Collections.Generic.Queue<int>();
+
+            void TryEnq(int x, int y)
+            {
+                if ((uint)x >= w || (uint)y >= h) return;
+                var i = y * w + x;
+                if (visit[i] || !IsHotMagenta(px[i])) return;
+                visit[i] = true;
+                q.Enqueue(i);
+            }
+
+            for (var x = 0; x < w; x++)
+            {
+                TryEnq(x, 0);
+                TryEnq(x, h - 1);
+            }
+            for (var y = 0; y < h; y++)
+            {
+                TryEnq(0, y);
+                TryEnq(w - 1, y);
+            }
+
+            while (q.Count > 0)
+            {
+                var i = q.Dequeue();
+                px[i] = Color.clear;
+                var x = i % w;
+                var y = i / w;
+                TryEnq(x + 1, y);
+                TryEnq(x - 1, y);
+                TryEnq(x, y + 1);
+                TryEnq(x, y - 1);
+            }
+        }
+
+        static void ScrubNearMagentaFringe(Color[] px, int w, int h)
+        {
+            var copy = (Color[])px.Clone();
+            for (var y = 1; y < h - 1; y++)
+            for (var x = 1; x < w - 1; x++)
+            {
+                var i = y * w + x;
+                if (copy[i].a < 0.08f) continue;
+                if (!IsNearMagentaFringe(copy[i])) continue;
+
+                var clearN =
+                    copy[i - 1].a < 0.08f ||
+                    copy[i + 1].a < 0.08f ||
+                    copy[i - w].a < 0.08f ||
+                    copy[i + w].a < 0.08f;
+                if (clearN)
+                    px[i] = Color.clear;
+            }
+        }
+
+        static bool IsNearMagentaFringe(Color c)
         {
             if (c.a < 0.08f) return true;
-            // Soft AI plates are often ~R245 G6 B198, with pink fringe down to B~0.55.
-            // Keep thresholds loose enough to eat fringe without eating warm wood (high G).
-            return c.r > 0.70f && c.b > 0.55f && c.g < 0.28f &&
-                   (c.r - c.g) > 0.35f && (c.b - c.g) > 0.28f;
+            if (c.g > 0.40f) return false;
+            if (c.r < 0.45f) return false;
+            return (c.r - c.g) > 0.18f && c.b > 0.18f && (c.b - c.g) > 0.06f;
         }
 
         static void FindOpaqueContent(

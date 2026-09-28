@@ -341,6 +341,7 @@ namespace BuildATower
                 return false;
 
             SelectedRoom.PriceTier = PricePricing.ClampTier(tier);
+            GameSession.MarkGameplaySaveDirty();
             RefreshHelpText();
             StateChanged?.Invoke();
             return true;
@@ -352,6 +353,7 @@ namespace BuildATower
                 return false;
 
             SelectedRoom.SetStaffedWorkers(count);
+            GameSession.MarkGameplaySaveDirty();
             if (view != null)
                 PaintRoomKeepingTransitOnTop(SelectedRoom);
             NotifyGridChanged();

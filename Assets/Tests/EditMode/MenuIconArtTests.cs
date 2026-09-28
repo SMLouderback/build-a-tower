@@ -60,6 +60,9 @@ namespace BuildATower.Tests
             // Observed menu plate ~R237 G10 B126
             var plate = new Color(237f / 255f, 10f / 255f, 126f / 255f, 1f);
             Assert.IsTrue(MenuIconArt.IsHotMagenta(plate));
+            // Structure ramp plate ~R224 G3 B116 (B below old StructureCutawayArt 0.55 threshold)
+            var rampPlate = new Color(224f / 255f, 3f / 255f, 116f / 255f, 1f);
+            Assert.IsTrue(MenuIconArt.IsHotMagenta(rampPlate));
             Assert.IsFalse(MenuIconArt.IsHotMagenta(new Color(0.72f, 0.55f, 0.28f, 1f))); // wood
         }
     }

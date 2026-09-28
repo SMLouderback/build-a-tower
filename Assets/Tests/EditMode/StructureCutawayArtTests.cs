@@ -116,6 +116,21 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void TryRampSprite_ClearsHotPinkPlateFromCorners()
+        {
+            // parking_ramp_3x1 plate is ~R224 G3 B116 — not pure #FF00FF.
+            StructureCutawayArt.ResetCache();
+            Assert.IsTrue(StructureCutawayArt.TryRampSprite(out var sprite));
+            var px = sprite.texture.GetPixels();
+            for (var i = 0; i < px.Length; i++)
+            {
+                if (px[i].a < 0.08f) continue;
+                Assert.IsFalse(MenuIconArt.IsHotMagenta(px[i]),
+                    $"Opaque hot magenta remaining at index {i}: R={px[i].r:F3} G={px[i].g:F3} B={px[i].b:F3}");
+            }
+        }
+
+        [Test]
         public void TryScaffoldSprite_ReturnsSpriteWhenArtPresent()
         {
             StructureCutawayArt.ResetCache();
