@@ -27,6 +27,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<PlaytestOptio
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Smtp"));
 builder.Services.AddSingleton<FamilyKeyStore>();
 builder.Services.AddSingleton<VersionDocument>();
+builder.Services.AddSingleton<KeyRequestLog>();
 builder.Services.AddSingleton<IEmailSender>(sp =>
 {
     var smtp = sp.GetRequiredService<IOptions<SmtpOptions>>().Value;
@@ -72,10 +73,11 @@ app.MapPost("/playtest/download", (DownloadRequest body, FamilyKeyStore keys, Pl
     return Results.File(path, "application/zip", options.ZipFileName);
 }).RequireRateLimiting("playtest-forms");
 
-app.MapPost("/playtest/request-key", async (RequestKeyBody body, IEmailSender mail, PlaytestOptions options, CancellationToken cancellationToken) =>
+app.MapPost("/playtest/request-key", async (RequestKeyBody body, IEmailSender mail, KeyRequestLog requests, PlaytestOptions options, CancellationToken cancellationToken) =>
 {
     if (!EmailValidation.TryNormalize(body.Email, out var email))
         return Results.Json(new { error = "invalid_email" }, statusCode: 400);
+    requests.Append(email);
     try
     {
         await mail.SendAsync(

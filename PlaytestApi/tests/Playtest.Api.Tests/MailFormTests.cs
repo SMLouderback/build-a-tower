@@ -74,6 +74,28 @@ public sealed class MailFormTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Request_key_is_logged_when_smtp_is_down()
+    {
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("Playtest:DataDirectory", _dataDir);
+            builder.UseSetting("Playtest:OperatorEmail", "escapemobileproductions@gmail.com");
+            builder.ConfigureTestServices(services =>
+            {
+                var existing = services.SingleOrDefault(d => d.ServiceType == typeof(IEmailSender));
+                if (existing != null)
+                    services.Remove(existing);
+                services.AddSingleton<IEmailSender, NullEmailSender>();
+            });
+        });
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/playtest/request-key", new { email = "friend@example.com" });
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        var log = File.ReadAllText(Path.Combine(_dataDir, "key-requests.log"));
+        Assert.Contains("friend@example.com", log);
+    }
+
+    [Fact]
     public async Task Feedback_sends_note_and_version()
     {
         var response = await _client.PostAsJsonAsync("/playtest/feedback", new

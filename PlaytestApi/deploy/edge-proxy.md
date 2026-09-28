@@ -1,8 +1,8 @@
 # Playtest sidecar on edge-proxy
 
 Live host: `ubuntu@192.168.0.35`  
-Data: `/opt/playtest/data`  
-API: `127.0.0.1:5080` (nginx on `escape-web` proxies `/playtest/`)
+Data: `/home/ubuntu/playtest/data`  
+API: `172.17.0.1:5080` (nginx on `escape-web` proxies `/playtest/`)
 
 ## First install
 
@@ -36,7 +36,7 @@ Does not change the zip. Old zips still play.
 From the PC that ran Unity:
 
 ```powershell
-.\PlaytestApi\deploy\publish.ps1 -PlayerDir 'C:\path\to\Build-A-Tower-win' -Version '0.1.0'
+.\PlaytestApi\deploy\publish.ps1 -PlayerDir 'Build\Win64' -Version '1.0.1'
 ```
 
 Failed scp leaves the previous zip and version in place.

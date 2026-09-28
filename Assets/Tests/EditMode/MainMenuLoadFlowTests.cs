@@ -511,6 +511,32 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Exit_button_confirms_then_quits_without_native_navigation()
+        {
+            var menu = CreateBoundMenu(out var rootVisual);
+            var quits = 0;
+            menu.ExitGame = () => quits++;
+            var exit = rootVisual.Q<Button>("btn-exit");
+            var confirm = rootVisual.Q("panel-exit");
+            Assert.IsNotNull(exit);
+            Assert.AreEqual("Exit", exit.text);
+            Assert.IsNotNull(confirm);
+            Assert.IsTrue(confirm.ClassListContains("hidden"));
+
+            menu.RequestExit();
+            Assert.IsFalse(confirm.ClassListContains("hidden"));
+            Assert.AreEqual(0, quits);
+
+            menu.CancelExit();
+            Assert.IsTrue(confirm.ClassListContains("hidden"));
+            Assert.AreEqual(0, quits);
+
+            menu.RequestExit();
+            menu.ConfirmExit();
+            Assert.AreEqual(1, quits);
+        }
+
+        [Test]
         public void StartNewGame_clears_current_save_identity_and_starts_dirty()
         {
             Assert.IsTrue(GameSession.PrepareLoad(ValidSnapshot(SaveId, "2026-01-01T00:00:00.0000000Z", 1)).Success);

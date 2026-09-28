@@ -22,6 +22,7 @@ namespace BuildATower
         VisualElement _panelDialog;
         VisualElement _panelLocalSaves;
         VisualElement _panelAccount;
+        VisualElement _panelExit;
         VisualElement _localSavesRows;
         VisualElement _screen;
         Label _brandTitle;
@@ -33,6 +34,8 @@ namespace BuildATower
         LocalSaveMenuPresenter _presenter;
         ICloudSlotSource _cloudSlots;
         bool _callbacksBound;
+
+        public Action ExitGame { get; set; }
 
         public void ConfigureLocalSaves(
             LocalSaveRepository repository,
@@ -97,6 +100,7 @@ namespace BuildATower
             _panelDialog = root.Q<VisualElement>("panel-dialog");
             _panelLocalSaves = root.Q<VisualElement>("panel-local-saves");
             _panelAccount = root.Q<VisualElement>("panel-account");
+            _panelExit = root.Q<VisualElement>("panel-exit");
             _localSavesRows = root.Q<VisualElement>("local-saves-rows");
             _aboutVersion = root.Q<Label>("about-version");
             _dialogMessage = root.Q<Label>("dialog-message");
@@ -123,6 +127,7 @@ namespace BuildATower
                 root.Q<Button>("btn-account")?.RegisterCallback<ClickEvent>(_ => ShowAccountPanel());
                 root.Q<Button>("btn-contact")?.RegisterCallback<ClickEvent>(_ => ShowOnly(_panelContact));
                 root.Q<Button>("btn-about")?.RegisterCallback<ClickEvent>(_ => ShowAbout());
+                root.Q<Button>("btn-exit")?.RegisterCallback<ClickEvent>(_ => RequestExit());
 
                 root.Q<Button>("btn-diff-sandbox")?.RegisterCallback<ClickEvent>(_ => StartTower(GameDifficulty.Sandbox));
                 root.Q<Button>("btn-diff-easy")?.RegisterCallback<ClickEvent>(_ => StartTower(GameDifficulty.Easy));
@@ -142,6 +147,8 @@ namespace BuildATower
                 root.Q<Button>("btn-account-verify")?.RegisterCallback<ClickEvent>(_ => SetAccountPanelState(null, false, "Enter the verification code from email."));
                 root.Q<Button>("btn-account-forgot")?.RegisterCallback<ClickEvent>(_ => SetAccountPanelState(null, false, "Password reset email request queued."));
                 root.Q<Button>("btn-dialog-ok")?.RegisterCallback<ClickEvent>(_ => HideDialog());
+                root.Q<Button>("btn-exit-confirm")?.RegisterCallback<ClickEvent>(_ => ConfirmExit());
+                root.Q<Button>("btn-exit-cancel")?.RegisterCallback<ClickEvent>(_ => CancelExit());
                 _callbacksBound = true;
             }
 
@@ -223,13 +230,38 @@ namespace BuildATower
 
         void HideDialog()
         {
-            if (_panelDialog != null)
-                _panelDialog.AddToClassList("hidden");
+            _panelDialog?.AddToClassList("hidden");
+        }
+
+        public void RequestExit()
+        {
+            HideDialog();
+            _panelExit?.RemoveFromClassList("hidden");
+        }
+
+        public void CancelExit()
+        {
+            _panelExit?.AddToClassList("hidden");
+        }
+
+        public void ConfirmExit()
+        {
+            CancelExit();
+            (ExitGame ?? QuitProcess)();
+        }
+
+        static void QuitProcess()
+        {
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#endif
+            Application.Quit();
         }
 
         void ShowOnly(VisualElement panel)
         {
             HideDialog();
+            CancelExit();
             SetVisible(_panelRoot, panel == _panelRoot);
             SetVisible(_panelDifficulty, panel == _panelDifficulty);
             SetVisible(_panelContact, panel == _panelContact);
