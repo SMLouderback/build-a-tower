@@ -9,6 +9,7 @@
       <ui:Button name="btn-save-game" text="Save Game" class="menu-button" />
       <ui:Button name="btn-load-game" text="Load Game" class="menu-button" />
       <ui:Button name="btn-account" text="Account" class="menu-button" />
+      <ui:Button name="btn-feedback" text="Feedback" class="menu-button" />
       <ui:Button name="btn-contact" text="Contact Us" class="menu-button" />
       <ui:Button name="btn-about" text="About" class="menu-button" />
       <ui:Button name="btn-exit" text="Exit" class="menu-button secondary" />
@@ -35,6 +36,18 @@
       <ui:Button name="btn-account-verify" text="Verify Email" class="menu-button" />
       <ui:Button name="btn-account-forgot" text="Forgot Password" class="menu-button secondary" />
       <ui:Button name="btn-account-back" text="Back" class="menu-button secondary" />
+    </ui:VisualElement>
+
+    <ui:VisualElement name="panel-feedback" class="panel panel-feedback hidden">
+      <ui:Label text="Feedback" class="panel-title" />
+      <ui:TextField name="feedback-note" label="Note" multiline="true" class="feedback-field feedback-note" />
+      <ui:TextField name="feedback-name" label="Name" class="feedback-field" />
+      <ui:TextField name="feedback-email" label="Email" class="feedback-field" />
+      <ui:Label text="Optional — only if you want a reply." class="body feedback-hint" />
+      <ui:Label name="feedback-status" text="" class="body feedback-status" />
+      <ui:Button name="btn-feedback-send" text="Send" class="menu-button" />
+      <ui:Button name="btn-feedback-facebook" text="Message on Facebook" class="menu-button" />
+      <ui:Button name="btn-feedback-back" text="Back" class="menu-button secondary" />
     </ui:VisualElement>
 
     <ui:VisualElement name="panel-difficulty" class="panel hidden">

@@ -128,6 +128,10 @@
   width: 480px;
 }
 
+.panel-feedback {
+  width: 480px;
+}
+
 .account-status {
   color: rgb(180, 198, 210);
   padding: 8px;
@@ -141,6 +145,29 @@
   margin-top: 4px;
   margin-bottom: 4px;
   color: rgb(236, 242, 248);
+}
+
+.feedback-field {
+  margin-top: 4px;
+  margin-bottom: 4px;
+  color: rgb(236, 242, 248);
+}
+
+.feedback-note {
+  min-height: 96px;
+}
+
+.feedback-hint {
+  color: rgb(150, 168, 180);
+  font-size: 12px;
+  margin-top: 2px;
+  margin-bottom: 6px;
+}
+
+.feedback-status {
+  min-height: 20px;
+  color: rgb(242, 214, 140);
+  margin-bottom: 4px;
 }
 
 .saves-scroll {

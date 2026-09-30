@@ -13,12 +13,14 @@ namespace BuildATower
         const string TowerSceneName = "TowerSandbox";
         const string ContactEmail = "escapemobileproductions@gmail.com";
         const string ContactWebsite = "https://escapeproductions.biz/";
+        const string FacebookUrl = "https://www.facebook.com/EScapeMProd";
         const string CopyrightLine = "© 2026 Escape Productions. All rights reserved.";
 
         VisualElement _panelRoot;
         VisualElement _panelDifficulty;
         VisualElement _panelContact;
         VisualElement _panelAbout;
+        VisualElement _panelFeedback;
         VisualElement _panelDialog;
         VisualElement _panelLocalSaves;
         VisualElement _panelAccount;
@@ -31,11 +33,21 @@ namespace BuildATower
         Label _dialogMessage;
         Label _localSavesEmpty;
         Label _accountStatus;
+        TextField _feedbackNote;
+        TextField _feedbackName;
+        TextField _feedbackEmail;
+        Label _feedbackStatus;
         LocalSaveMenuPresenter _presenter;
         ICloudSlotSource _cloudSlots;
+        PlaytestFeedbackClient _feedbackClient;
         bool _callbacksBound;
 
         public Action ExitGame { get; set; }
+
+        public void ConfigureFeedback(PlaytestFeedbackClient feedbackClient)
+        {
+            _feedbackClient = feedbackClient;
+        }
 
         public void ConfigureLocalSaves(
             LocalSaveRepository repository,
@@ -97,6 +109,7 @@ namespace BuildATower
             _panelDifficulty = root.Q<VisualElement>("panel-difficulty");
             _panelContact = root.Q<VisualElement>("panel-contact");
             _panelAbout = root.Q<VisualElement>("panel-about");
+            _panelFeedback = root.Q<VisualElement>("panel-feedback");
             _panelDialog = root.Q<VisualElement>("panel-dialog");
             _panelLocalSaves = root.Q<VisualElement>("panel-local-saves");
             _panelAccount = root.Q<VisualElement>("panel-account");
@@ -106,9 +119,14 @@ namespace BuildATower
             _dialogMessage = root.Q<Label>("dialog-message");
             _localSavesEmpty = root.Q<Label>("local-saves-empty");
             _accountStatus = root.Q<Label>("account-status");
+            _feedbackNote = root.Q<TextField>("feedback-note");
+            _feedbackName = root.Q<TextField>("feedback-name");
+            _feedbackEmail = root.Q<TextField>("feedback-email");
+            _feedbackStatus = root.Q<Label>("feedback-status");
             DisableRichText(_dialogMessage);
             DisableRichText(_localSavesEmpty);
             DisableRichText(_accountStatus);
+            DisableRichText(_feedbackStatus);
             var aboutCopyright = root.Q<Label>("about-copyright");
             if (aboutCopyright != null)
                 aboutCopyright.text = CopyrightLine;
@@ -125,6 +143,7 @@ namespace BuildATower
                 root.Q<Button>("btn-new-game")?.RegisterCallback<ClickEvent>(_ => ShowOnly(_panelDifficulty));
                 root.Q<Button>("btn-load-game")?.RegisterCallback<ClickEvent>(_ => ShowLocalSavesPanel());
                 root.Q<Button>("btn-account")?.RegisterCallback<ClickEvent>(_ => ShowAccountPanel());
+                root.Q<Button>("btn-feedback")?.RegisterCallback<ClickEvent>(_ => ShowFeedbackPanel());
                 root.Q<Button>("btn-contact")?.RegisterCallback<ClickEvent>(_ => ShowOnly(_panelContact));
                 root.Q<Button>("btn-about")?.RegisterCallback<ClickEvent>(_ => ShowAbout());
                 root.Q<Button>("btn-exit")?.RegisterCallback<ClickEvent>(_ => RequestExit());
@@ -139,6 +158,12 @@ namespace BuildATower
                 root.Q<Button>("btn-email")?.RegisterCallback<ClickEvent>(_ => Application.OpenURL("mailto:" + ContactEmail));
                 root.Q<Button>("btn-website")?.RegisterCallback<ClickEvent>(_ => Application.OpenURL(ContactWebsite));
                 root.Q<Button>("btn-contact-back")?.RegisterCallback<ClickEvent>(_ => ShowOnly(_panelRoot));
+                root.Q<Button>("btn-feedback-send")?.RegisterCallback<ClickEvent>(evt =>
+                {
+                    _ = TrySendFeedback();
+                });
+                root.Q<Button>("btn-feedback-facebook")?.RegisterCallback<ClickEvent>(_ => Application.OpenURL(FacebookUrl));
+                root.Q<Button>("btn-feedback-back")?.RegisterCallback<ClickEvent>(_ => ShowOnly(_panelRoot));
                 root.Q<Button>("btn-about-back")?.RegisterCallback<ClickEvent>(_ => ShowOnly(_panelRoot));
                 root.Q<Button>("btn-local-saves-back")?.RegisterCallback<ClickEvent>(_ => HideLocalSavesPanel());
                 root.Q<Button>("btn-account-back")?.RegisterCallback<ClickEvent>(_ => ShowOnly(_panelRoot));
@@ -167,6 +192,30 @@ namespace BuildATower
             if (_accountStatus != null && string.IsNullOrEmpty(_accountStatus.text))
                 SetAccountPanelState(null, true, string.Empty);
             ShowOnly(_panelAccount);
+        }
+
+        public void ShowFeedbackPanel()
+        {
+            if (_feedbackStatus != null)
+                _feedbackStatus.text = string.Empty;
+            ShowOnly(_panelFeedback);
+        }
+
+        public async Task TrySendFeedback(CancellationToken cancellationToken = default)
+        {
+            var result = await FeedbackClient.SendAsync(
+                new PlaytestFeedbackDraft
+                {
+                    Message = _feedbackNote?.value,
+                    Name = _feedbackName?.value,
+                    Email = _feedbackEmail?.value,
+                    Version = Application.version
+                },
+                cancellationToken);
+
+            SetFeedbackStatus(result.Kind);
+            if (result.Kind == PlaytestFeedbackSendKind.Sent && _feedbackNote != null)
+                _feedbackNote.value = string.Empty;
         }
 
         public void SetAccountPanelState(string email, bool emailConfirmed, string message)
@@ -266,10 +315,14 @@ namespace BuildATower
             SetVisible(_panelDifficulty, panel == _panelDifficulty);
             SetVisible(_panelContact, panel == _panelContact);
             SetVisible(_panelAbout, panel == _panelAbout);
+            SetVisible(_panelFeedback, panel == _panelFeedback);
             SetVisible(_panelLocalSaves, panel == _panelLocalSaves);
             SetVisible(_panelAccount, panel == _panelAccount);
 
-            var compact = panel == _panelDifficulty || panel == _panelLocalSaves || panel == _panelAccount;
+            var compact = panel == _panelDifficulty
+                          || panel == _panelLocalSaves
+                          || panel == _panelAccount
+                          || panel == _panelFeedback;
             _screen?.EnableInClassList("compact-header", compact);
             _brandTitle?.EnableInClassList("brand-compact", compact);
             _subtitle?.EnableInClassList("hidden", compact);
@@ -447,6 +500,33 @@ namespace BuildATower
                     () => SceneManager.LoadScene(TowerSceneName),
                     TimeZoneInfo.Local);
                 return _presenter;
+            }
+        }
+
+        PlaytestFeedbackClient FeedbackClient => _feedbackClient ?? (_feedbackClient = new PlaytestFeedbackClient());
+
+        void SetFeedbackStatus(PlaytestFeedbackSendKind kind)
+        {
+            if (_feedbackStatus == null)
+                return;
+
+            switch (kind)
+            {
+                case PlaytestFeedbackSendKind.Sent:
+                    _feedbackStatus.text = "Thanks — sent.";
+                    break;
+                case PlaytestFeedbackSendKind.RejectedEmpty:
+                    _feedbackStatus.text = "Write a note first.";
+                    break;
+                case PlaytestFeedbackSendKind.RejectedEmail:
+                    _feedbackStatus.text = "Enter a valid email or leave it blank.";
+                    break;
+                case PlaytestFeedbackSendKind.RateLimited:
+                    _feedbackStatus.text = "Too many tries. Wait a minute.";
+                    break;
+                default:
+                    _feedbackStatus.text = "Couldn't send.";
+                    break;
             }
         }
     }
