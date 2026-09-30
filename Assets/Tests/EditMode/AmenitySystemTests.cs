@@ -89,23 +89,50 @@ namespace BuildATower.Tests
             var inRangeGrid = new TowerGrid();
             inRangeGrid.TryPlaceLobby(LobbySo(), 0, 40, 0, out _);
             Assert.IsTrue(inRangeGrid.TryPlace(atriumType, new Vector2Int(0, 1), out _));
-            Assert.IsTrue(inRangeGrid.TryPlace(condoType, new Vector2Int(20, 1), out var condoInRange));
+            Assert.IsTrue(inRangeGrid.TryPlace(condoType, new Vector2Int(AmenitySystem.AtriumMaxHorizontalCells, 1), out var condoInRange));
             Assert.AreEqual(5f, AmenitySystem.MaxReliefInRange(inRangeGrid, condoInRange));
 
             var farHorizGrid = new TowerGrid();
             farHorizGrid.TryPlaceLobby(LobbySo(), 0, 40, 0, out _);
             Assert.IsTrue(farHorizGrid.TryPlace(atriumType, new Vector2Int(0, 1), out _));
-            Assert.IsTrue(farHorizGrid.TryPlace(condoType, new Vector2Int(25, 1), out var farCondo));
+            Assert.IsTrue(farHorizGrid.TryPlace(condoType, new Vector2Int(AmenitySystem.AtriumMaxHorizontalCells + 1, 1), out var farCondo));
             Assert.AreEqual(0f, AmenitySystem.MaxReliefInRange(farHorizGrid, farCondo));
 
-            var vertInRangeGrid = new TowerGrid();
-            vertInRangeGrid.TryPlaceLobby(LobbySo(), 0, 40, 0, out _);
-            Assert.IsTrue(vertInRangeGrid.TryPlace(atriumType, new Vector2Int(0, 7), out _));
-            Assert.IsTrue(vertInRangeGrid.TryPlace(condoType, new Vector2Int(0, 1), out var lowCondo));
+            // Exactly 6 floors above the condo: in range.
+            var vertInRangeGrid = BuildGridWithAtriumAt(
+                atriumType, condoType, AmenitySystem.AtriumMaxFloorDelta + 1, out var lowCondo);
             Assert.AreEqual(5f, AmenitySystem.MaxReliefInRange(vertInRangeGrid, lowCondo));
+
+            // 7 floors above the condo: out of range.
+            var vertFarGrid = BuildGridWithAtriumAt(
+                atriumType, condoType, AmenitySystem.AtriumMaxFloorDelta + 2, out var farLowCondo);
+            Assert.AreEqual(0f, AmenitySystem.MaxReliefInRange(vertFarGrid, farLowCondo));
 
             Object.DestroyImmediate(condoType);
             Object.DestroyImmediate(atriumType);
+        }
+
+        /// <summary>Condo at floor 1, scaffold column, atrium at <paramref name="atriumFloor"/> (x 0..5).</summary>
+        static TowerGrid BuildGridWithAtriumAt(
+            RoomTypeSO atriumType, RoomTypeSO condoType, int atriumFloor, out RoomInstance condo)
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(LobbySo(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(condoType, new Vector2Int(0, 1), out condo), "condo");
+            for (var y = 2; y < atriumFloor; y++)
+            for (var x = 0; x <= 5; x++)
+                Assert.IsTrue(grid.TryPlaceScaffold(new Vector2Int(x, y), out _), $"scaffold {x},{y}");
+            Assert.IsTrue(grid.TryPlace(atriumType, new Vector2Int(0, atriumFloor), out _), "atrium");
+            return grid;
+        }
+
+        [TestCase("leisure_casino", 3f)]
+        [TestCase("leisure_nightclub", 2f)]
+        [TestCase("leisure_chapel", 4f)]
+        [TestCase("leisure_atrium", 5f)]
+        public void ReliefForId_new_leisure_rooms(string id, float expected)
+        {
+            Assert.AreEqual(expected, AmenitySystem.ReliefForId(id));
         }
 
         [Test]

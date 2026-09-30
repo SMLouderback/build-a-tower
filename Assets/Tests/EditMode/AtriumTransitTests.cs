@@ -63,7 +63,34 @@ namespace BuildATower.Tests
             Assert.IsTrue(grid.IsTransferLobbyFloor(2));
             Assert.IsTrue(grid.IsTransferLobbyFloor(3));
             Assert.IsFalse(grid.IsTransferLobbyFloor(4));
-            CollectionAssert.AreEqual(new[] { 0, 1, 2, 3 }, grid.GetLobbyFloors());
+            CollectionAssert.AreEqual(new[] { 0, 1, 2, 3 }, grid.GetTransferFloors());
+            CollectionAssert.AreEqual(new[] { 0, 1, 2, 3 }, TransferFloorProvider.GetSortedTransferFloors(grid));
+        }
+
+        [Test]
+        public void Atrium_floors_are_not_lobby_floors()
+        {
+            var grid = BuildGrid();
+
+            // Lobby floors drive sky-lobby spacing and Express stops; atrium is neither.
+            CollectionAssert.AreEqual(new[] { 0 }, grid.GetLobbyFloors());
+            Assert.IsTrue(grid.IsLobbyFloor(0));
+            Assert.IsFalse(grid.IsLobbyFloor(2));
+            Assert.IsTrue(grid.IsTransferLobbyFloor(2));
+        }
+
+        [Test]
+        public void Atrium_does_not_block_sky_lobby_spacing()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(LobbySo(), 0, 10, 0, out _));
+            Assert.IsTrue(grid.TryPlace(AtriumSo(), new Vector2Int(0, 1), out _));
+            for (var y = 4; y <= 14; y++)
+            for (var x = 0; x <= 5; x++)
+                Assert.IsTrue(grid.TryPlaceScaffold(new Vector2Int(x, y), out _), $"scaffold {x},{y}");
+
+            // Atrium tops out at floor 3; floor 15 is 12 away but only the ground lobby counts.
+            Assert.IsTrue(grid.CanPlaceSkyLobby(0, 5, 15));
         }
 
         [Test]

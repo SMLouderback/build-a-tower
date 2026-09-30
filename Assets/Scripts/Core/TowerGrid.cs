@@ -182,7 +182,13 @@ namespace BuildATower
             return true;
         }
 
-        public List<int> GetLobbyFloors()
+        /// <summary>Ground lobby + sky lobby floors only (sky-lobby spacing, Express stops).</summary>
+        public List<int> GetLobbyFloors() => CollectFloors(includeAtrium: false);
+
+        /// <summary>Lobby, sky lobby and atrium floors (stair comfort reset, router transfers).</summary>
+        public List<int> GetTransferFloors() => CollectFloors(includeAtrium: true);
+
+        List<int> CollectFloors(bool includeAtrium)
         {
             var floors = new List<int>();
             if (HasLobby)
@@ -194,7 +200,7 @@ namespace BuildATower
                     if (!floors.Contains(room.Origin.y))
                         floors.Add(room.Origin.y);
                 }
-                else if (room?.Type != null && room.Type.isAtrium)
+                else if (includeAtrium && room?.Type != null && room.Type.isAtrium)
                 {
                     for (var y = room.Origin.y; y < room.Origin.y + room.Size.y; y++)
                     {
@@ -206,6 +212,14 @@ namespace BuildATower
 
             floors.Sort();
             return floors;
+        }
+
+        /// <summary>True for the ground lobby or a sky lobby floor (not atrium).</summary>
+        public bool IsLobbyFloor(int floor)
+        {
+            if (floor == LobbyFloor && HasLobby)
+                return true;
+            return TryGetSkyLobbyOnFloor(floor, out _);
         }
 
         public bool IsTransferLobbyFloor(int floor)

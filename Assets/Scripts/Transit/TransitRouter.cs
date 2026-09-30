@@ -377,7 +377,8 @@ namespace BuildATower
 
             foreach (var transferFloor in TransferFloorProvider.TransferFloorsBetween(start.y, goal.y, _grid))
             {
-                if (!_grid.IsTransferLobbyFloor(transferFloor)) continue;
+                // Elevator-to-elevator transfers stay on true lobbies; atrium floors are stair-only.
+                if (!_grid.IsLobbyFloor(transferFloor)) continue;
 
                 foreach (var shaftA in _elevators.GetServingShafts(start.y, transferFloor))
                 {

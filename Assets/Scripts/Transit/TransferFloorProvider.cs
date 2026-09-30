@@ -8,7 +8,7 @@ namespace BuildATower
         public static List<int> GetSortedTransferFloors(TowerGrid grid)
         {
             if (grid == null) return new List<int>();
-            return grid.GetLobbyFloors();
+            return grid.GetTransferFloors();
         }
 
         public static IEnumerable<int> TransferFloorsBetween(int y0, int y1, TowerGrid grid)
