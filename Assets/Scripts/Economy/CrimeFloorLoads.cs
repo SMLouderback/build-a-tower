@@ -1,9 +1,20 @@
+using System;
 using System.Collections.Generic;
 
 namespace BuildATower
 {
     public static class CrimeFloorLoads
     {
+        public static float VisitorCrimeWeight(RoomTypeSO type)
+        {
+            if (type == null || string.IsNullOrEmpty(type.id)) return 1f;
+            var id = type.id;
+            if (id.StartsWith("leisure_casino", StringComparison.OrdinalIgnoreCase)) return 1.75f;
+            if (id.StartsWith("leisure_nightclub", StringComparison.OrdinalIgnoreCase)) return 1.5f;
+            if (id.StartsWith("leisure_chapel", StringComparison.OrdinalIgnoreCase)) return 0.5f;
+            return 1f;
+        }
+
         public static Dictionary<int, float> ShopLoadByFloor(TowerGrid grid)
         {
             var loads = new Dictionary<int, float>();
@@ -14,7 +25,7 @@ namespace BuildATower
                 if (!ShopVisitRules.IsTrafficVenue(room.Type)) continue;
                 if (room.ConcurrentVisitors <= 0) continue;
 
-                var visitors = (float)room.ConcurrentVisitors;
+                var visitors = room.ConcurrentVisitors * VisitorCrimeWeight(room.Type);
                 var minY = room.Origin.y;
                 var maxY = room.Origin.y + room.Size.y - 1;
                 for (var floor = minY; floor <= maxY; floor++)
