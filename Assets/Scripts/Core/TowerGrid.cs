@@ -190,7 +190,18 @@ namespace BuildATower
             foreach (var room in _rooms)
             {
                 if (room?.Type != null && room.Type.isSkyLobby)
-                    floors.Add(room.Origin.y);
+                {
+                    if (!floors.Contains(room.Origin.y))
+                        floors.Add(room.Origin.y);
+                }
+                else if (room?.Type != null && room.Type.isAtrium)
+                {
+                    for (var y = room.Origin.y; y < room.Origin.y + room.Size.y; y++)
+                    {
+                        if (!floors.Contains(y))
+                            floors.Add(y);
+                    }
+                }
             }
 
             floors.Sort();
@@ -199,9 +210,23 @@ namespace BuildATower
 
         public bool IsTransferLobbyFloor(int floor)
         {
-            if (floor == LobbyFloor)
-                return HasLobby;
-            return TryGetSkyLobbyOnFloor(floor, out _);
+            if (floor == LobbyFloor && HasLobby)
+                return true;
+            if (TryGetSkyLobbyOnFloor(floor, out _))
+                return true;
+            return IsAtriumFloor(floor);
+        }
+
+        public bool IsAtriumFloor(int floor)
+        {
+            foreach (var room in _rooms)
+            {
+                if (room?.Type == null || !room.Type.isAtrium) continue;
+                if (floor >= room.Origin.y && floor < room.Origin.y + room.Size.y)
+                    return true;
+            }
+
+            return false;
         }
 
         public bool CanPlaceSkyLobby(int minX, int maxX, int floor)

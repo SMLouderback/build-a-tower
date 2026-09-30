@@ -2667,6 +2667,51 @@ namespace BuildATower
             return true;
         }
 
+        /// <summary>
+        /// One vertical step on a Stairs leg. Atrium-internal steps are free (no comfort count,
+        /// no over-cap stress) and reset the chain. Landing on any transfer floor (lobby,
+        /// sky lobby, atrium) restarts the comfort chain after the crossing is charged.
+        /// </summary>
+        public static bool TryApplyStairStep(
+            Agent agent,
+            TowerGrid grid,
+            Vector2Int from,
+            Vector2Int to,
+            out bool refused)
+        {
+            refused = false;
+            if (agent == null)
+            {
+                refused = true;
+                return false;
+            }
+
+            if (IsAtriumInternalVerticalStep(grid, from, to))
+            {
+                agent.StairsFloorsCrossedThisLeg = 0;
+                return true;
+            }
+
+            agent.StairsFloorsCrossedThisLeg++;
+            if (!TryApplyStairFloorCrossing(agent, agent.StairsFloorsCrossedThisLeg, out refused))
+            {
+                agent.StairsFloorsCrossedThisLeg--;
+                return false;
+            }
+
+            if (grid != null && grid.IsTransferLobbyFloor(to.y))
+                agent.StairsFloorsCrossedThisLeg = 0;
+            return true;
+        }
+
+        public static bool IsAtriumInternalVerticalStep(TowerGrid grid, Vector2Int from, Vector2Int to)
+        {
+            if (grid == null || from.y == to.y) return false;
+            if (!grid.TryGetRoomAt(from, out var a) || a?.Type == null || !a.Type.isAtrium)
+                return false;
+            return grid.TryGetRoomAt(to, out var b) && b?.Type != null && b.Type.isAtrium;
+        }
+
         void StepMovement(Agent agent, float deltaGameMinutes, TowerGrid grid)
         {
             if (agent.Phase == AgentPhase.WaitingAtElevator)
@@ -2741,13 +2786,8 @@ namespace BuildATower
                     var previousCell = agent.Cell;
                     if (IsCurrentStairsLeg(agent) && target.y != previousCell.y)
                     {
-                        agent.StairsFloorsCrossedThisLeg++;
-                        if (!TryApplyStairFloorCrossing(
-                                agent,
-                                agent.StairsFloorsCrossedThisLeg,
-                                out _))
+                        if (!TryApplyStairStep(agent, grid, previousCell, target, out _))
                         {
-                            agent.StairsFloorsCrossedThisLeg--;
                             agent.Path.Clear();
                             agent.PathIndex = 0;
                             ReplanTrip(agent, allowReplan: true);

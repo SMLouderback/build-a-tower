@@ -115,9 +115,10 @@ namespace BuildATower
                 return true;
             }
 
-            var floorSpan = Mathf.Abs(goal.y - start.y);
+            var transferFloors = TransferFloorProvider.GetSortedTransferFloors(_grid);
+            var floorSpan = StairSpanMath.MaxSegmentSpan(start.y, goal.y, transferFloors);
             if (floorSpan <= StairsPathfinder.MaxStairsFloorSpan &&
-                _stairs.TryFindPath(start, goal, out var stairsPath) &&
+                _stairs.TryFindPath(start, goal, -1, out var stairsPath) &&
                 stairsPath != null &&
                 stairsPath.Count > 0)
             {
@@ -182,7 +183,7 @@ namespace BuildATower
                     stairsAfter.Count == 0)
                     continue;
 
-                var stairSpan = Mathf.Abs(exitFloor - goal.y);
+                var stairSpan = StairSpanMath.MaxSegmentSpan(exitFloor, goal.y, transferFloors);
                 if (!IsAffordableStairSpan(stairSpan, agentStress))
                     continue;
 
@@ -246,7 +247,8 @@ namespace BuildATower
                         continue;
                 }
 
-                var stairSpan = Mathf.Abs(start.y - entryFloor) + Mathf.Abs(exitFloor - goal.y);
+                var stairSpan = StairSpanMath.MaxSegmentSpan(start.y, entryFloor, transferFloors) +
+                                StairSpanMath.MaxSegmentSpan(exitFloor, goal.y, transferFloors);
                 if (!IsAffordableStairSpan(stairSpan, agentStress))
                     continue;
 
@@ -281,7 +283,7 @@ namespace BuildATower
                 pureStairs != null &&
                 pureStairs.Count > 0)
             {
-                var stairSpan = Mathf.Abs(goal.y - start.y);
+                var stairSpan = floorSpan;
                 if (IsAffordableStairSpan(stairSpan, agentStress))
                 {
                     var score = ElevatorRouting.Score(pureStairs.Count, 0f, _waitWeightScale) +
