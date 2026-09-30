@@ -19,6 +19,11 @@ namespace BuildATower.Tests
                          FindObjectsInactive.Include,
                          FindObjectsSortMode.None))
                 UnityEngine.Object.DestroyImmediate(menu.gameObject);
+
+            foreach (var hud in UnityEngine.Object.FindObjectsByType<TowerHudController>(
+                         FindObjectsInactive.Include,
+                         FindObjectsSortMode.None))
+                UnityEngine.Object.DestroyImmediate(hud.gameObject);
         }
 
         [Test]
@@ -94,6 +99,46 @@ namespace BuildATower.Tests
             Assert.AreEqual("Enter a valid email or leave it blank.", root.Q<Label>("feedback-status").text);
         }
 
+        [Test]
+        public void Pause_feedback_test_hook_opens_feedback_state()
+        {
+            var hud = CreateHud();
+
+            hud.OpenPauseFeedbackForTests();
+
+            Assert.AreEqual("Feedback", GetPauseUi(hud));
+        }
+
+        [Test]
+        public async Task Pause_feedback_empty_send_shows_write_a_note_first_without_posting()
+        {
+            var posted = false;
+            var hud = CreateHud();
+            hud.ConfigureFeedback(Client(_ =>
+            {
+                posted = true;
+                return new HttpResponseMessage(HttpStatusCode.NoContent);
+            }));
+            hud.OpenPauseFeedbackForTests();
+            hud.SetPauseFeedbackDraftForTests("  ");
+
+            await hud.TrySendPauseFeedback();
+
+            Assert.IsFalse(posted);
+            Assert.AreEqual("Write a note first.", hud.PauseFeedbackStatusText);
+        }
+
+        [Test]
+        public void Pause_feedback_escape_returns_to_pause_root()
+        {
+            var hud = CreateHud();
+            hud.OpenPauseFeedbackForTests();
+
+            InvokeHud(hud, "HandlePauseEscape");
+
+            Assert.AreEqual("Paused", GetPauseUi(hud));
+        }
+
         static MainMenuController CreateBoundMenu(out VisualElement root)
         {
             var gameObject = new GameObject("Playtest Menu");
@@ -104,6 +149,27 @@ namespace BuildATower.Tests
             root = asset.CloneTree();
             menu.Bind(root);
             return menu;
+        }
+
+        static TowerHudController CreateHud()
+        {
+            var gameObject = new GameObject("Playtest Pause HUD");
+            gameObject.SetActive(false);
+            return gameObject.AddComponent<TowerHudController>();
+        }
+
+        static string GetPauseUi(TowerHudController hud)
+        {
+            var field = typeof(TowerHudController).GetField("_pauseUi", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(field);
+            return field.GetValue(hud).ToString();
+        }
+
+        static void InvokeHud(TowerHudController hud, string methodName)
+        {
+            var method = typeof(TowerHudController).GetMethod(methodName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(method, "Missing method " + methodName);
+            method.Invoke(hud, null);
         }
 
         static PlaytestFeedbackClient Client(Func<HttpRequestMessage, HttpResponseMessage> responder)

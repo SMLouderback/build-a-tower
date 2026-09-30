@@ -148,11 +148,13 @@ namespace BuildATower
             Paused,
             Options,
             Account,
+            Feedback,
             Load,
             ConfirmQuit
         }
 
         const string TowerSceneName = "TowerSandbox";
+        const string FeedbackFacebookUrl = "https://www.facebook.com/EScapeMProd";
 
         PauseUiState _pauseUi = PauseUiState.Playing;
         float _speedBeforePause = 1f;
@@ -163,6 +165,10 @@ namespace BuildATower
         string _pauseSaveMessage;
         string _pauseLoadMessage;
         string _pauseAccountMessage;
+        string _pauseFeedbackNote;
+        string _pauseFeedbackName;
+        string _pauseFeedbackEmail;
+        string _pauseFeedbackStatus;
         Vector2 _pauseLoadScroll;
         LocalSaveMenuPresenter _pauseLoadPresenter;
         IReadOnlyList<LocalSaveSummary> _pauseLoadSummaries;
@@ -170,6 +176,7 @@ namespace BuildATower
         ICloudSlotSource _cloudSlots;
         Func<SyncStatus> _syncStatusProvider;
         Action _loadTowerSceneOverride;
+        PlaytestFeedbackClient _feedbackClient;
 
         public Rect PanelScreenRect => _panelRect;
         public Rect TopBarScreenRect => _topBarRect;
@@ -215,7 +222,13 @@ namespace BuildATower
             _syncStatusProvider = syncStatusProvider;
         }
 
+        public void ConfigureFeedback(PlaytestFeedbackClient feedbackClient)
+        {
+            _feedbackClient = feedbackClient;
+        }
+
         public IReadOnlyList<CloudSlotSummary> PauseCloudSlots => _pauseCloudSlots;
+        public string PauseFeedbackStatusText => _pauseFeedbackStatus;
 
         public async System.Threading.Tasks.Task<IReadOnlyList<CloudSlotSummary>> RefreshPauseCloudSlots()
         {
@@ -260,6 +273,15 @@ namespace BuildATower
         public bool HasRestoreFallbackNotice => GameSession.HasRestoreFallbackNotice;
 
         public string RestoreFallbackNoticeText => GameSession.RestoreFallbackNotice;
+
+        public void OpenPauseFeedbackForTests() => OpenPauseFeedback();
+
+        public void SetPauseFeedbackDraftForTests(string note, string name = null, string email = null)
+        {
+            _pauseFeedbackNote = note;
+            _pauseFeedbackName = name;
+            _pauseFeedbackEmail = email;
+        }
 
         public void DismissRestoreFallbackNotice()
         {
@@ -382,12 +404,19 @@ namespace BuildATower
             if (celeb != null && celeb.IsModalOpen)
                 return;
 
+            HandlePauseEscape();
+        }
+
+        void HandlePauseEscape()
+        {
             if (_pauseUi == PauseUiState.ConfirmQuit
                 || _pauseUi == PauseUiState.Options
                 || _pauseUi == PauseUiState.Load
-                || _pauseUi == PauseUiState.Account)
+                || _pauseUi == PauseUiState.Account
+                || _pauseUi == PauseUiState.Feedback)
             {
                 _pauseLoadMessage = null;
+                _pauseAccountMessage = null;
                 _pauseUi = PauseUiState.Paused;
                 return;
             }
@@ -876,15 +905,16 @@ namespace BuildATower
             if (GameSession.HasRestoreFallbackNotice) return;
 
             GUI.Box(new Rect(0, 0, Screen.width, Screen.height), GUIContent.none);
-            var panelW = _pauseUi == PauseUiState.Load ? 440f : 360f;
+            var panelW = _pauseUi == PauseUiState.Load || _pauseUi == PauseUiState.Feedback ? 440f : 360f;
             var hasSaveMessage = _pauseUi == PauseUiState.Paused && !string.IsNullOrEmpty(_pauseSaveMessage);
             float panelH = _pauseUi switch
             {
                 PauseUiState.ConfirmQuit => 184f,
                 PauseUiState.Options => 320f,
                 PauseUiState.Account => 260f,
+                PauseUiState.Feedback => 440f,
                 PauseUiState.Load => 360f,
-                _ => hasSaveMessage ? 372f : 340f
+                _ => hasSaveMessage ? 412f : 380f
             };
             var panel = new Rect(
                 (Screen.width - panelW) * 0.5f,
@@ -927,6 +957,12 @@ namespace BuildATower
                 return;
             }
 
+            if (_pauseUi == PauseUiState.Feedback)
+            {
+                DrawPauseFeedback(cx, cy, inner, btnH, title, label);
+                return;
+            }
+
             GUI.Label(new Rect(cx, cy, inner, 28f), "Paused", title);
             cy += 36f;
             GUI.Label(new Rect(cx, cy, inner, 24f), "Cloud: " + CurrentSyncStatusText(), label);
@@ -946,6 +982,9 @@ namespace BuildATower
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Account"))
                 _pauseUi = PauseUiState.Account;
             cy += btnH + 8f;
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Feedback"))
+                OpenPauseFeedback();
+            cy += btnH + 8f;
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Resume"))
                 ResumeFromPause();
             cy += btnH + 8f;
@@ -954,6 +993,12 @@ namespace BuildATower
             cy += btnH + 8f;
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Main Menu"))
                 _pauseUi = PauseUiState.ConfirmQuit;
+        }
+
+        void OpenPauseFeedback()
+        {
+            _pauseFeedbackStatus = string.Empty;
+            _pauseUi = PauseUiState.Feedback;
         }
 
         void OpenPauseLoad()
@@ -1072,6 +1117,85 @@ namespace BuildATower
             {
                 _pauseAccountMessage = null;
                 _pauseUi = PauseUiState.Paused;
+            }
+        }
+
+        void DrawPauseFeedback(float cx, float cy, float inner, float btnH, GUIStyle title, GUIStyle label)
+        {
+            GUI.Label(new Rect(cx, cy, inner, 28f), "Feedback", title);
+            cy += 36f;
+
+            GUI.Label(new Rect(cx, cy, inner, 20f), "Note", label);
+            cy += 22f;
+            _pauseFeedbackNote = GUI.TextArea(new Rect(cx, cy, inner, 84f), _pauseFeedbackNote ?? string.Empty);
+            cy += 92f;
+
+            GUI.Label(new Rect(cx, cy, 56f, 24f), "Name", label);
+            _pauseFeedbackName = GUI.TextField(new Rect(cx + 64f, cy, inner - 64f, 24f), _pauseFeedbackName ?? string.Empty);
+            cy += 32f;
+
+            GUI.Label(new Rect(cx, cy, 56f, 24f), "Email", label);
+            _pauseFeedbackEmail = GUI.TextField(new Rect(cx + 64f, cy, inner - 64f, 24f), _pauseFeedbackEmail ?? string.Empty);
+            cy += 30f;
+
+            GUI.Label(new Rect(cx, cy, inner, 36f), "Optional — only if you want a reply.", label);
+            cy += 40f;
+
+            if (!string.IsNullOrEmpty(_pauseFeedbackStatus))
+            {
+                GUI.Label(new Rect(cx, cy, inner, 24f), _pauseFeedbackStatus, label);
+                cy += 32f;
+            }
+
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Send"))
+                _ = TrySendPauseFeedback();
+            cy += btnH + 8f;
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Message on Facebook"))
+                Application.OpenURL(FeedbackFacebookUrl);
+            cy += btnH + 8f;
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Back"))
+                _pauseUi = PauseUiState.Paused;
+        }
+
+        public async System.Threading.Tasks.Task TrySendPauseFeedback(
+            System.Threading.CancellationToken cancellationToken = default)
+        {
+            var result = await FeedbackClient.SendAsync(
+                new PlaytestFeedbackDraft
+                {
+                    Message = _pauseFeedbackNote,
+                    Name = _pauseFeedbackName,
+                    Email = _pauseFeedbackEmail,
+                    Version = Application.version
+                },
+                cancellationToken);
+
+            SetPauseFeedbackStatus(result.Kind);
+            if (result.Kind == PlaytestFeedbackSendKind.Sent)
+                _pauseFeedbackNote = string.Empty;
+        }
+
+        PlaytestFeedbackClient FeedbackClient => _feedbackClient ?? (_feedbackClient = new PlaytestFeedbackClient());
+
+        void SetPauseFeedbackStatus(PlaytestFeedbackSendKind kind)
+        {
+            switch (kind)
+            {
+                case PlaytestFeedbackSendKind.Sent:
+                    _pauseFeedbackStatus = "Thanks — sent.";
+                    break;
+                case PlaytestFeedbackSendKind.RejectedEmpty:
+                    _pauseFeedbackStatus = "Write a note first.";
+                    break;
+                case PlaytestFeedbackSendKind.RejectedEmail:
+                    _pauseFeedbackStatus = "Enter a valid email or leave it blank.";
+                    break;
+                case PlaytestFeedbackSendKind.RateLimited:
+                    _pauseFeedbackStatus = "Too many tries. Wait a minute.";
+                    break;
+                default:
+                    _pauseFeedbackStatus = "Couldn't send.";
+                    break;
             }
         }
 
