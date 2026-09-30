@@ -6,6 +6,8 @@ namespace BuildATower
     {
         public const int MaxFloorDelta = 2;
         public const int MaxHorizontalCells = 12;
+        public const int AtriumMaxFloorDelta = 6;
+        public const int AtriumMaxHorizontalCells = 24;
         public const float HotelDemandBonusAmount = 0.08f;
 
         public static float ReliefForId(string id)
@@ -16,6 +18,10 @@ namespace BuildATower
             if (id.StartsWith("leisure_gym", System.StringComparison.Ordinal)) return 3f;
             if (id.StartsWith("leisure_theater", System.StringComparison.Ordinal)) return 3f;
             if (id.StartsWith("leisure_bowling", System.StringComparison.Ordinal)) return 2f;
+            if (id.StartsWith("leisure_casino", System.StringComparison.Ordinal)) return 3f;
+            if (id.StartsWith("leisure_nightclub", System.StringComparison.Ordinal)) return 2f;
+            if (id.StartsWith("leisure_chapel", System.StringComparison.Ordinal)) return 4f;
+            if (id.StartsWith("leisure_atrium", System.StringComparison.Ordinal)) return 5f;
             return 0f;
         }
 
@@ -69,14 +75,20 @@ namespace BuildATower
             if (amenity?.Type == null || home == null) return false;
             if (amenity.IsBroken) return false;
             if (amenity.Type.ResolvedBuildFamily() != BuildFamily.Leisure) return false;
-            return IsInRange(amenity.Origin, home.Origin);
+            return IsInRange(amenity, home.Origin);
         }
 
-        /// <summary>Origin-to-origin: ±2 floors, ≤12 cells horizontal.</summary>
-        static bool IsInRange(Vector2Int amenityOrigin, Vector2Int homeOrigin)
+        /// <summary>Origin-to-origin: ±2 floors (±6 atrium), ≤12 cells horizontal (≤24 atrium).</summary>
+        static bool IsInRange(RoomInstance amenity, Vector2Int homeOrigin)
         {
-            if (Mathf.Abs(amenityOrigin.y - homeOrigin.y) > MaxFloorDelta) return false;
-            return Mathf.Abs(amenityOrigin.x - homeOrigin.x) <= MaxHorizontalCells;
+            var amenityOrigin = amenity.Origin;
+            var atrium = amenity.Type != null &&
+                (amenity.Type.isAtrium ||
+                 amenity.Type.id.StartsWith("leisure_atrium", System.StringComparison.Ordinal));
+            var maxFloor = atrium ? AtriumMaxFloorDelta : MaxFloorDelta;
+            var maxHoriz = atrium ? AtriumMaxHorizontalCells : MaxHorizontalCells;
+            if (Mathf.Abs(amenityOrigin.y - homeOrigin.y) > maxFloor) return false;
+            return Mathf.Abs(amenityOrigin.x - homeOrigin.x) <= maxHoriz;
         }
     }
 }

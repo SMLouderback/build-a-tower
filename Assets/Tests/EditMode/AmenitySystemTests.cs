@@ -77,6 +77,58 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Atrium_relief_uses_wider_range()
+        {
+            var condoType = ScriptableObject.CreateInstance<RoomTypeSO>();
+            condoType.id = "condo";
+            condoType.category = RoomCategory.Condo;
+            condoType.size = new Vector2Int(6, 1);
+            condoType.allowAboveGround = true;
+            var atriumType = LeisureSo("leisure_atrium", new Vector2Int(6, 1), isAtrium: true);
+
+            var inRangeGrid = new TowerGrid();
+            inRangeGrid.TryPlaceLobby(LobbySo(), 0, 40, 0, out _);
+            Assert.IsTrue(inRangeGrid.TryPlace(atriumType, new Vector2Int(0, 1), out _));
+            Assert.IsTrue(inRangeGrid.TryPlace(condoType, new Vector2Int(20, 1), out var condoInRange));
+            Assert.AreEqual(5f, AmenitySystem.MaxReliefInRange(inRangeGrid, condoInRange));
+
+            var farHorizGrid = new TowerGrid();
+            farHorizGrid.TryPlaceLobby(LobbySo(), 0, 40, 0, out _);
+            Assert.IsTrue(farHorizGrid.TryPlace(atriumType, new Vector2Int(0, 1), out _));
+            Assert.IsTrue(farHorizGrid.TryPlace(condoType, new Vector2Int(25, 1), out var farCondo));
+            Assert.AreEqual(0f, AmenitySystem.MaxReliefInRange(farHorizGrid, farCondo));
+
+            var vertInRangeGrid = new TowerGrid();
+            vertInRangeGrid.TryPlaceLobby(LobbySo(), 0, 40, 0, out _);
+            Assert.IsTrue(vertInRangeGrid.TryPlace(atriumType, new Vector2Int(0, 7), out _));
+            Assert.IsTrue(vertInRangeGrid.TryPlace(condoType, new Vector2Int(0, 1), out var lowCondo));
+            Assert.AreEqual(5f, AmenitySystem.MaxReliefInRange(vertInRangeGrid, lowCondo));
+
+            Object.DestroyImmediate(condoType);
+            Object.DestroyImmediate(atriumType);
+        }
+
+        [Test]
+        public void Other_leisure_still_uses_tight_range()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(LobbySo(), 0, 40, 0, out _);
+            var condoType = ScriptableObject.CreateInstance<RoomTypeSO>();
+            condoType.id = "condo";
+            condoType.category = RoomCategory.Condo;
+            condoType.size = new Vector2Int(6, 1);
+            condoType.allowAboveGround = true;
+            Assert.IsTrue(grid.TryPlace(condoType, new Vector2Int(0, 1), out var condo));
+
+            var spaType = LeisureSo("leisure_spa", new Vector2Int(6, 1));
+            Assert.IsTrue(grid.TryPlace(spaType, new Vector2Int(13, 1), out _));
+            Assert.AreEqual(0f, AmenitySystem.MaxReliefInRange(grid, condo));
+
+            Object.DestroyImmediate(condoType);
+            Object.DestroyImmediate(spaType);
+        }
+
+        [Test]
         public void MaxReliefInRange_picks_strongest_amenity()
         {
             var grid = new TowerGrid();
@@ -124,7 +176,7 @@ namespace BuildATower.Tests
             return so;
         }
 
-        static RoomTypeSO LeisureSo(string id, Vector2Int size)
+        static RoomTypeSO LeisureSo(string id, Vector2Int size, bool isAtrium = false)
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
             so.id = id;
@@ -133,6 +185,7 @@ namespace BuildATower.Tests
             so.buildFamily = BuildFamily.Leisure;
             so.size = size;
             so.allowAboveGround = true;
+            so.isAtrium = isAtrium;
             return so;
         }
     }
