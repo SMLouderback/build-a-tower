@@ -25,6 +25,7 @@ namespace BuildATower
         public bool isSkyLobby;
         public bool isScaffolding;
         public bool isStairs;
+        public bool isAtrium;
         public bool isElevatorShaft;
         public bool isParkingRamp;
         public LuxuryBand luxuryBand = LuxuryBand.None;

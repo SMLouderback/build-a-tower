@@ -95,42 +95,17 @@ namespace BuildATower
             return shops[shops.Count - 1];
         }
 
+        public static (int lo, int hi) DwellRangeForId(string id)
+        {
+            if (TryIdSpecificDwellRange(id, out var range))
+                return range;
+            return (20, 40);
+        }
+
         static (int lo, int hi) DwellRange(RoomTypeSO type)
         {
-            if (type != null && !string.IsNullOrEmpty(type.id))
-            {
-                var id = type.id;
-                if (id.IndexOf("food_fine", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return (40, 60);
-                if (id.IndexOf("food_mexican", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return (35, 50);
-                if (id.IndexOf("food_taco", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return (12, 20);
-                if (id.IndexOf("food_chicken", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return (15, 25);
-                if (id.IndexOf("food_fast", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return (15, 25);
-                if (id.IndexOf("food_restaurant", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return (40, 60);
-                if (id.IndexOf("retail_gifts", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return (15, 30);
-                if (id.IndexOf("retail_department", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return (30, 50);
-                if (id.IndexOf("retail_shoes", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return (25, 40);
-                if (id.IndexOf("retail", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return (20, 40);
-                if (id.StartsWith("leisure_gym", StringComparison.OrdinalIgnoreCase))
-                    return (30, 50);
-                if (id.StartsWith("leisure_spa", StringComparison.OrdinalIgnoreCase))
-                    return (45, 75);
-                if (id.StartsWith("leisure_pool", StringComparison.OrdinalIgnoreCase))
-                    return (40, 70);
-                if (id.StartsWith("leisure_bowling", StringComparison.OrdinalIgnoreCase))
-                    return (50, 80);
-                if (id.StartsWith("leisure_theater", StringComparison.OrdinalIgnoreCase))
-                    return (90, 130);
-            }
+            if (type != null && TryIdSpecificDwellRange(type.id, out var range))
+                return range;
 
             if (type != null)
             {
@@ -142,6 +117,123 @@ namespace BuildATower
             }
 
             return (20, 40);
+        }
+
+        static bool TryIdSpecificDwellRange(string id, out (int lo, int hi) range)
+        {
+            range = default;
+            if (string.IsNullOrEmpty(id))
+                return false;
+
+            if (id.IndexOf("food_fine", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (40, 60);
+                return true;
+            }
+
+            if (id.IndexOf("food_mexican", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (35, 50);
+                return true;
+            }
+
+            if (id.IndexOf("food_taco", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (12, 20);
+                return true;
+            }
+
+            if (id.IndexOf("food_chicken", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (15, 25);
+                return true;
+            }
+
+            if (id.IndexOf("food_fast", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (15, 25);
+                return true;
+            }
+
+            if (id.IndexOf("food_restaurant", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (40, 60);
+                return true;
+            }
+
+            if (id.IndexOf("retail_gifts", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (15, 30);
+                return true;
+            }
+
+            if (id.IndexOf("retail_department", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (30, 50);
+                return true;
+            }
+
+            if (id.IndexOf("retail_shoes", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (25, 40);
+                return true;
+            }
+
+            if (id.IndexOf("retail", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (20, 40);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_gym", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (30, 50);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_spa", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (45, 75);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_pool", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (40, 70);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_bowling", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (50, 80);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_theater", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (90, 130);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_casino", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (40, 70);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_nightclub", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (50, 90);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_chapel", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (20, 40);
+                return true;
+            }
+
+            return false;
         }
     }
 }
