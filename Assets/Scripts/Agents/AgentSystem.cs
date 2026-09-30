@@ -483,7 +483,9 @@ namespace BuildATower
             if (best == null) return false;
 
             var fill = HotelLuxury.CheckInFillMultiplier(EffectiveHotelLuxuryBand(best.Type), climateStep);
-            fill = Mathf.Clamp01(fill + AmenitySystem.HotelDemandBonus(grid, best));
+            fill = Mathf.Clamp01(fill +
+                                  AmenitySystem.HotelDemandBonus(grid, best) +
+                                  AtriumMarketing.HotelFillBonusFor(grid));
             if (fill < 1f && rng.NextDouble() >= fill)
                 return false;
 
@@ -586,7 +588,7 @@ namespace BuildATower
                 if (!IsClaimableUnsoldCondo(candidate)) continue;
                 if (CountHomeOccupants(candidate) > 0) continue;
                 if (!CanReachCondoFromLobby(grid, candidate)) continue;
-                if (!PassesCondoDemand(candidate, currentStars, climateOffset)) continue;
+                if (!PassesCondoDemand(candidate, grid, currentStars, climateOffset)) continue;
 
                 var band = EffectiveCondoLuxuryBand(candidate.Type);
                 if (!CondoLuxury.AcceptsBuyer(band, wealth, candidate.Type.id))
@@ -663,7 +665,7 @@ namespace BuildATower
             return true;
         }
 
-        bool PassesCondoDemand(RoomInstance room, int currentStars, int climateOffset = 0)
+        bool PassesCondoDemand(RoomInstance room, TowerGrid grid, int currentStars, int climateOffset = 0)
         {
             var offset = EconomySystem.EffectiveDemandClimateOffset(room?.Type, climateOffset);
             var climateStep = System.Math.Clamp(
@@ -678,6 +680,7 @@ namespace BuildATower
                 if (floor > chance)
                     chance = floor;
             }
+            chance = Mathf.Clamp01(chance + AtriumMarketing.CondoDemandBonusFor(grid));
 
             if (chance >= 1f) return true;
             if (chance <= 0f) return false;
@@ -1987,7 +1990,10 @@ namespace BuildATower
                 if (CountStreetVisitors() >= MaxConcurrentStreetVisitors) continue;
                 if (FindOpenShops(grid, clock.MinuteOfDay).Count == 0) continue;
 
-                var chance = Mathf.Clamp01(StreetSpawnBaseChance * (1 + Mathf.Max(0, stars)));
+                var chance = Mathf.Clamp01(
+                    StreetSpawnBaseChance *
+                    (1 + Mathf.Max(0, stars)) *
+                    AtriumMarketing.StreetSpawnMultiplierFor(grid));
                 if (_rng.NextDouble() >= chance) continue;
 
                 TrySpawnStreetVisitor(grid, clock);
