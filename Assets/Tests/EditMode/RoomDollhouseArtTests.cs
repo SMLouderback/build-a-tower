@@ -100,7 +100,7 @@ namespace BuildATower.Tests
         [Test]
         public void Catalog_count_matches_approved_attachment_list()
         {
-            Assert.AreEqual(51, Catalog.Length);
+            Assert.AreEqual(52, Catalog.Length);
         }
 
         [Test]
@@ -183,6 +183,7 @@ namespace BuildATower.Tests
             ("leisure_bowling", "bowling_10x1"),
             ("leisure_theater", "theater_8x2"),
             ("leisure_casino", "casino_10x1"),
+            ("leisure_nightclub", "nightclub_8x1"),
         };
 
         static Sprite DummySprite()
