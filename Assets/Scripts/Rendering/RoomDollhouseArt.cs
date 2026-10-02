@@ -73,6 +73,7 @@ namespace BuildATower
             ["leisure_casino"] = "casino_10x1",
             ["leisure_nightclub"] = "nightclub_8x1",
             ["leisure_chapel"] = "chapel_6x1",
+            ["leisure_atrium"] = "atrium_8x3",
         };
 
         static readonly Dictionary<string, Sprite> SpriteCache = new();
