@@ -131,6 +131,8 @@ namespace BuildATower
             if (aboutCopyright != null)
                 aboutCopyright.text = CopyrightLine;
 
+            ApplyLobbyAtmosphere(root);
+
             var saveButton = root.Q<Button>("btn-save-game");
             if (saveButton != null)
             {
@@ -322,17 +324,62 @@ namespace BuildATower
             var compact = panel == _panelDifficulty
                           || panel == _panelLocalSaves
                           || panel == _panelAccount
-                          || panel == _panelFeedback;
+                          || panel == _panelFeedback
+                          || panel == _panelContact
+                          || panel == _panelAbout;
             _screen?.EnableInClassList("compact-header", compact);
             _brandTitle?.EnableInClassList("brand-compact", compact);
             _subtitle?.EnableInClassList("hidden", compact);
         }
 
+        void ApplyLobbyAtmosphere(VisualElement root)
+        {
+            var atmosphere = root.Q<VisualElement>("atmosphere");
+            if (atmosphere == null)
+                return;
+
+            var lobby = LoadMenuTexture("mainmenu_lobby_bg");
+            if (lobby != null)
+                atmosphere.style.backgroundImage = new StyleBackground(lobby);
+        }
+
+        static Texture2D LoadMenuTexture(string id)
+        {
+            if (string.IsNullOrEmpty(id))
+                return null;
+
+            var path = MenuIconArt.ResourcesRoot + id;
+            var bytesAsset = Resources.Load<TextAsset>(path);
+            var png = bytesAsset != null ? bytesAsset.bytes : null;
+            if (png != null && png.Length >= 32)
+            {
+                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false)
+                {
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp,
+                    name = id
+                };
+                if (tex.LoadImage(png, false))
+                    return tex;
+                UnityEngine.Object.Destroy(tex);
+            }
+
+            return Resources.Load<Texture2D>(path);
+        }
+
         static void SetVisible(VisualElement el, bool visible)
         {
             if (el == null) return;
-            if (visible) el.RemoveFromClassList("hidden");
-            else el.AddToClassList("hidden");
+            if (visible)
+            {
+                el.RemoveFromClassList("hidden");
+                el.style.display = DisplayStyle.Flex;
+            }
+            else
+            {
+                el.AddToClassList("hidden");
+                el.style.display = DisplayStyle.None;
+            }
         }
 
         static Label PlainTextLabel(string text, string name)

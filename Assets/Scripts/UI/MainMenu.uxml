@@ -2,6 +2,7 @@
   <Style src="MainMenu.uss" />
   <ui:VisualElement name="screen" class="screen">
     <ui:VisualElement name="atmosphere" class="atmosphere" picking-mode="Ignore" />
+    <ui:VisualElement name="atmosphere-veil" class="atmosphere-veil" picking-mode="Ignore" />
     <ui:VisualElement name="plaque" class="plaque">
       <ui:Label name="brand-title" text="Build-A-Tower" class="brand" />
       <ui:Label name="subtitle" text="Raise a skyscraper. House tenants. Chase stars." class="subtitle" />
@@ -88,7 +89,7 @@
         <ui:Label text="About" class="panel-title" />
         <ui:Label name="about-blurb" text="Build-A-Tower is a SimTower-inspired skyscraper builder. Place rooms, house tenants and guests, manage transit, and grow your star rating." class="body" />
         <ui:Label name="about-version" text="Version" class="body" />
-        <ui:Label name="about-copyright" text="© 2026 Escape Productions. All rights reserved." class="body" />
+        <ui:Label name="about-copyright" text="뿯½ 2026 Escape Productions. All rights reserved." class="body" />
         <ui:Button name="btn-about-back" text="Back" class="menu-button secondary" />
       </ui:VisualElement>
     </ui:VisualElement>

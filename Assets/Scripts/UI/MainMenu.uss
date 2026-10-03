@@ -12,12 +12,21 @@
 
 .atmosphere {
   position: absolute;
-  left: -10%;
-  right: -10%;
-  top: -5%;
-  bottom: -5%;
-  background-color: rgb(58, 44, 32);
-  opacity: 0.4;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  -unity-background-scale-mode: scale-and-crop;
+  background-color: rgb(20, 14, 10);
+}
+
+.atmosphere-veil {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background-color: rgba(8, 6, 4, 0.38);
 }
 
 .plaque {
@@ -26,8 +35,8 @@
   max-width: 92%;
   max-height: 92%;
   padding: 22px 24px 18px 24px;
-  background-color: rgba(22, 16, 12, 0.94);
-  border-radius: 8px;
+  background-color: rgba(18, 12, 9, 0.92);
+  border-radius: 6px;
   border-width: 2px;
   border-color: rgb(212, 176, 106);
   align-items: stretch;
@@ -253,7 +262,6 @@
   display: none;
 }
 
-/* Legacy class kept so older panel class references do not break */
+/* Legacy class kept so older panel class references do not break. */
 .panel {
-  /* unused — chrome lives on .plaque */
 }
