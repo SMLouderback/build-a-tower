@@ -4,73 +4,104 @@
   right: 0;
   top: 0;
   bottom: 0;
-  padding: 48px 32px;
-  background-color: rgb(18, 32, 42);
+  padding: 32px 24px;
+  background-color: rgb(20, 16, 14);
   align-items: center;
   justify-content: center;
 }
 
+.atmosphere {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  top: -5%;
+  bottom: -5%;
+  background-color: rgb(58, 44, 32);
+  opacity: 0.4;
+}
+
+.plaque {
+  position: relative;
+  width: 460px;
+  max-width: 92%;
+  max-height: 92%;
+  padding: 22px 24px 18px 24px;
+  background-color: rgba(22, 16, 12, 0.94);
+  border-radius: 8px;
+  border-width: 2px;
+  border-color: rgb(212, 176, 106);
+  align-items: stretch;
+  flex-shrink: 1;
+  overflow: hidden;
+  transition-property: opacity, translate;
+  transition-duration: 0.18s;
+  transition-timing-function: ease-out;
+}
+
+.panel-body {
+  align-items: stretch;
+  flex-grow: 1;
+  flex-shrink: 1;
+  overflow: hidden;
+}
+
 .brand {
   color: rgb(242, 214, 140);
-  font-size: 56px;
+  font-size: 42px;
   -unity-font-style: bold;
-  margin-bottom: 8px;
+  margin-top: 4px;
+  margin-bottom: 6px;
   -unity-text-align: middle-center;
+  letter-spacing: 1px;
 }
 
 .brand-compact {
-  font-size: 28px;
-  margin-bottom: 12px;
+  font-size: 26px;
+  margin-bottom: 8px;
 }
 
 .compact-header {
-  padding-top: 24px;
-  padding-bottom: 24px;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
 .subtitle {
-  color: rgb(180, 198, 210);
-  font-size: 16px;
-  margin-bottom: 36px;
+  color: rgb(186, 168, 142);
+  font-size: 14px;
+  margin-bottom: 16px;
   -unity-text-align: middle-center;
   white-space: normal;
-  max-width: 520px;
-}
-
-.panel {
-  width: 420px;
-  max-width: 90%;
-  padding: 20px;
-  background-color: rgba(8, 16, 24, 0.88);
-  border-radius: 10px;
-  border-width: 1px;
-  border-color: rgba(242, 214, 140, 0.35);
-  align-items: stretch;
+  max-width: 100%;
 }
 
 .panel-title {
   color: rgb(242, 214, 140);
-  font-size: 22px;
+  font-size: 20px;
   -unity-font-style: bold;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   -unity-text-align: middle-center;
 }
 
 .menu-button {
-  height: 48px;
-  margin-top: 6px;
-  margin-bottom: 2px;
-  font-size: 16px;
-  background-color: rgb(36, 58, 72);
-  color: rgb(236, 242, 248);
-  border-radius: 6px;
+  height: 40px;
+  margin-top: 4px;
+  margin-bottom: 0;
+  font-size: 15px;
+  background-color: rgb(48, 38, 30);
+  color: rgb(244, 236, 220);
+  border-radius: 5px;
   border-width: 1px;
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: rgba(212, 176, 106, 0.35);
+  transition-property: background-color, border-color;
+  transition-duration: 0.12s;
 }
 
 .menu-button:hover {
-  background-color: rgb(48, 78, 96);
+  background-color: rgb(68, 52, 40);
+  border-color: rgba(242, 214, 140, 0.75);
+}
+
+.menu-button:active {
+  background-color: rgb(58, 44, 34);
 }
 
 .difficulty-button {
@@ -85,7 +116,7 @@
 }
 
 .diff-name {
-  color: rgb(236, 242, 248);
+  color: rgb(244, 236, 220);
   font-size: 15px;
   -unity-font-style: bold;
   margin: 0;
@@ -93,7 +124,7 @@
 }
 
 .diff-hint {
-  color: rgb(150, 168, 180);
+  color: rgb(168, 150, 128);
   font-size: 11px;
   margin: 1px 0 0 0;
   padding: 0;
@@ -101,12 +132,12 @@
 }
 
 .secondary {
-  background-color: rgb(28, 40, 50);
-  margin-top: 14px;
+  background-color: rgb(36, 28, 22);
+  margin-top: 12px;
 }
 
 .body {
-  color: rgb(210, 220, 228);
+  color: rgb(220, 208, 188);
   font-size: 14px;
   white-space: normal;
   margin-bottom: 10px;
@@ -118,47 +149,49 @@
   top: 50%;
   translate: -50% -50%;
   z-index: 10;
+  width: 400px;
+  max-width: 90%;
 }
 
 .panel-saves {
-  width: 520px;
+  min-height: 0;
 }
 
 .panel-account {
-  width: 480px;
+  min-height: 0;
 }
 
 .panel-feedback {
-  width: 480px;
+  min-height: 0;
 }
 
 .account-status {
-  color: rgb(180, 198, 210);
+  color: rgb(186, 168, 142);
   padding: 8px;
-  background-color: rgba(36, 58, 72, 0.45);
-  border-radius: 6px;
+  background-color: rgba(48, 38, 30, 0.55);
+  border-radius: 5px;
   border-width: 1px;
-  border-color: rgba(242, 214, 140, 0.22);
+  border-color: rgba(212, 176, 106, 0.28);
 }
 
 .account-field {
   margin-top: 4px;
   margin-bottom: 4px;
-  color: rgb(236, 242, 248);
+  color: rgb(244, 236, 220);
 }
 
 .feedback-field {
   margin-top: 4px;
   margin-bottom: 4px;
-  color: rgb(236, 242, 248);
+  color: rgb(244, 236, 220);
 }
 
 .feedback-note {
-  min-height: 96px;
+  min-height: 88px;
 }
 
 .feedback-hint {
-  color: rgb(150, 168, 180);
+  color: rgb(168, 150, 128);
   font-size: 12px;
   margin-top: 2px;
   margin-bottom: 6px;
@@ -171,8 +204,9 @@
 }
 
 .saves-scroll {
-  max-height: 360px;
+  max-height: 280px;
   margin-bottom: 8px;
+  flex-grow: 1;
 }
 
 .saves-rows {
@@ -180,36 +214,36 @@
 }
 
 .save-row {
-  margin-top: 8px;
-  margin-bottom: 8px;
+  margin-top: 6px;
+  margin-bottom: 6px;
   padding: 8px;
-  background-color: rgba(12, 24, 34, 0.9);
-  border-radius: 6px;
+  background-color: rgba(32, 24, 18, 0.92);
+  border-radius: 5px;
   border-width: 1px;
-  border-color: rgba(242, 214, 140, 0.2);
+  border-color: rgba(212, 176, 106, 0.25);
 }
 
 .cloud-save-row {
-  background-color: rgba(42, 46, 38, 0.92);
-  border-color: rgba(242, 214, 140, 0.28);
+  background-color: rgba(42, 36, 28, 0.94);
+  border-color: rgba(212, 176, 106, 0.35);
 }
 
 .save-name {
   color: rgb(242, 214, 140);
-  font-size: 16px;
+  font-size: 15px;
   -unity-font-style: bold;
   white-space: normal;
 }
 
 .save-meta {
-  color: rgb(180, 198, 210);
+  color: rgb(186, 168, 142);
   font-size: 12px;
   white-space: normal;
   margin-top: 4px;
 }
 
 .save-status {
-  color: rgb(210, 160, 150);
+  color: rgb(210, 160, 140);
   font-size: 12px;
   white-space: normal;
   margin-top: 4px;
@@ -217,4 +251,9 @@
 
 .hidden {
   display: none;
+}
+
+/* Legacy class kept so older panel class references do not break */
+.panel {
+  /* unused — chrome lives on .plaque */
 }
