@@ -558,6 +558,9 @@ namespace BuildATower
             TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/LeisureAtrium"));
             TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/Housekeeping"));
             TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/Maintenance"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ServiceMail"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ServiceRecycling"));
+            TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ServiceLoadingDock"));
             TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/SecurityPost"));
             TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/ResearchLab"));
             TryAddRoomButton(buttons, Resources.Load<RoomTypeSO>("Rooms/Conference"));

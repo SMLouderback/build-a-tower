@@ -7,8 +7,8 @@ Mode: subagent-driven-development
 Commits: only when task steps say commit
 
 Task 1: complete (`f31cfd9` — feat: add Mail Recycling Loading Dock room catalog)
-Task 2: complete (`e70aa17` — feat: require vehicle access for recycling and loading dock)
+Task 2: complete (`c1ebf36` + fix `7662a46` — vehicle access; above-ground Recycling curb access)
 Task 3: complete (`feat: amenity hooks for mail recycling loading dock`)
-Task 4: pending
+Task 4: complete (`feat: wire building services into Utility build menu`)
 Task 5: pending
 Task 6: pending
