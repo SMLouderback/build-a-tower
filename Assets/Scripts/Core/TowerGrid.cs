@@ -447,6 +447,10 @@ namespace BuildATower
                 if (!HasSupportFromAdjacentLevel(cell, footprint)) return false;
             }
 
+            if (ParkingStalls.RequiresVehicleAccess(type) &&
+                !ParkingStalls.WouldBeVehicleAccessible(this, type, origin))
+                return false;
+
             return true;
         }
 

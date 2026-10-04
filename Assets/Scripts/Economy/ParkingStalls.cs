@@ -11,6 +11,9 @@ namespace BuildATower
         public const string ParkingId = "parking_underground";
         public const string ValetId = "service_valet";
         public const string RampId = "parking_ramp";
+        public const string MailId = "service_mail";
+        public const string RecyclingId = "service_recycling";
+        public const string LoadingDockId = "service_loading_dock";
         public const int ParkingDailyUpkeep = 500;
         public const int ValetDailyUpkeep = 1_000;
         public const int RampDailyUpkeep = 200;
@@ -31,6 +34,156 @@ namespace BuildATower
 
         public static bool IsRamp(RoomInstance room) =>
             room?.Type != null && IsRamp(room.Type);
+
+        public static bool RequiresVehicleAccess(RoomTypeSO type) =>
+            type != null && (type.id == RecyclingId || type.id == LoadingDockId);
+
+        public static bool IsVehicleService(RoomTypeSO type) =>
+            type != null && (type.id == RecyclingId || type.id == LoadingDockId);
+
+        public static bool WouldBeVehicleAccessible(TowerGrid grid, RoomTypeSO type, Vector2Int origin)
+        {
+            if (!RequiresVehicleAccess(type)) return true;
+            if (grid == null || type == null) return false;
+            var hypothetical = new RoomInstance(0, type, origin, type.size);
+            return IsVehicleAccessible(grid, hypothetical, includeExtra: hypothetical);
+        }
+
+        public static bool IsVehicleAccessible(TowerGrid grid, RoomInstance room) =>
+            IsVehicleAccessible(grid, room, includeExtra: null);
+
+        static bool IsVehicleAccessible(TowerGrid grid, RoomInstance room, RoomInstance includeExtra)
+        {
+            if (room?.Type == null || !RequiresVehicleAccess(room.Type)) return true;
+            if (room.IsBroken) return false;
+            if (room.Origin.y >= TowerGrid.LobbyFloor) return false;
+            if (room.Origin.y == -1) return true;
+            if (grid == null) return false;
+
+            var vehicleRooms = new List<RoomInstance>();
+            var parkingLots = new List<RoomInstance>();
+            foreach (var candidate in EnumerateRooms(grid, includeExtra))
+            {
+                if (candidate.IsBroken) continue;
+                if (IsVehicleService(candidate.Type))
+                {
+                    if (candidate.Origin.y >= TowerGrid.LobbyFloor) continue;
+                    vehicleRooms.Add(candidate);
+                }
+                else if (IsParking(candidate) && candidate.Origin.y < TowerGrid.LobbyFloor)
+                    parkingLots.Add(candidate);
+            }
+
+            var targetIdx = IndexOfRoom(vehicleRooms, room);
+            if (targetIdx < 0) return false;
+
+            var accessibleParking = new List<RoomInstance>();
+            foreach (var lot in parkingLots)
+            {
+                if (IsParkingAccessible(grid, lot))
+                    accessibleParking.Add(lot);
+            }
+
+            var nodes = new List<RoomInstance>();
+            var isParkingNode = new List<bool>();
+            foreach (var v in vehicleRooms)
+            {
+                nodes.Add(v);
+                isParkingNode.Add(false);
+            }
+
+            foreach (var lot in accessibleParking)
+            {
+                nodes.Add(lot);
+                isParkingNode.Add(true);
+            }
+
+            var seeds = new HashSet<int>();
+            for (var i = 0; i < nodes.Count; i++)
+            {
+                var node = nodes[i];
+                if (isParkingNode[i])
+                {
+                    if (node.Origin.y == -1 || TouchesLobbyReachingRamp(grid, node))
+                        seeds.Add(i);
+                    continue;
+                }
+
+                if (node.Origin.y == -1 || TouchesLobbyReachingRamp(grid, node))
+                    seeds.Add(i);
+            }
+
+            if (seeds.Contains(targetIdx)) return true;
+
+            var reachable = new HashSet<int>(seeds);
+            var queue = new Queue<int>(seeds);
+            while (queue.Count > 0)
+            {
+                var i = queue.Dequeue();
+                if (i == targetIdx) return true;
+                for (var j = 0; j < nodes.Count; j++)
+                {
+                    if (reachable.Contains(j)) continue;
+                    if (!VehicleAccessNodesLink(nodes[i], isParkingNode[i], nodes[j], isParkingNode[j]))
+                        continue;
+                    if (!RoomsHorizontallyAdjacent(nodes[i], nodes[j])) continue;
+                    reachable.Add(j);
+                    queue.Enqueue(j);
+                }
+            }
+
+            return reachable.Contains(targetIdx);
+        }
+
+        static bool VehicleAccessNodesLink(
+            RoomInstance a,
+            bool aIsParking,
+            RoomInstance b,
+            bool bIsParking)
+        {
+            if (a.Origin.y != b.Origin.y) return false;
+            if (aIsParking && bIsParking) return true;
+            if (aIsParking || bIsParking)
+            {
+                var vehicle = aIsParking ? b : a;
+                return vehicle.Type.id == LoadingDockId;
+            }
+
+            return a.Type.id == b.Type.id;
+        }
+
+        static int IndexOfRoom(List<RoomInstance> rooms, RoomInstance room)
+        {
+            for (var i = 0; i < rooms.Count; i++)
+            {
+                if (ReferenceEquals(rooms[i], room)) return i;
+                if (rooms[i].Type.id == room.Type.id &&
+                    rooms[i].Origin == room.Origin &&
+                    rooms[i].Size == room.Size)
+                    return i;
+            }
+
+            return -1;
+        }
+
+        static IEnumerable<RoomInstance> EnumerateRooms(TowerGrid grid, RoomInstance includeExtra)
+        {
+            foreach (var room in grid.Rooms)
+                yield return room;
+            if (includeExtra == null) yield break;
+            var seen = false;
+            foreach (var room in grid.Rooms)
+            {
+                if (ReferenceEquals(room, includeExtra))
+                {
+                    seen = true;
+                    break;
+                }
+            }
+
+            if (!seen)
+                yield return includeExtra;
+        }
 
         public static bool HasOperationalValet(TowerGrid grid)
         {
