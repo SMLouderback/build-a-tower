@@ -8,7 +8,7 @@ Commits: only when task steps say commit
 
 Task 1: complete (`f31cfd9` — feat: add Mail Recycling Loading Dock room catalog)
 Task 2: complete (`e70aa17` — feat: require vehicle access for recycling and loading dock)
-Task 3: pending
+Task 3: complete (`feat: amenity hooks for mail recycling loading dock`)
 Task 4: pending
 Task 5: pending
 Task 6: pending

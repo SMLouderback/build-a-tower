@@ -70,17 +70,32 @@ namespace BuildATower
             return free * fairness * origin;
         }
 
+        public static float DemandWeight(RoomInstance shop, bool streetOrigin, TowerGrid grid)
+        {
+            var dockBonus = IsShop(shop?.Type)
+                ? AmenitySystem.LoadingDockDemandBonus(grid, shop)
+                : 0f;
+            return DemandWeight(shop, streetOrigin) * (1f + dockBonus);
+        }
+
         public static RoomInstance PickDemandWeightedShop(
             IReadOnlyList<RoomInstance> shops,
             System.Random rng,
-            bool streetOrigin)
+            bool streetOrigin) =>
+            PickDemandWeightedShop(shops, rng, streetOrigin, null);
+
+        public static RoomInstance PickDemandWeightedShop(
+            IReadOnlyList<RoomInstance> shops,
+            System.Random rng,
+            bool streetOrigin,
+            TowerGrid grid)
         {
             if (shops == null || shops.Count == 0) return null;
             if (shops.Count == 1) return shops[0];
 
             var total = 0f;
             foreach (var shop in shops)
-                total += DemandWeight(shop, streetOrigin);
+                total += DemandWeight(shop, streetOrigin, grid);
 
             if (total <= 0f)
                 return shops[rng.Next(shops.Count)];
@@ -88,7 +103,7 @@ namespace BuildATower
             var roll = (float)(rng.NextDouble() * total);
             foreach (var shop in shops)
             {
-                roll -= DemandWeight(shop, streetOrigin);
+                roll -= DemandWeight(shop, streetOrigin, grid);
                 if (roll < 0f) return shop;
             }
 

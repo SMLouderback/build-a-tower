@@ -1941,7 +1941,7 @@ namespace BuildATower
             }
 
             if (candidates.Count == 0) return null;
-            return ShopVisitRules.PickDemandWeightedShop(candidates, _rng, streetOrigin);
+            return ShopVisitRules.PickDemandWeightedShop(candidates, _rng, streetOrigin, grid);
         }
 
         bool CanReachShopFromLobby(TowerGrid grid, RoomInstance shop) =>
