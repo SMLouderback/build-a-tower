@@ -73,6 +73,7 @@ namespace BuildATower.Tests
             Assert.AreEqual(allowAboveGround, room.allowAboveGround);
             Assert.AreEqual(allowBasement, room.allowBasement);
             Assert.AreEqual(RoomCategory.Service, room.category);
+            Assert.AreEqual(BuildFamily.Utility, room.buildFamily);
             Assert.AreEqual(BuildFamily.Utility, room.ResolvedBuildFamily());
             Assert.AreEqual(IncomeModel.None, room.incomeModel);
             Assert.AreEqual(0, room.baseIncome);
