@@ -58,6 +58,46 @@ namespace BuildATower.Tests
             Assert.IsTrue(grid.CanPlace(mail, new Vector2Int(10, -2)));
         }
 
+        [Test]
+        public void Above_ground_recycling_has_street_curb_access()
+        {
+            var grid = NewGridWithLobby();
+            var recycling = Recycling();
+            // Catalog allows above-ground Recycling; curb access counts without a ramp chain.
+            Assert.IsTrue(ParkingStalls.WouldBeVehicleAccessible(grid, recycling, new Vector2Int(0, 1)));
+            Assert.IsTrue(grid.CanPlace(recycling, new Vector2Int(0, 1)));
+            Assert.IsTrue(grid.TryPlace(Recycling(), new Vector2Int(0, 1), out var above));
+            Assert.IsTrue(ParkingStalls.IsVehicleAccessible(grid, above));
+
+            var dock = LoadingDock();
+            Assert.IsFalse(ParkingStalls.WouldBeVehicleAccessible(grid, dock, new Vector2Int(0, 1)));
+            Assert.IsFalse(grid.CanPlace(dock, new Vector2Int(0, 1)));
+        }
+
+        [Test]
+        public void Broken_recycling_does_not_seed_or_count_accessible()
+        {
+            var grid = NewGridWithLobby();
+            Assert.IsTrue(grid.TryPlace(Recycling(), new Vector2Int(0, -1), out var seed));
+            Assert.IsTrue(grid.TryPlace(Recycling(), new Vector2Int(6, -1), out var neighbor));
+            Assert.IsTrue(ParkingStalls.IsVehicleAccessible(grid, neighbor));
+
+            seed.Condition = 0;
+            Assert.IsFalse(ParkingStalls.IsVehicleAccessible(grid, seed));
+            // Neighbor is still on B1, so it remains a seed on its own.
+            Assert.IsTrue(ParkingStalls.IsVehicleAccessible(grid, neighbor));
+
+            // Deep floor: broken peer must not bridge access.
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -1), out _));
+            Assert.IsTrue(grid.TryPlace(Ramp(), new Vector2Int(0, -2), out _));
+            Assert.IsTrue(grid.TryPlace(Recycling(), new Vector2Int(3, -2), out var deepSeed));
+            Assert.IsTrue(ParkingStalls.IsVehicleAccessible(grid, deepSeed));
+            Assert.IsTrue(grid.TryPlace(Recycling(), new Vector2Int(9, -2), out var deepPeer));
+            Assert.IsTrue(ParkingStalls.IsVehicleAccessible(grid, deepPeer));
+            deepSeed.Condition = 0;
+            Assert.IsFalse(ParkingStalls.IsVehicleAccessible(grid, deepPeer));
+        }
+
         static TowerGrid NewGridWithLobby()
         {
             var grid = new TowerGrid();

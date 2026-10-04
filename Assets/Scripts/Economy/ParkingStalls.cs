@@ -56,8 +56,12 @@ namespace BuildATower
         {
             if (room?.Type == null || !RequiresVehicleAccess(room.Type)) return true;
             if (room.IsBroken) return false;
-            if (room.Origin.y >= TowerGrid.LobbyFloor) return false;
+            // Loading Dock is basement-only; Recycling may use street-level curb access above lobby.
+            if (room.Type.id == LoadingDockId && room.Origin.y >= TowerGrid.LobbyFloor)
+                return false;
             if (room.Origin.y == -1) return true;
+            if (room.Type.id == RecyclingId && room.Origin.y > TowerGrid.LobbyFloor)
+                return true;
             if (grid == null) return false;
 
             var vehicleRooms = new List<RoomInstance>();
@@ -67,7 +71,10 @@ namespace BuildATower
                 if (candidate.IsBroken) continue;
                 if (IsVehicleService(candidate.Type))
                 {
-                    if (candidate.Origin.y >= TowerGrid.LobbyFloor) continue;
+                    // Keep Loading Dock basement-only in the access graph.
+                    if (candidate.Type.id == LoadingDockId &&
+                        candidate.Origin.y >= TowerGrid.LobbyFloor)
+                        continue;
                     vehicleRooms.Add(candidate);
                 }
                 else if (IsParking(candidate) && candidate.Origin.y < TowerGrid.LobbyFloor)
