@@ -10,5 +10,5 @@ Task 1: complete (`f31cfd9` — feat: add Mail Recycling Loading Dock room catal
 Task 2: complete (`c1ebf36` + fix `7662a46` — vehicle access; above-ground Recycling curb access)
 Task 3: complete (`feat: amenity hooks for mail recycling loading dock`)
 Task 4: complete (`feat: wire building services into Utility build menu`)
-Task 5: pending
+Task 5: complete — dollhouse + menu art for Mail/Recycling/Loading Dock
 Task 6: pending
