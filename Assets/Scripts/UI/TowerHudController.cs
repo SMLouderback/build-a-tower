@@ -323,6 +323,7 @@ namespace BuildATower
         {
             // Domain-reload off can keep stale keyed icons; always rebuild on play.
             MenuIconArt.ResetCache();
+            SeasonHudArt.ResetCache();
             if (simulation == null && build != null)
                 simulation = build.GetComponent<TowerSimulation>();
             ResolveCelebration();
@@ -1344,6 +1345,17 @@ namespace BuildATower
 
             var clockText = simulation?.Clock != null ? simulation.Clock.FormatHud() : "—";
             DrawChip(clockText, 150f);
+
+            // Season tile (icon only; no weather caption). Tooltip names the season.
+            {
+                const float seasonTile = 34f; // fits the 36px bar with a 1px inset
+                var season = SeasonHudArt.Resolve(simulation);
+                var tileRect = new Rect(x, barTopY + (barH - seasonTile) * 0.5f, seasonTile, seasonTile);
+                if (SeasonHudArt.TryGetTexture(season, out var seasonTex) && seasonTex != null)
+                    GUI.DrawTexture(tileRect, seasonTex, ScaleMode.StretchToFill, true);
+                GUI.Label(tileRect, new GUIContent(string.Empty, SeasonHudArt.DisplayName(season)));
+                x += seasonTile + 10f;
+            }
 
             var climateName = simulation?.Climate?.Name ?? "—";
             DrawChip(climateName, 78f);
