@@ -52,7 +52,8 @@ def smooth_noise_x(w, cell, seed):
 
 
 def fall(px, w, h):
-    noise = smooth_noise_x(w, 70, 5)  # smooth hue variation along x
+    # Per-tree bands along x: mix red / orange / yellow / brown (spec §5.3).
+    noise = smooth_noise_x(w, 90, 5)
     jitter = random.Random(7)
     for y in range(h):
         for x in range(w):
@@ -60,10 +61,18 @@ def fall(px, w, h):
             if a < 8 or is_plate(r, g, b) or not is_foliage(r, g, b):
                 continue
             _, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
-            n = noise(x)
-            hue = (0.02 + 0.10 * n + 0.015 * jitter.random()) % 1.0  # red -> amber
-            s = min(1.0, s * 1.15 + 0.20)
-            v = min(1.0, v * 1.12 + 0.05)
+            n = (noise(x) * 0.75 + jitter.random() * 0.25)
+            # Four buckets: red, orange, yellow, brown
+            if n < 0.22:
+                hue, s_boost, v_boost = 0.00, 1.25, 1.05  # red
+            elif n < 0.48:
+                hue, s_boost, v_boost = 0.06, 1.20, 1.10  # orange
+            elif n < 0.72:
+                hue, s_boost, v_boost = 0.12, 1.15, 1.15  # yellow
+            else:
+                hue, s_boost, v_boost = 0.07, 0.75, 0.72  # brown
+            s = min(1.0, s * s_boost + 0.12)
+            v = min(1.0, v * v_boost)
             nr, ng, nb = colorsys.hsv_to_rgb(hue, s, v)
             px[x, y] = (int(nr * 255), int(ng * 255), int(nb * 255), a)
 

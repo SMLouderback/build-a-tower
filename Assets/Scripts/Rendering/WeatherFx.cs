@@ -34,7 +34,7 @@ namespace BuildATower
     /// </summary>
     public sealed class WeatherFx : MonoBehaviour
     {
-        const int PoolSize = 220;
+        const int PoolSize = 320;
         const float LightningDuration = 0.55f;
 
         [SerializeField] Camera targetCamera;
@@ -230,7 +230,7 @@ namespace BuildATower
             var viewH = halfH * 2f;
             var viewW = halfW * 2f;
             var rain = _style == PrecipStyle.Rain;
-            var fall = rain ? 1.8f : 0.22f;           // view-heights per second
+            var fall = rain ? 2.1f : 0.28f;           // view-heights per second
             var rot = Mathf.Atan(_wind) * Mathf.Rad2Deg;
 
             for (var i = 0; i < _drops.Length; i++)
@@ -255,13 +255,14 @@ namespace BuildATower
                     0f);
                 if (rain)
                 {
-                    t.localScale = new Vector3(0.03f, 0.45f * _speed[i], 1f);
+                    // Longer thin streaks read better at high camera orthographic sizes.
+                    t.localScale = new Vector3(0.025f, 0.55f * _speed[i], 1f);
                     t.rotation = Quaternion.Euler(0f, 0f, rot);
                 }
                 else
                 {
-                    var s = 0.07f + 0.05f * _speed[i];
-                    t.localScale = new Vector3(s, s, 1f);
+                    var s = 0.09f + 0.07f * _speed[i];
+                    t.localScale = new Vector3(s, s * 0.85f, 1f);
                     t.rotation = Quaternion.identity;
                 }
             }

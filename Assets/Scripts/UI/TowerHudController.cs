@@ -1369,7 +1369,7 @@ namespace BuildATower
             if (goalsUnlocked) clusterW += 64f + 8f + 72f;
             else if (economyUnlocked) clusterW = Mathf.Max(56f + 8f + 64f + 8f, clusterW - 8f);
 
-            var speedWidth = 236f;
+            var speedWidth = 320f;
             if (x + speedWidth < right - clusterW - 12f)
             {
                 DrawTimeSpeedButtons(x, y, speedWidth, lineH);
@@ -3283,11 +3283,12 @@ namespace BuildATower
             // Celebration pause snapshot must stay intact until Continue.
             if (ResolveCelebration()?.IsModalOpen == true) return;
 
-            var labels = new[] { "||", "1x", "2x", "5x", "10x", "60x" };
-            var speeds = new[] { 0f, 1f, 2f, 5f, 10f, 60f };
+            // minutesPerRealSecond: 360x ≈ 6 game hours/sec; 1d = 1440 = one game day/sec.
+            var labels = new[] { "||", "1x", "5x", "60x", "360x", "1d" };
+            var speeds = new[] { 0f, 1f, 5f, 60f, 360f, 1440f };
             const float gap = 3f;
-            // Weight later buttons slightly wider so "10x" / "60x" are not clipped.
-            var weights = new[] { 0.85f, 0.9f, 0.9f, 0.9f, 1.2f, 1.25f };
+            // Weight later buttons wider so "360x" / "1d" are not clipped.
+            var weights = new[] { 0.8f, 0.85f, 0.85f, 1.05f, 1.25f, 1.0f };
             var weightSum = 0f;
             foreach (var w in weights)
                 weightSum += w;
