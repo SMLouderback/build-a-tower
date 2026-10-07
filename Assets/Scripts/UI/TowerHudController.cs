@@ -42,7 +42,6 @@ namespace BuildATower
             yield return serviceElevatorRoom;
         }
 
-        [SerializeField] float panelWidth = 280f;
         [SerializeField] float edgeGapPixels = 12f;
 
         public const float MenuIconSize = 44f;
@@ -51,6 +50,7 @@ namespace BuildATower
 
         const float IconSize = MenuIconSize;
         const float IconGap = MenuIconGap;
+        const int BuildToolIconCount = 5;
 
         /// <summary>Legacy single-variant Office / Hotel / Condo replaced by luxury catalog.</summary>
         static readonly HashSet<string> LegacyMenuRoomIds = new(StringComparer.Ordinal)
@@ -96,7 +96,16 @@ namespace BuildATower
         public static Rect MenuStripIconRect(float cx, float cy, int index) =>
             IconRect(cx, cy, index, MenuStripColumns);
 
+        const string BuildDockPrefsKey = "bat.buildDock";
+        const string BuildInfoPrefsKey = "bat.buildInfo";
+        const float BuildDockGripHeight = 24f;
+        const float BuildPanelPad = 8f;
+        const float BuildPopoutGap = 4f;
+
         Rect _panelRect;
+        Rect _dockRect;
+        Rect _infoRect;
+        Rect _popoutRect;
         Rect _topBarRect;
         Rect _goalsDropdownRect;
         Rect _infoDropdownRect;
@@ -117,12 +126,14 @@ namespace BuildATower
         TopInfoPanel _infoPanel;
         bool _goalsOpen;
         bool _mapsOpen;
-        bool _buildOpen = true;
-        bool _selectionOpen = true;
         BuildFamily? _expandedFamily;
         BuildSubgroup? _expandedShopSubgroup;
-        Vector2 _scroll;
-        float _contentHeight = 400f;
+        bool _buildLayoutInitialized;
+        bool _dockDragging;
+        bool _infoDragging;
+        Vector2 _dockDragOffset;
+        Vector2 _infoDragOffset;
+        float _lastBuildInfoTopY = 64f;
         TowerMapController _mapController;
 
         // Maps Graph metric toggles (shared chart).
@@ -311,7 +322,9 @@ namespace BuildATower
         public bool ContainsGuiPoint(Vector2 guiPoint) =>
             GameSession.HasRestoreFallbackNotice ||
             _topBarRect.Contains(guiPoint) ||
-            _panelRect.Contains(guiPoint) ||
+            _dockRect.Contains(guiPoint) ||
+            _infoRect.Contains(guiPoint) ||
+            (_expandedFamily.HasValue && _popoutRect.Contains(guiPoint)) ||
             (_goalsOpen && _goalsDropdownRect.Contains(guiPoint)) ||
             (_infoPanel != TopInfoPanel.None && _infoDropdownRect.Contains(guiPoint)) ||
             (_mapsOpen && _mapsDropdownRect.Contains(guiPoint)) ||
@@ -335,6 +348,7 @@ namespace BuildATower
         void OnEnable()
         {
             SubscribeGridDirty();
+            _buildLayoutInitialized = false;
         }
 
         void OnDisable()
@@ -344,7 +358,57 @@ namespace BuildATower
                 build.GridChanged -= OnGridChangedForSave;
                 _gridDirtyBound = false;
             }
+            _dockDragging = false;
+            _infoDragging = false;
         }
+
+        public void ResetBuildMenuLayout()
+        {
+            HudFloatingPanel.ClearRect(BuildDockPrefsKey);
+            HudFloatingPanel.ClearRect(BuildInfoPrefsKey);
+            RestoreDefaultBuildMenuLayout();
+            _expandedFamily = null;
+            _expandedShopSubgroup = null;
+        }
+
+        void EnsureBuildMenuLayout(float infoTopY)
+        {
+            _lastBuildInfoTopY = infoTopY;
+            if (_buildLayoutInitialized)
+                return;
+
+            _dockRect = HudFloatingPanel.TryLoadRect(BuildDockPrefsKey, out var dock)
+                ? HudFloatingPanel.SoftClamp(dock, Screen.width, Screen.height)
+                : DefaultDockRect();
+            _infoRect = HudFloatingPanel.TryLoadRect(BuildInfoPrefsKey, out var info)
+                ? HudFloatingPanel.SoftClamp(info, Screen.width, Screen.height)
+                : DefaultInfoRect();
+            _panelRect = _dockRect;
+            _buildLayoutInitialized = true;
+        }
+
+        void RestoreDefaultBuildMenuLayout()
+        {
+            _dockRect = DefaultDockRect();
+            _infoRect = DefaultInfoRect();
+            _popoutRect = Rect.zero;
+            _panelRect = _dockRect;
+            _buildLayoutInitialized = true;
+        }
+
+        Rect DefaultDockRect() =>
+            BuildMenuLayoutDefaults.DefaultDock(
+                Screen.width,
+                Screen.height,
+                BuildToolIconCount + _catalog.Count,
+                edgeGapPixels);
+
+        Rect DefaultInfoRect() =>
+            BuildMenuLayoutDefaults.DefaultInfo(
+                Screen.width,
+                Screen.height,
+                _lastBuildInfoTopY,
+                edgeGapPixels);
 
         void SubscribeGridDirty()
         {
@@ -607,12 +671,6 @@ namespace BuildATower
             title.normal.textColor = new Color(1f, 0.86f, 0.47f);
             label.normal.textColor = Color.white;
 
-            var section = new GUIStyle(GUI.skin.button)
-            {
-                fontSize = 11,
-                fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleLeft
-            };
             var iconStyle = new GUIStyle(GUI.skin.button)
             {
                 fontSize = 11,
@@ -639,8 +697,6 @@ namespace BuildATower
             var averageStress = agents != null ? agents.AverageStress : 0f;
             var goalsUnlocked = build.Grid != null && build.Grid.HasLobby;
             var economyUnlocked = simulation?.Economy != null && simulation.Economy.HasRecordedEconomyEvent;
-            var hasSelection = build.SelectedRoom != null;
-
             var dayIndex = simulation?.Clock != null ? simulation.Clock.DayIndex : 0;
             var newsStripHeight = _newsHud.Draw(
                 simulation?.News,
@@ -664,141 +720,11 @@ namespace BuildATower
                 goalsUnlocked,
                 economyUnlocked);
 
-            var x = gap;
-            var y = gap + newsStripHeight + topBarHeight + 6f;
-            var width = Mathf.Min(panelWidth, Screen.width - gap * 2f);
-            var inner = Mathf.Max(80f, width - 16f);
-            var maxPanelHeight = Mathf.Max(160f, Screen.height - y - gap);
-            var panelHeight = Mathf.Clamp(_contentHeight + 16f, 160f, maxPanelHeight);
-
-            var help = string.IsNullOrEmpty(build.HelpText) ? "—" : build.HelpText;
-            var helpHeight = Mathf.Clamp(
-                label.CalcHeight(new GUIContent(help), inner),
-                row,
-                row * 3f);
-
-            _panelRect = new Rect(x, y, width, panelHeight);
-            GUI.Box(_panelRect, GUIContent.none);
-
-            var viewRect = new Rect(x + 4f, y + 4f, width - 8f, panelHeight - 8f);
-            var contentWidth = inner;
-            var contentRect = new Rect(0f, 0f, contentWidth - 12f, Mathf.Max(_contentHeight, viewRect.height));
-            _scroll = GUI.BeginScrollView(viewRect, _scroll, contentRect, false, true);
-
-            var cx = 4f;
-            var cy = 0f;
-            var contentInner = contentWidth - 20f;
-
-            GUI.Label(new Rect(cx, cy, contentInner, row), "Build", title);
-            cy += row;
-
-            GUI.Label(new Rect(cx, cy, contentInner, helpHeight), help, label);
-            cy += helpHeight + 4f;
-
-            if (DrawSectionHeader(ref cy, cx, contentInner, btnH, section, "Catalog", ref _buildOpen))
-            {
-                var roomName = build.SelectedRoomType != null ? build.SelectedRoomType.displayName : "—";
-                GUI.Label(new Rect(cx, cy, contentInner, row), $"Tool: {build.CurrentTool} / {roomName}", label);
-                cy += row;
-
-                foreach (var economyLine in SelectedEconomyLines(build.SelectedRoomType))
-                {
-                    GUI.Label(new Rect(cx, cy, contentInner, row), economyLine, label);
-                    cy += row;
-                }
-
-                if (build.HoverCell.HasValue)
-                {
-                    var c = build.HoverCell.Value;
-                    var floorLabel = c.y > 0 ? c.y.ToString() : c.y < 0 ? $"B{-c.y}" : "G";
-                    GUI.Label(new Rect(cx, cy, contentInner, row), $"Cell: ({c.x}, floor {floorLabel})", label);
-                }
-                else
-                {
-                    GUI.Label(new Rect(cx, cy, contentInner, row), "Cell: —", label);
-                }
-
-                cy += row + 4f;
-
-                GUI.Label(new Rect(cx, cy, contentInner, row), "Tools");
-                cy += row;
-                cy = DrawToolIcons(cx, cy, iconStyle);
-                cy += 4f;
-
-                cy = DrawIconCatalog(cx, cy, contentInner, row, iconStyle, stars);
-                cy += 6f;
-            }
-
-            if (hasSelection)
-            {
-                if (DrawSectionHeader(ref cy, cx, contentInner, btnH, section, "Selection", ref _selectionOpen))
-                {
-                    var selection = build.GetSelectionSummary();
-                    if (selection != null)
-                    {
-                        foreach (var line in selection.Split('\n'))
-                        {
-                            GUI.Label(new Rect(cx, cy, contentInner, row), line, label);
-                            cy += row;
-                        }
-                    }
-
-                    foreach (var line in RoomEconomyFormat.SelectedUnitLines(
-                                 build.SelectedRoom,
-                                 agents?.Agents,
-                                 simulation?.Economy,
-                                 simulation?.ShopDemand,
-                                 ShopDemandFormat.CountOpenShopsInPool(
-                                     build.Grid?.Rooms,
-                                     build.SelectedRoom?.Type)))
-                    {
-                        GUI.Label(new Rect(cx, cy, contentInner, row), line, label);
-                        cy += row;
-                    }
-
-                    foreach (var line in ConferenceSelectionLines(build.SelectedRoom))
-                    {
-                        GUI.Label(new Rect(cx, cy, contentInner, row), line, label);
-                        cy += row;
-                    }
-
-                    if (PricePricing.IsPricedRoom(build.SelectedRoom?.Type))
-                        cy = DrawPriceTierButtons(cx, cy, contentInner, btnH, row, label, stars);
-
-                    if (BuildController.IsStaffedServiceRoom(build.SelectedRoom?.Type))
-                        cy = DrawStaffStepper(cx, cy, contentInner, btnH, row, label);
-
-                    if (build.SelectedRoom?.Type?.id == EconomySystem.ResearchId)
-                        cy = DrawResearchSelection(cx, cy, contentInner, btnH, row, label);
-
-                    var elevStatus = build.GetElevatorStatusText();
-                    if (elevStatus != null)
-                    {
-                        GUI.Label(new Rect(cx, cy, contentInner, row), $"Elevator: {elevStatus}", label);
-                        cy += row;
-                        var simElev = simulation?.Elevators?.FindByRoomId(build.SelectedRoom.InstanceId);
-                        if (simElev != null)
-                        {
-                            foreach (var line in ElevatorTrafficLines(simElev))
-                            {
-                                GUI.Label(new Rect(cx, cy, contentInner, row), line, label);
-                                cy += row;
-                            }
-                        }
-
-                        var inMaint = simElev != null && simElev.InMaintenance;
-                        var maintLabel = inMaint ? "Exit Maintenance" : "Enter Maintenance";
-                        if (GUI.Button(new Rect(cx, cy, contentInner, btnH), maintLabel))
-                            build.TrySetSelectedElevatorMaintenance(!inMaint);
-                        cy += btnH;
-                    }
-
-                    cy += 4f;
-                }
-            }
-
-            _contentHeight = cy + 8f;
-            GUI.EndScrollView();
+            var buildInfoTopY = gap + newsStripHeight + topBarHeight + 6f;
+            EnsureBuildMenuLayout(buildInfoTopY);
+            DrawBuildDock(iconStyle, title, label);
+            DrawFamilyPopout(iconStyle, title, label, stars);
+            DrawBuildInfoPanel(title, label, stars, agents, row, btnH);
 
             DrawHoverTooltip(label);
             DrawRestoreFallbackOverlay(title, label);
@@ -918,11 +844,11 @@ namespace BuildATower
             float panelH = _pauseUi switch
             {
                 PauseUiState.ConfirmQuit => 184f,
-                PauseUiState.Options => 320f,
+                PauseUiState.Options => 360f,
                 PauseUiState.Account => 260f,
                 PauseUiState.Feedback => 440f,
                 PauseUiState.Load => 360f,
-                _ => hasSaveMessage ? 412f : 380f
+                _ => hasSaveMessage ? 452f : 420f
             };
             var panel = new Rect(
                 (Screen.width - panelW) * 0.5f,
@@ -998,6 +924,9 @@ namespace BuildATower
             cy += btnH + 8f;
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Options"))
                 _pauseUi = PauseUiState.Options;
+            cy += btnH + 8f;
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Reset layout"))
+                ResetBuildMenuLayout();
             cy += btnH + 8f;
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Main Menu"))
                 _pauseUi = PauseUiState.ConfirmQuit;
@@ -1257,6 +1186,9 @@ namespace BuildATower
             });
 
             cy += 8f;
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), "Reset layout"))
+                ResetBuildMenuLayout();
+            cy += btnH + 8f;
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Back"))
                 _pauseUi = PauseUiState.Paused;
         }
@@ -1711,10 +1643,8 @@ namespace BuildATower
             var history = maps.Analytics.DayHistory;
             var stars = maps.Analytics.StarEvents;
 
-            // Large analytics panel: remaining view right of build strip, below top bar.
+            // Large analytics panel sits below the top bar; the build dock now floats over the world.
             var panelX = gap;
-            if (_panelRect.width > 0f)
-                panelX = Mathf.Max(gap, _panelRect.xMax + 8f);
             var panelY = barTopY + barH + 4f;
             var panelW = Mathf.Max(320f, Screen.width - panelX - gap);
             var panelH = Mathf.Max(280f, Screen.height - panelY - gap);
@@ -2233,8 +2163,6 @@ namespace BuildATower
             var panelH = 68f;
             var w = 320f;
             var legendX = gap;
-            if (_panelRect.width > 0f)
-                legendX = Mathf.Max(gap, _panelRect.xMax + 8f);
             _mapsLegendRect = new Rect(legendX, barTopY + barH + 4f, w, panelH);
             GUI.Box(_mapsLegendRect, GUIContent.none);
 
@@ -2426,6 +2354,328 @@ namespace BuildATower
             return x + 10f;
         }
 
+        void DrawBuildDock(GUIStyle iconStyle, GUIStyle title, GUIStyle label)
+        {
+            _dockRect = HudFloatingPanel.SoftClamp(_dockRect, Screen.width, Screen.height);
+            _panelRect = _dockRect;
+            GUI.Box(_dockRect, GUIContent.none);
+
+            var grip = new Rect(_dockRect.x, _dockRect.y, _dockRect.width, BuildDockGripHeight);
+            var dragGrip = new Rect(grip.x, grip.y, grip.width - 52f, grip.height);
+            var wasDragging = _dockDragging;
+            if (HudFloatingPanel.DragGrip(
+                    dragGrip,
+                    ref _dockRect,
+                    Screen.width,
+                    Screen.height,
+                    ref _dockDragging,
+                    ref _dockDragOffset) &&
+                wasDragging &&
+                !_dockDragging)
+                HudFloatingPanel.SaveRect(BuildDockPrefsKey, _dockRect);
+
+            EnsureWhiteTex();
+            GUI.DrawTexture(
+                grip,
+                _whiteTex,
+                ScaleMode.StretchToFill,
+                false,
+                0f,
+                new Color(0.18f, 0.16f, 0.13f, 0.92f),
+                0f,
+                0f);
+            GUI.Label(new Rect(grip.x + 8f, grip.y + 3f, grip.width - 54f, 18f), "Build", title);
+            if (GUI.Button(new Rect(grip.xMax - 46f, grip.y + 3f, 40f, 18f), "Reset"))
+                ResetBuildMenuLayout();
+
+            var cx = _dockRect.x + BuildPanelPad;
+            var cy = _dockRect.y + BuildDockGripHeight + BuildPanelPad;
+            cy = DrawToolIcons(cx, cy, iconStyle);
+            cy += 2f;
+            DrawFamilyIcons(cx, cy, iconStyle);
+        }
+
+        void DrawFamilyPopout(GUIStyle iconStyle, GUIStyle title, GUIStyle label, StarSystem stars)
+        {
+            var active = ActiveCatalogFamily();
+            if (active == null)
+            {
+                _popoutRect = Rect.zero;
+                return;
+            }
+
+            if (active.Family == BuildFamily.Shops &&
+                !_expandedShopSubgroup.HasValue &&
+                active.Subgroups.Count > 0)
+                _expandedShopSubgroup = active.Subgroups[0].Subgroup;
+
+            var popoutSize = PopoutSize(active);
+            var side = BuildMenuPopoutLayout.ChooseSide(_dockRect, popoutSize, Screen.width, BuildPopoutGap);
+            _popoutRect = HudFloatingPanel.SoftClamp(
+                BuildMenuPopoutLayout.Place(_dockRect, popoutSize, side, BuildPopoutGap),
+                Screen.width,
+                Screen.height);
+
+            GUI.Box(_popoutRect, GUIContent.none);
+            var cx = _popoutRect.x + BuildPanelPad;
+            var cy = _popoutRect.y + BuildPanelPad;
+            var inner = _popoutRect.width - BuildPanelPad * 2f;
+            GUI.Label(new Rect(cx, cy, inner, 20f), active.Label, title);
+            cy += 24f;
+
+            if (active.Family == BuildFamily.Shops)
+            {
+                cy = DrawIconRow(
+                    cy,
+                    active.Subgroups.Count,
+                    MenuStripColumns,
+                    i =>
+                    {
+                        var subgroup = active.Subgroups[i];
+                        var selected = _expandedShopSubgroup == subgroup.Subgroup;
+                        if (DrawPictureButton(
+                                IconRect(cx, cy, i, MenuStripColumns),
+                                MenuIconIdForSubgroup(subgroup.Subgroup),
+                                SubgroupGlyph(subgroup.Subgroup),
+                                $"{active.Label} -> {subgroup.Label}",
+                                FamilyColor(BuildFamily.Shops),
+                                selected,
+                                enabled: true,
+                                iconStyle))
+                            _expandedShopSubgroup = subgroup.Subgroup;
+                    });
+
+                foreach (var subgroup in active.Subgroups)
+                {
+                    if (subgroup.Subgroup != _expandedShopSubgroup) continue;
+                    DrawRoomIconGrid(cx, cy, iconStyle, subgroup.Rooms, stars);
+                    return;
+                }
+            }
+            else
+            {
+                DrawRoomIconGrid(cx, cy, iconStyle, active.Rooms, stars);
+            }
+        }
+
+        void DrawBuildInfoPanel(
+            GUIStyle title,
+            GUIStyle label,
+            StarSystem stars,
+            AgentSystem agents,
+            float row,
+            float btnH)
+        {
+            _infoRect = HudFloatingPanel.SoftClamp(_infoRect, Screen.width, Screen.height);
+            GUI.Box(_infoRect, GUIContent.none);
+
+            var grip = new Rect(_infoRect.x, _infoRect.y, _infoRect.width, BuildDockGripHeight);
+            var wasDragging = _infoDragging;
+            if (HudFloatingPanel.DragGrip(
+                    grip,
+                    ref _infoRect,
+                    Screen.width,
+                    Screen.height,
+                    ref _infoDragging,
+                    ref _infoDragOffset) &&
+                wasDragging &&
+                !_infoDragging)
+                HudFloatingPanel.SaveRect(BuildInfoPrefsKey, _infoRect);
+
+            EnsureWhiteTex();
+            GUI.DrawTexture(
+                grip,
+                _whiteTex,
+                ScaleMode.StretchToFill,
+                false,
+                0f,
+                new Color(0.18f, 0.16f, 0.13f, 0.92f),
+                0f,
+                0f);
+            GUI.Label(new Rect(grip.x + 8f, grip.y + 3f, grip.width - 16f, 18f), "Info", title);
+
+            var cx = _infoRect.x + BuildPanelPad;
+            var cy = _infoRect.y + BuildDockGripHeight + BuildPanelPad;
+            var inner = _infoRect.width - BuildPanelPad * 2f;
+            if (build.SelectedRoom != null)
+            {
+                DrawSelectedRoomInfo(cx, cy, inner, row, btnH, label, stars, agents);
+                return;
+            }
+
+            DrawCatalogPickInfo(cx, cy, inner, row, label);
+        }
+
+        void DrawSelectedRoomInfo(
+            float cx,
+            float cy,
+            float inner,
+            float row,
+            float btnH,
+            GUIStyle label,
+            StarSystem stars,
+            AgentSystem agents)
+        {
+            var selection = build.GetSelectionSummary();
+            if (selection != null)
+            {
+                foreach (var line in selection.Split('\n'))
+                {
+                    GUI.Label(new Rect(cx, cy, inner, row), line, label);
+                    cy += row;
+                }
+            }
+
+            foreach (var line in RoomEconomyFormat.SelectedUnitLines(
+                         build.SelectedRoom,
+                         agents?.Agents,
+                         simulation?.Economy,
+                         simulation?.ShopDemand,
+                         ShopDemandFormat.CountOpenShopsInPool(
+                             build.Grid?.Rooms,
+                             build.SelectedRoom?.Type)))
+            {
+                GUI.Label(new Rect(cx, cy, inner, row), line, label);
+                cy += row;
+            }
+
+            foreach (var line in ConferenceSelectionLines(build.SelectedRoom))
+            {
+                GUI.Label(new Rect(cx, cy, inner, row), line, label);
+                cy += row;
+            }
+
+            if (PricePricing.IsPricedRoom(build.SelectedRoom?.Type))
+                cy = DrawPriceTierButtons(cx, cy, inner, btnH, row, label, stars);
+
+            if (BuildController.IsStaffedServiceRoom(build.SelectedRoom?.Type))
+                cy = DrawStaffStepper(cx, cy, inner, btnH, row, label);
+
+            if (build.SelectedRoom?.Type?.id == EconomySystem.ResearchId)
+                cy = DrawResearchSelection(cx, cy, inner, btnH, row, label);
+
+            var elevStatus = build.GetElevatorStatusText();
+            if (elevStatus == null) return;
+
+            GUI.Label(new Rect(cx, cy, inner, row), $"Elevator: {elevStatus}", label);
+            cy += row;
+            var simElev = simulation?.Elevators?.FindByRoomId(build.SelectedRoom.InstanceId);
+            if (simElev != null)
+            {
+                foreach (var line in ElevatorTrafficLines(simElev))
+                {
+                    GUI.Label(new Rect(cx, cy, inner, row), line, label);
+                    cy += row;
+                }
+            }
+
+            var inMaint = simElev != null && simElev.InMaintenance;
+            var maintLabel = inMaint ? "Exit Maintenance" : "Enter Maintenance";
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), maintLabel))
+                build.TrySetSelectedElevatorMaintenance(!inMaint);
+        }
+
+        void DrawCatalogPickInfo(float cx, float cy, float inner, float row, GUIStyle label)
+        {
+            var room = build.CurrentTool == BuildTool.PlaceRoom ? build.SelectedRoomType : null;
+            if (room != null)
+            {
+                GUI.Label(new Rect(cx, cy, inner, row), room.displayName, label);
+                cy += row;
+                foreach (var economyLine in SelectedEconomyLines(room))
+                {
+                    GUI.Label(new Rect(cx, cy, inner, row), economyLine, label);
+                    cy += row;
+                }
+
+                GUI.Label(new Rect(cx, cy, inner, row), $"Size {room.size.x}x{room.size.y}", label);
+                cy += row;
+            }
+            else if (build.CurrentTool != BuildTool.Select)
+            {
+                GUI.Label(new Rect(cx, cy, inner, row), build.CurrentTool.ToString(), label);
+                cy += row;
+            }
+            else
+            {
+                GUI.Label(new Rect(cx, cy, inner, row), "Select a tool or room.", label);
+                cy += row;
+            }
+
+            var help = string.IsNullOrEmpty(build.HelpText) ? "Pick an icon to start building." : build.HelpText;
+            var helpHeight = Mathf.Clamp(label.CalcHeight(new GUIContent(help), inner), row, row * 4f);
+            GUI.Label(new Rect(cx, cy + 4f, inner, helpHeight), help, label);
+
+            if (!build.HoverCell.HasValue) return;
+            var c = build.HoverCell.Value;
+            var floorLabel = c.y > 0 ? c.y.ToString() : c.y < 0 ? $"B{-c.y}" : "G";
+            GUI.Label(new Rect(cx, cy + helpHeight + 8f, inner, row), $"Cell: ({c.x}, floor {floorLabel})", label);
+        }
+
+        float DrawFamilyIcons(float cx, float cy, GUIStyle iconStyle)
+        {
+            return DrawIconRow(
+                cy,
+                _catalog.Count,
+                MenuStripColumns,
+                i =>
+                {
+                    var family = _catalog[i];
+                    var selected = _expandedFamily == family.Family;
+                    var tip = $"{family.Label}\nClick to {(selected ? "collapse" : "expand")}";
+                    if (DrawPictureButton(
+                            IconRect(cx, cy, i, MenuStripColumns),
+                            MenuIconIdForFamily(family.Family),
+                            FamilyGlyph(family.Family),
+                            tip,
+                            FamilyColor(family.Family),
+                            selected,
+                            enabled: true,
+                            iconStyle))
+                    {
+                        _expandedFamily = selected ? null : family.Family;
+                        if (_expandedFamily != BuildFamily.Shops)
+                            _expandedShopSubgroup = null;
+                    }
+                });
+        }
+
+        BuildCatalogFamily ActiveCatalogFamily()
+        {
+            if (!_expandedFamily.HasValue)
+                return null;
+
+            foreach (var family in _catalog)
+                if (family.Family == _expandedFamily)
+                    return family;
+            return null;
+        }
+
+        static Vector2 PopoutSize(BuildCatalogFamily active)
+        {
+            var count = active.Family == BuildFamily.Shops
+                ? active.Subgroups.Count
+                : active.Rooms.Count;
+            if (active.Family == BuildFamily.Shops)
+            {
+                var maxRooms = 0;
+                foreach (var subgroup in active.Subgroups)
+                    maxRooms = Mathf.Max(maxRooms, subgroup.Rooms.Count);
+                count += maxRooms;
+            }
+
+            var rows = Mathf.Max(1, Mathf.CeilToInt(count / (float)MenuStripColumns));
+            var width = BuildPanelPad * 2f
+                        + MenuStripColumns * MenuIconSize
+                        + (MenuStripColumns - 1) * MenuIconGap;
+            var height = BuildPanelPad * 2f
+                         + 24f
+                         + rows * MenuIconSize
+                         + Mathf.Max(0, rows - 1) * MenuIconGap
+                         + 8f;
+            return new Vector2(width, height);
+        }
+
         void DrawHoverTooltip(GUIStyle label)
         {
             var tip = string.IsNullOrEmpty(_hoverTooltip) ? GUI.tooltip : _hoverTooltip;
@@ -2439,22 +2689,6 @@ namespace BuildATower
             var rect = new Rect(tipX, tipY, width, height);
             GUI.Box(rect, GUIContent.none);
             GUI.Label(new Rect(rect.x + 6f, rect.y + 4f, rect.width - 12f, rect.height - 8f), tip, label);
-        }
-
-        static bool DrawSectionHeader(
-            ref float cy,
-            float cx,
-            float inner,
-            float btnH,
-            GUIStyle style,
-            string name,
-            ref bool open)
-        {
-            var arrow = open ? "▼" : "▶";
-            if (GUI.Button(new Rect(cx, cy, inner, btnH), $"{arrow} {name}", style))
-                open = !open;
-            cy += btnH + 4f;
-            return open;
         }
 
         float DrawIconCatalog(
@@ -2674,7 +2908,11 @@ namespace BuildATower
                             tool.selected,
                             enabled: true,
                             iconStyle))
+                    {
+                        _expandedFamily = null;
+                        _expandedShopSubgroup = null;
                         tool.onClick();
+                    }
                 });
         }
 
