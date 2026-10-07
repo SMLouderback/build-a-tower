@@ -87,6 +87,7 @@ namespace BuildATower
         readonly HashSet<int> _criminalFloorScratch = new();
         System.Action<RoomInstance> _onCondoResidentMovedIn;
         MarketClimate _climate;
+        WeatherSystem _weather;
         CrimeSystem _crime;
         ResearchSystem _research;
         int _nextId = 1;
@@ -135,16 +136,20 @@ namespace BuildATower
             TransitRouter router,
             MarketClimate climate = null,
             StairCapacity stairCapacity = null,
-            ShopDemandSystem shopDemand = null)
+            ShopDemandSystem shopDemand = null,
+            WeatherSystem weather = null)
         {
             _router = router;
             _elevators = router.Elevators;
             _climate = climate;
             _stairCapacity = stairCapacity ?? new StairCapacity(StairCapacity.DefaultCap);
             _shopDemand = shopDemand;
+            _weather = weather;
         }
 
         public void SetClimate(MarketClimate climate) => _climate = climate;
+
+        public void SetWeather(WeatherSystem weather) => _weather = weather;
 
         public void SyncHomes(
             TowerGrid grid,
@@ -1979,6 +1984,18 @@ namespace BuildATower
             BeginTrip(agent, agent.Cell, returnCell, after, grid);
         }
 
+        /// <summary>Per-interval street spawn probability: base x (1 + stars) x atrium x weather, clamped 0..1.</summary>
+        public static float StreetSpawnChance(int stars, float atriumMultiplier, float weatherMultiplier) =>
+            Mathf.Clamp01(
+                StreetSpawnBaseChance *
+                (1 + Mathf.Max(0, stars)) *
+                atriumMultiplier *
+                Mathf.Max(0f, weatherMultiplier));
+
+        /// <summary>Street-visitor disposable multiplier: economic climate stacked with weather.</summary>
+        public static float StreetSpendMultiplier(float climateMultiplier, float weatherMultiplier) =>
+            climateMultiplier * Mathf.Max(0f, weatherMultiplier);
+
         void UpdateStreetTraffic(GameClock clock, TowerGrid grid, int stars, int advancedMinutes)
         {
             if (advancedMinutes <= 0) return;
@@ -1990,10 +2007,11 @@ namespace BuildATower
                 if (CountStreetVisitors() >= MaxConcurrentStreetVisitors) continue;
                 if (FindOpenShops(grid, clock.MinuteOfDay).Count == 0) continue;
 
-                var chance = Mathf.Clamp01(
-                    StreetSpawnBaseChance *
-                    (1 + Mathf.Max(0, stars)) *
-                    AtriumMarketing.StreetSpawnMultiplierFor(grid));
+                var chance = StreetSpawnChance(
+                    stars,
+                    AtriumMarketing.StreetSpawnMultiplierFor(grid),
+                    _weather?.StreetTrafficMultiplier ?? 1f);
+                if (chance <= 0f) continue;
                 if (_rng.NextDouble() >= chance) continue;
 
                 TrySpawnStreetVisitor(grid, clock);
@@ -2011,7 +2029,9 @@ namespace BuildATower
 
             var remaining = AgentWealth.RollDailyDisposable(
                 WealthBand.Street,
-                _climate?.SpendMultiplier ?? 1f,
+                StreetSpendMultiplier(
+                    _climate?.SpendMultiplier ?? 1f,
+                    _weather?.ShopSpendMultiplier ?? 1f),
                 _rng);
             var shop = PickCommercialShop(
                 grid,

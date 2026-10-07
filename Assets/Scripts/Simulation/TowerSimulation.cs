@@ -87,6 +87,7 @@ namespace BuildATower
         TowerNews _news;
         StarSystem _stars;
         MarketClimate _climate;
+        WeatherSystem _weather;
         readonly System.Random _climateRng = new();
         readonly System.Random _conferenceRng = new();
         readonly System.Random _newsRng = new();
@@ -105,6 +106,7 @@ namespace BuildATower
         public TowerNews News => _news;
         public StarSystem Stars => _stars;
         public MarketClimate Climate => _climate;
+        public WeatherSystem Weather => _weather;
         public StairsPathfinder Pathfinder => _pathfinder;
         public ElevatorSystem Elevators => _elevators;
         public TransitRouter Router => _router;
@@ -142,7 +144,8 @@ namespace BuildATower
                 _pathfinder = new StairsPathfinder();
                 _router = new TransitRouter(_pathfinder, _elevators);
                 _shopDemand = new ShopDemandSystem();
-                _agents = new AgentSystem(_router, shopDemand: _shopDemand);
+                _weather = new WeatherSystem();
+                _agents = new AgentSystem(_router, shopDemand: _shopDemand, weather: _weather);
                 _crime = new CrimeSystem();
                 _economy = new EconomySystem();
                 _research = new ResearchSystem();
@@ -255,6 +258,7 @@ namespace BuildATower
         {
             if (build?.Grid == null || _clock == null || _agents == null) return;
             _clock.Tick(Time.deltaTime);
+            _weather?.AdvanceTo(_clock.DayIndex, _clock.MinuteOfDay);
             var research = _research;
             _router?.SetWaitWeightScale(ResearchEffects.ElevatorRoutingWaitWeightScale(research));
             _elevators.Tick(
