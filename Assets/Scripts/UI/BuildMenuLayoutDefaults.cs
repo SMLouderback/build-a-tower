@@ -6,7 +6,7 @@ namespace BuildATower
     {
         const float GripHeight = 24f;
         const float PanelPad = 8f;
-        const float DefaultInfoHeight = 220f;
+        const float DefaultInfoHeight = 280f;
         const float DefaultInfoWidth = 260f;
 
         public static Rect DefaultDock(float screenW, float screenH, int itemCount, float gap = 12f)

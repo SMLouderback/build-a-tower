@@ -133,6 +133,7 @@ namespace BuildATower
         bool _infoDragging;
         Vector2 _dockDragOffset;
         Vector2 _infoDragOffset;
+        Vector2 _infoScroll;
         float _lastBuildInfoTopY = 64f;
         TowerMapController _mapController;
 
@@ -848,7 +849,7 @@ namespace BuildATower
                 PauseUiState.Account => 260f,
                 PauseUiState.Feedback => 440f,
                 PauseUiState.Load => 360f,
-                _ => hasSaveMessage ? 452f : 420f
+                _ => hasSaveMessage ? 488f : 456f
             };
             var panel = new Rect(
                 (Screen.width - panelW) * 0.5f,
@@ -1646,8 +1647,29 @@ namespace BuildATower
             // Large analytics panel sits below the top bar; the build dock now floats over the world.
             var panelX = gap;
             var panelY = barTopY + barH + 4f;
-            var panelW = Mathf.Max(320f, Screen.width - panelX - gap);
+            var panelRight = Screen.width - gap;
+            if (_dockRect.width > 0f && _dockRect.x > Screen.width * 0.5f)
+                panelRight = Mathf.Min(panelRight, _dockRect.x - gap);
+            var panelW = Mathf.Max(240f, panelRight - panelX);
             var panelH = Mathf.Max(280f, Screen.height - panelY - gap);
+
+            var candidate = new Rect(panelX, panelY, panelW, panelH);
+            if (_infoRect.width > 0f && candidate.Overlaps(_infoRect))
+            {
+                var insetX = Mathf.Max(gap, _infoRect.xMax + 8f);
+                var insetW = panelRight - insetX;
+                if (insetW >= 320f)
+                {
+                    panelX = insetX;
+                    panelW = insetW;
+                }
+                else
+                {
+                    panelY = _infoRect.yMax + 4f;
+                    panelW = Mathf.Max(240f, panelRight - panelX);
+                    panelH = Mathf.Max(220f, Screen.height - panelY - gap);
+                }
+            }
 
             _mapsGraphRect = new Rect(panelX, panelY, panelW, panelH);
             EnsureWhiteTex();
@@ -2162,8 +2184,23 @@ namespace BuildATower
 
             var panelH = 68f;
             var w = 320f;
-            var legendX = gap;
-            _mapsLegendRect = new Rect(legendX, barTopY + barH + 4f, w, panelH);
+            var legendY = barTopY + barH + 4f;
+            var maxX = Mathf.Max(gap, Screen.width - gap - w);
+            var legendX = Mathf.Clamp(Mathf.Max(gap, _infoRect.xMax + 8f), gap, maxX);
+            _mapsLegendRect = new Rect(legendX, legendY, w, panelH);
+            var collidesWithInfo = _infoRect.width > 0f && _mapsLegendRect.Overlaps(_infoRect);
+            var collidesWithRightDock = _dockRect.width > 0f &&
+                                        _dockRect.x > Screen.width * 0.5f &&
+                                        _mapsLegendRect.Overlaps(_dockRect);
+            if (collidesWithInfo || collidesWithRightDock)
+            {
+                var belowX = Mathf.Clamp(_infoRect.width > 0f ? _infoRect.x : gap, gap, maxX);
+                var belowY = _infoRect.width > 0f ? _infoRect.yMax + 4f : legendY;
+                _mapsLegendRect = HudFloatingPanel.SoftClamp(
+                    new Rect(belowX, belowY, w, panelH),
+                    Screen.width,
+                    Screen.height);
+            }
             GUI.Box(_mapsLegendRect, GUIContent.none);
 
             var pad = 8f;
@@ -2497,13 +2534,23 @@ namespace BuildATower
             var cx = _infoRect.x + BuildPanelPad;
             var cy = _infoRect.y + BuildDockGripHeight + BuildPanelPad;
             var inner = _infoRect.width - BuildPanelPad * 2f;
+            var viewRect = new Rect(
+                cx,
+                cy,
+                inner,
+                Mathf.Max(1f, _infoRect.height - BuildDockGripHeight - BuildPanelPad * 2f));
+            var bodyInner = Mathf.Max(1f, inner - 18f);
+            var contentRect = new Rect(0f, 0f, bodyInner, 1200f);
+            _infoScroll = GUI.BeginScrollView(viewRect, _infoScroll, contentRect);
             if (build.SelectedRoom != null)
             {
-                DrawSelectedRoomInfo(cx, cy, inner, row, btnH, label, stars, agents);
+                DrawSelectedRoomInfo(0f, 0f, bodyInner, row, btnH, label, stars, agents);
+                GUI.EndScrollView();
                 return;
             }
 
-            DrawCatalogPickInfo(cx, cy, inner, row, label);
+            DrawCatalogPickInfo(0f, 0f, bodyInner, row, label);
+            GUI.EndScrollView();
         }
 
         void DrawSelectedRoomInfo(
@@ -2689,119 +2736,6 @@ namespace BuildATower
             var rect = new Rect(tipX, tipY, width, height);
             GUI.Box(rect, GUIContent.none);
             GUI.Label(new Rect(rect.x + 6f, rect.y + 4f, rect.width - 12f, rect.height - 8f), tip, label);
-        }
-
-        float DrawIconCatalog(
-            float cx,
-            float cy,
-            float inner,
-            float row,
-            GUIStyle iconStyle,
-            StarSystem stars)
-        {
-            GUI.Label(new Rect(cx, cy, inner, row), "Rooms");
-            cy += row;
-
-            cy = DrawIconRow(
-                cy,
-                _catalog.Count,
-                MenuStripColumns,
-                i =>
-                {
-                    var family = _catalog[i];
-                    var selected = _expandedFamily == family.Family;
-                    var tip = $"{family.Label}\nClick to {(selected ? "collapse" : "expand")}";
-                    if (DrawPictureButton(
-                            IconRect(cx, cy, i, MenuStripColumns),
-                            MenuIconIdForFamily(family.Family),
-                            FamilyGlyph(family.Family),
-                            tip,
-                            FamilyColor(family.Family),
-                            selected,
-                            enabled: true,
-                            iconStyle))
-                    {
-                        _expandedFamily = selected ? null : family.Family;
-                        if (_expandedFamily != BuildFamily.Shops)
-                            _expandedShopSubgroup = null;
-                    }
-                });
-
-            if (!_expandedFamily.HasValue)
-                return cy;
-
-            BuildCatalogFamily active = null;
-            foreach (var family in _catalog)
-            {
-                if (family.Family == _expandedFamily)
-                {
-                    active = family;
-                    break;
-                }
-            }
-
-            if (active == null)
-                return cy;
-
-            // Clear separator + title above the expanded units list.
-            cy += 6f;
-            EnsureWhiteTex();
-            var rule = new Color(1f, 1f, 1f, 0.28f);
-            GUI.DrawTexture(
-                new Rect(cx, cy, inner, 1f),
-                _whiteTex,
-                ScaleMode.StretchToFill,
-                false,
-                0f,
-                rule,
-                0f,
-                0f);
-            cy += 6f;
-            var unitsTitle = active.Family == BuildFamily.Shops && _expandedShopSubgroup.HasValue
-                ? $"{active.Label} · {_expandedShopSubgroup}"
-                : $"{active.Label} units";
-            GUI.Label(new Rect(cx, cy, inner, row), unitsTitle);
-            cy += row;
-
-            if (active.Family == BuildFamily.Shops)
-            {
-                cy = DrawIconRow(
-                    cy,
-                    active.Subgroups.Count,
-                    MenuStripColumns,
-                    i =>
-                    {
-                        var subgroup = active.Subgroups[i];
-                        var selected = _expandedShopSubgroup == subgroup.Subgroup;
-                        var tip = $"{active.Label} → {subgroup.Label}";
-                        if (DrawPictureButton(
-                                IconRect(cx, cy, i, MenuStripColumns),
-                                MenuIconIdForSubgroup(subgroup.Subgroup),
-                                SubgroupGlyph(subgroup.Subgroup),
-                                tip,
-                                FamilyColor(BuildFamily.Shops),
-                                selected,
-                                enabled: true,
-                                iconStyle))
-                            _expandedShopSubgroup = selected ? null : subgroup.Subgroup;
-                    });
-
-                if (_expandedShopSubgroup.HasValue)
-                {
-                    foreach (var subgroup in active.Subgroups)
-                    {
-                        if (subgroup.Subgroup != _expandedShopSubgroup) continue;
-                        cy = DrawRoomIconGrid(cx, cy, iconStyle, subgroup.Rooms, stars);
-                        break;
-                    }
-                }
-            }
-            else
-            {
-                cy = DrawRoomIconGrid(cx, cy, iconStyle, active.Rooms, stars);
-            }
-
-            return cy;
         }
 
         float DrawRoomIconGrid(
