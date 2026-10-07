@@ -401,8 +401,19 @@ namespace BuildATower
             BuildMenuLayoutDefaults.DefaultDock(
                 Screen.width,
                 Screen.height,
-                BuildToolIconCount + _catalog.Count,
+                BuildToolIconCount,
+                _catalog.Count,
                 edgeGapPixels);
+
+        void FitDockHeightToContent()
+        {
+            var needed = BuildMenuLayoutDefaults.DockContentHeight(BuildToolIconCount, _catalog.Count);
+            if (_dockRect.height + 0.5f >= needed)
+                return;
+            _dockRect.height = needed;
+            _dockRect = HudFloatingPanel.SoftClamp(_dockRect, Screen.width, Screen.height);
+            _panelRect = _dockRect;
+        }
 
         Rect DefaultInfoRect() =>
             BuildMenuLayoutDefaults.DefaultInfo(
@@ -2393,12 +2404,14 @@ namespace BuildATower
 
         void DrawBuildDock(GUIStyle iconStyle, GUIStyle title, GUIStyle label)
         {
+            FitDockHeightToContent();
             _dockRect = HudFloatingPanel.SoftClamp(_dockRect, Screen.width, Screen.height);
             _panelRect = _dockRect;
             GUI.Box(_dockRect, GUIContent.none);
 
             var grip = new Rect(_dockRect.x, _dockRect.y, _dockRect.width, BuildDockGripHeight);
-            var dragGrip = new Rect(grip.x, grip.y, grip.width - 52f, grip.height);
+            var resetW = 48f;
+            var dragGrip = new Rect(grip.x, grip.y, Mathf.Max(24f, grip.width - resetW - 6f), grip.height);
             var wasDragging = _dockDragging;
             if (HudFloatingPanel.DragGrip(
                     dragGrip,
@@ -2421,8 +2434,8 @@ namespace BuildATower
                 new Color(0.18f, 0.16f, 0.13f, 0.92f),
                 0f,
                 0f);
-            GUI.Label(new Rect(grip.x + 8f, grip.y + 3f, grip.width - 54f, 18f), "Build", title);
-            if (GUI.Button(new Rect(grip.xMax - 46f, grip.y + 3f, 40f, 18f), "Reset"))
+            GUI.Label(new Rect(grip.x + 8f, grip.y + 3f, grip.width - resetW - 12f, 18f), "Build", title);
+            if (GUI.Button(new Rect(grip.xMax - resetW - 4f, grip.y + 3f, resetW, 18f), "Reset"))
                 ResetBuildMenuLayout();
 
             var cx = _dockRect.x + BuildPanelPad;

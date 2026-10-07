@@ -21,13 +21,30 @@ namespace BuildATower.Tests
             const float screenW = 1920f;
             const float screenH = 1080f;
             const float gap = 12f;
-            const int itemCount = 12;
 
-            var dock = BuildMenuLayoutDefaults.DefaultDock(screenW, screenH, itemCount, gap);
+            var dock = BuildMenuLayoutDefaults.DefaultDock(screenW, screenH, toolCount: 5, familyCount: 7, gap);
 
             Assert.LessOrEqual(Mathf.Abs(screenW - dock.xMax - gap), 0.01f);
             Assert.Greater(dock.width, 0f);
             Assert.Greater(dock.height, 0f);
+        }
+
+        [Test]
+        public void DockContentHeight_accounts_for_separate_tool_and_family_grids()
+        {
+            // 5 tools = 3 rows, 7 families = 4 rows (7 total) vs one continuous 12-icon grid (6 rows)
+            var splitStrips = BuildMenuLayoutDefaults.IconStripHeight(5)
+                              + BuildMenuLayoutDefaults.IconStripHeight(7);
+            var continuousStrip = BuildMenuLayoutDefaults.IconStripHeight(12);
+            Assert.Greater(splitStrips, continuousStrip);
+
+            var expected = BuildMenuLayoutDefaults.GripHeight
+                           + BuildMenuLayoutDefaults.PanelPad
+                           + BuildMenuLayoutDefaults.IconStripHeight(5)
+                           + BuildMenuLayoutDefaults.SectionGap
+                           + BuildMenuLayoutDefaults.IconStripHeight(7)
+                           + BuildMenuLayoutDefaults.PanelPad;
+            Assert.AreEqual(expected, BuildMenuLayoutDefaults.DockContentHeight(5, 7), 0.01f);
         }
 
         [Test]
