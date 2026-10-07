@@ -43,6 +43,25 @@ namespace BuildATower
         float _midTileW = 32f;
         float _grassTileW = 24f;
         float _treeTileW = 24f;
+        float _treeScale = 1f;
+        TowerSimulation _sim;
+        Season _treeSeason = Season.Summer;
+        readonly Dictionary<Season, Sprite> _treeSprites = new();
+
+        /// <summary>
+        /// Resources key for the near-tree plate of a season. Summer doubles as the
+        /// fallback plate when a seasonal plate is missing.
+        /// </summary>
+        public static string TreeResourceFor(Season season)
+        {
+            switch (season)
+            {
+                case Season.Winter: return "Art/Parallax/near_trees_winter";
+                case Season.Spring: return "Art/Parallax/near_trees_spring";
+                case Season.Fall: return "Art/Parallax/near_trees_fall";
+                default: return "Art/Parallax/near_trees";
+            }
+        }
 
         void Start()
         {
@@ -101,6 +120,16 @@ namespace BuildATower
                 out _treeRenderers,
                 out _treeTileW);
 
+            // Remember the summer sprite + strip scale so seasonal plates swap in place.
+            if (_treeRenderers != null && _treeRenderers.Length > 0 && _treeRenderers[0] != null)
+            {
+                _treeSprites[Season.Summer] = _treeRenderers[0].sprite;
+                _treeScale = _treeRenderers[0].transform.localScale.x;
+            }
+
+            _treeSeason = CurrentSeason();
+            ApplyTreeSeason(_treeSeason);
+
             if (targetCamera != null)
                 _lastCamX = targetCamera.transform.position.x;
         }
@@ -125,12 +154,58 @@ namespace BuildATower
             if (_grass != null) _grass.position = new Vector3(cam.x + _grassOff, groundY, 0f);
             if (_trees != null) _trees.position = new Vector3(cam.x + _treeOff, groundY, 0f);
 
+            var season = CurrentSeason();
+            if (season != _treeSeason)
+            {
+                _treeSeason = season;
+                ApplyTreeSeason(season); // hard swap, no crossfade
+            }
+
             ApplyDaylightTint();
+        }
+
+        TowerSimulation Sim()
+        {
+            if (_sim == null) _sim = FindAnyObjectByType<TowerSimulation>();
+            return _sim;
+        }
+
+        Season CurrentSeason()
+        {
+            var sim = Sim();
+            if (sim == null) return Season.Summer;
+            if (sim.Weather != null) return sim.Weather.CurrentSeason;
+            var clock = sim.Clock;
+            return clock == null
+                ? Season.Summer
+                : SeasonUtil.FromMonth(GameClock.DateForDayIndex(clock.DayIndex).Month);
+        }
+
+        void ApplyTreeSeason(Season season)
+        {
+            if (_treeRenderers == null) return;
+            if (!_treeSprites.TryGetValue(season, out var sprite))
+            {
+                sprite = LoadSprite(TreeResourceFor(season), PlateMode.TreesAlpha);
+                // Missing seasonal art -> keep the summer plate.
+                if (sprite == null) _treeSprites.TryGetValue(Season.Summer, out sprite);
+                _treeSprites[season] = sprite;
+            }
+
+            if (sprite == null) return;
+            for (var i = 0; i < _treeRenderers.Length; i++)
+            {
+                var sr = _treeRenderers[i];
+                if (sr == null) continue;
+                sr.sprite = sprite;
+                sr.transform.localScale = new Vector3(_treeScale, _treeScale, 1f);
+            }
         }
 
         void ApplyDaylightTint()
         {
-            var clock = FindAnyObjectByType<TowerSimulation>()?.Clock;
+            var sim = Sim();
+            var clock = sim?.Clock;
             var sky = DayNightSky.ColorAt(clock);
             var dayAmt = Mathf.Clamp01(
                 Vector3.Dot(new Vector3(sky.r, sky.g, sky.b), new Vector3(0.3f, 0.5f, 0.2f)) /
@@ -143,10 +218,25 @@ namespace BuildATower
                 new Color(0.22f, 0.32f, 0.18f, 1f),
                 new Color(0.55f, 0.72f, 0.38f, 1f),
                 dayAmt);
+            // Non-summer tree plates carry their own hue; use a neutral day tint so
+            // fall reds / spring pinks aren't muddied by the green summer multiplier.
+            var treeTint = _treeSeason == Season.Summer
+                ? vegTint
+                : Color.Lerp(
+                    new Color(0.30f, 0.30f, 0.34f, 1f),
+                    new Color(0.80f, 0.80f, 0.76f, 1f),
+                    dayAmt);
+
+            // Weather darkens / desaturates the backdrop like the sky (no lightning flash on
+            // the backdrop itself: WeatherFx owns the flash overlay).
+            var kind = sim?.Weather != null ? sim.Weather.Kind : WeatherKind.Clear;
+            midTint = DayNightSky.ApplyWeather(midTint, kind);
+            vegTint = DayNightSky.ApplyWeather(vegTint, kind);
+            treeTint = DayNightSky.ApplyWeather(treeTint, kind);
 
             SetTint(_midRenderers, midTint);
             SetTint(_grassRenderers, vegTint);
-            SetTint(_treeRenderers, vegTint);
+            SetTint(_treeRenderers, treeTint);
         }
 
         static void SetTint(SpriteRenderer[] renderers, Color tint)
@@ -256,7 +346,15 @@ namespace BuildATower
                 // Keep alpha — city/grass show through canopy gaps.
             }
 
-            if (!TryContentBounds(px, w, h, out var minX, out var minY, out var maxX, out var maxY))
+            var hasBounds = TryContentBounds(px, w, h, out var minX, out var minY, out var maxX, out var maxY);
+            if (hasBounds && mode == PlateMode.TreesAlpha)
+            {
+                // Keep full plate width so every season tiles with identical width/spacing.
+                minX = 0;
+                maxX = w - 1;
+            }
+
+            if (!hasBounds)
             {
                 runtime.SetPixels(px);
                 runtime.Apply(false, false);
