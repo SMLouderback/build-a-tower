@@ -136,6 +136,7 @@ namespace BuildATower
 
             EnsureDayNightSkyController();
             ParallaxBackdrop.EnsureInScene();
+            WeatherFx.EnsureInScene();
 
             if (_clock == null)
             {

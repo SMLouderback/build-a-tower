@@ -24,7 +24,13 @@ namespace BuildATower
             if (simulation == null)
                 simulation = FindAnyObjectByType<TowerSimulation>();
 
-            targetCamera.backgroundColor = DayNightSky.ColorAt(simulation?.Clock);
+            var kind = simulation != null && simulation.Weather != null
+                ? simulation.Weather.Kind
+                : WeatherKind.Clear;
+            targetCamera.backgroundColor = DayNightSky.ApplyWeather(
+                DayNightSky.ColorAt(simulation?.Clock),
+                kind,
+                WeatherFx.LightningPulse01);
         }
     }
 }
