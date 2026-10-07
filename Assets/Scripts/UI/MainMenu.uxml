@@ -15,82 +15,95 @@
         <ui:Button name="btn-feedback" text="Feedback" class="menu-button" />
         <ui:Button name="btn-contact" text="Contact Us" class="menu-button" />
         <ui:Button name="btn-about" text="About" class="menu-button" />
+        <ui:Button name="btn-reset-layout" text="Reset Layout" class="menu-button secondary" />
         <ui:Button name="btn-exit" text="Exit" class="menu-button secondary" />
       </ui:VisualElement>
 
       <ui:VisualElement name="panel-local-saves" class="panel-body panel-saves hidden">
-        <ui:Label text="Load Game" class="panel-title" />
-        <ui:Label name="local-saves-empty" text="No local saves yet." class="body hidden" />
-        <ui:ScrollView name="local-saves-list" class="saves-scroll">
-          <ui:VisualElement name="local-saves-rows" class="saves-rows" />
-        </ui:ScrollView>
-        <ui:Button name="btn-local-saves-back" text="Back" class="menu-button secondary" />
+        <ui:VisualElement class="panel-scroll">
+          <ui:Label text="Load Game" class="panel-title" />
+          <ui:Label name="local-saves-empty" text="No local saves yet." class="body hidden" />
+          <ui:ScrollView name="local-saves-list" class="saves-scroll">
+            <ui:VisualElement name="local-saves-rows" class="saves-rows" />
+          </ui:ScrollView>
+        </ui:VisualElement>
+        <ui:Button name="btn-local-saves-back" text="Back to Main Menu" class="menu-button secondary panel-back" />
       </ui:VisualElement>
 
       <ui:VisualElement name="panel-account" class="panel-body panel-account hidden">
-        <ui:Label text="Account" class="panel-title" />
-        <ui:Label name="account-status" text="Sign in to use three cloud save slots. Local saves still work offline." class="body account-status" />
-        <ui:TextField name="account-email" label="Email" class="account-field" />
-        <ui:TextField name="account-password" label="Password" password="true" class="account-field" />
-        <ui:TextField name="account-invite" label="Invite code" class="account-field" />
-        <ui:TextField name="account-verify-token" label="Verify code" class="account-field" />
-        <ui:Button name="btn-account-login" text="Log In" class="menu-button" />
-        <ui:Button name="btn-account-register" text="Register" class="menu-button" />
-        <ui:Button name="btn-account-verify" text="Verify Email" class="menu-button" />
-        <ui:Button name="btn-account-forgot" text="Forgot Password" class="menu-button secondary" />
-        <ui:Button name="btn-account-back" text="Back" class="menu-button secondary" />
+        <ui:ScrollView class="panel-scroll">
+          <ui:Label text="Account" class="panel-title" />
+          <ui:Label name="account-status" text="Sign in to use three cloud save slots. Local saves still work offline." class="body account-status" />
+          <ui:TextField name="account-email" label="Email" class="account-field" />
+          <ui:TextField name="account-password" label="Password" password="true" class="account-field" />
+          <ui:TextField name="account-invite" label="Invite code" class="account-field" />
+          <ui:TextField name="account-verify-token" label="Verify code" class="account-field" />
+          <ui:Button name="btn-account-login" text="Log In" class="menu-button" />
+          <ui:Button name="btn-account-register" text="Register" class="menu-button" />
+          <ui:Button name="btn-account-verify" text="Verify Email" class="menu-button" />
+          <ui:Button name="btn-account-forgot" text="Forgot Password" class="menu-button secondary" />
+        </ui:ScrollView>
+        <ui:Button name="btn-account-back" text="Back to Main Menu" class="menu-button secondary panel-back" />
       </ui:VisualElement>
 
       <ui:VisualElement name="panel-feedback" class="panel-body panel-feedback hidden">
-        <ui:Label text="Feedback" class="panel-title" />
-        <ui:TextField name="feedback-note" label="Note" multiline="true" class="feedback-field feedback-note" />
-        <ui:TextField name="feedback-name" label="Name" class="feedback-field" />
-        <ui:TextField name="feedback-email" label="Email" class="feedback-field" />
-        <ui:Label text="Optional — only if you want a reply." class="body feedback-hint" />
-        <ui:Label name="feedback-status" text="" class="body feedback-status" />
-        <ui:Button name="btn-feedback-send" text="Send" class="menu-button" />
-        <ui:Button name="btn-feedback-facebook" text="Message on Facebook" class="menu-button" />
-        <ui:Button name="btn-feedback-back" text="Back" class="menu-button secondary" />
+        <ui:ScrollView class="panel-scroll">
+          <ui:Label text="Feedback" class="panel-title" />
+          <ui:TextField name="feedback-note" label="Note" multiline="true" class="feedback-field feedback-note" />
+          <ui:TextField name="feedback-name" label="Name" class="feedback-field" />
+          <ui:TextField name="feedback-email" label="Email" class="feedback-field" />
+          <ui:Label text="Optional - only if you want a reply." class="body feedback-hint" />
+          <ui:Label name="feedback-status" text="" class="body feedback-status" />
+          <ui:Button name="btn-feedback-send" text="Send" class="menu-button" />
+          <ui:Button name="btn-feedback-facebook" text="Message on Facebook" class="menu-button" />
+        </ui:ScrollView>
+        <ui:Button name="btn-feedback-back" text="Back to Main Menu" class="menu-button secondary panel-back" />
       </ui:VisualElement>
 
       <ui:VisualElement name="panel-difficulty" class="panel-body hidden">
-        <ui:Label text="Choose difficulty" class="panel-title" />
-        <ui:Button name="btn-diff-sandbox" class="menu-button difficulty-button">
-          <ui:Label text="Sandbox" class="diff-name" />
-          <ui:Label text="Free builds — test layouts without money pressure." class="diff-hint" />
-        </ui:Button>
-        <ui:Button name="btn-diff-easy" class="menu-button difficulty-button">
-          <ui:Label text="Easy" class="diff-name" />
-          <ui:Label text="More starting cash; cheaper builds; stronger income." class="diff-hint" />
-        </ui:Button>
-        <ui:Button name="btn-diff-normal" class="menu-button difficulty-button">
-          <ui:Label text="Normal" class="diff-name" />
-          <ui:Label text="Tuned baseline." class="diff-hint" />
-        </ui:Button>
-        <ui:Button name="btn-diff-hard" class="menu-button difficulty-button">
-          <ui:Label text="Hard" class="diff-name" />
-          <ui:Label text="Tighter cash; costlier builds; weaker income." class="diff-hint" />
-        </ui:Button>
-        <ui:Button name="btn-diff-extreme" class="menu-button difficulty-button">
-          <ui:Label text="Extreme" class="diff-name" />
-          <ui:Label text="Scarce cash; expensive builds; lean income." class="diff-hint" />
-        </ui:Button>
-        <ui:Button name="btn-diff-back" text="Back" class="menu-button secondary" />
+        <ui:ScrollView class="panel-scroll">
+          <ui:Label text="Choose difficulty" class="panel-title" />
+          <ui:Button name="btn-diff-sandbox" class="menu-button difficulty-button">
+            <ui:Label text="Sandbox" class="diff-name" />
+            <ui:Label text="Free builds - test layouts without money pressure." class="diff-hint" />
+          </ui:Button>
+          <ui:Button name="btn-diff-easy" class="menu-button difficulty-button">
+            <ui:Label text="Easy" class="diff-name" />
+            <ui:Label text="More starting cash; cheaper builds; stronger income." class="diff-hint" />
+          </ui:Button>
+          <ui:Button name="btn-diff-normal" class="menu-button difficulty-button">
+            <ui:Label text="Normal" class="diff-name" />
+            <ui:Label text="Tuned baseline." class="diff-hint" />
+          </ui:Button>
+          <ui:Button name="btn-diff-hard" class="menu-button difficulty-button">
+            <ui:Label text="Hard" class="diff-name" />
+            <ui:Label text="Tighter cash; costlier builds; weaker income." class="diff-hint" />
+          </ui:Button>
+          <ui:Button name="btn-diff-extreme" class="menu-button difficulty-button">
+            <ui:Label text="Extreme" class="diff-name" />
+            <ui:Label text="Scarce cash; expensive builds; lean income." class="diff-hint" />
+          </ui:Button>
+        </ui:ScrollView>
+        <ui:Button name="btn-diff-back" text="Back to Main Menu" class="menu-button secondary panel-back" />
       </ui:VisualElement>
 
       <ui:VisualElement name="panel-contact" class="panel-body hidden">
-        <ui:Label text="Contact Us" class="panel-title" />
-        <ui:Button name="btn-email" text="escapemobileproductions@gmail.com" class="menu-button" />
-        <ui:Button name="btn-website" text="https://escapeproductions.biz/" class="menu-button" />
-        <ui:Button name="btn-contact-back" text="Back" class="menu-button secondary" />
+        <ui:ScrollView class="panel-scroll">
+          <ui:Label text="Contact Us" class="panel-title" />
+          <ui:Button name="btn-email" text="escapemobileproductions@gmail.com" class="menu-button" />
+          <ui:Button name="btn-website" text="https://escapeproductions.biz/" class="menu-button" />
+        </ui:ScrollView>
+        <ui:Button name="btn-contact-back" text="Back to Main Menu" class="menu-button secondary panel-back" />
       </ui:VisualElement>
 
       <ui:VisualElement name="panel-about" class="panel-body hidden">
-        <ui:Label text="About" class="panel-title" />
-        <ui:Label name="about-blurb" text="Build-A-Tower is a SimTower-inspired skyscraper builder. Place rooms, house tenants and guests, manage transit, and grow your star rating." class="body" />
-        <ui:Label name="about-version" text="Version" class="body" />
-        <ui:Label name="about-copyright" text="뿯½ 2026 Escape Productions. All rights reserved." class="body" />
-        <ui:Button name="btn-about-back" text="Back" class="menu-button secondary" />
+        <ui:ScrollView class="panel-scroll">
+          <ui:Label text="About" class="panel-title" />
+          <ui:Label name="about-blurb" text="Build-A-Tower is a SimTower-inspired skyscraper builder. Place rooms, house tenants and guests, manage transit, and grow your star rating." class="body" />
+          <ui:Label name="about-version" text="Version" class="body" />
+          <ui:Label name="about-copyright" text="(c) 2026 Escape Productions. All rights reserved." class="body" />
+        </ui:ScrollView>
+        <ui:Button name="btn-about-back" text="Back to Main Menu" class="menu-button secondary panel-back" />
       </ui:VisualElement>
     </ui:VisualElement>
 

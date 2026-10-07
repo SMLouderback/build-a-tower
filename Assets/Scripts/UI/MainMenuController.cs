@@ -133,6 +133,12 @@ namespace BuildATower
 
             ApplyLobbyAtmosphere(root);
 
+            if (_screen != null)
+            {
+                _screen.focusable = true;
+                _screen.tabIndex = 0;
+            }
+
             var saveButton = root.Q<Button>("btn-save-game");
             if (saveButton != null)
             {
@@ -148,6 +154,7 @@ namespace BuildATower
                 root.Q<Button>("btn-feedback")?.RegisterCallback<ClickEvent>(_ => ShowFeedbackPanel());
                 root.Q<Button>("btn-contact")?.RegisterCallback<ClickEvent>(_ => ShowOnly(_panelContact));
                 root.Q<Button>("btn-about")?.RegisterCallback<ClickEvent>(_ => ShowAbout());
+                root.Q<Button>("btn-reset-layout")?.RegisterCallback<ClickEvent>(_ => ResetBuildHudLayout());
                 root.Q<Button>("btn-exit")?.RegisterCallback<ClickEvent>(_ => RequestExit());
 
                 root.Q<Button>("btn-diff-sandbox")?.RegisterCallback<ClickEvent>(_ => StartTower(GameDifficulty.Sandbox));
@@ -176,10 +183,37 @@ namespace BuildATower
                 root.Q<Button>("btn-dialog-ok")?.RegisterCallback<ClickEvent>(_ => HideDialog());
                 root.Q<Button>("btn-exit-confirm")?.RegisterCallback<ClickEvent>(_ => ConfirmExit());
                 root.Q<Button>("btn-exit-cancel")?.RegisterCallback<ClickEvent>(_ => CancelExit());
+                root.RegisterCallback<KeyDownEvent>(OnRootKeyDown);
                 _callbacksBound = true;
             }
 
             ShowOnly(_panelRoot);
+        }
+
+        void OnRootKeyDown(KeyDownEvent evt)
+        {
+            if (evt == null || evt.keyCode != KeyCode.Escape)
+                return;
+
+            if (_panelExit != null && !_panelExit.ClassListContains("hidden"))
+            {
+                CancelExit();
+                evt.StopPropagation();
+                return;
+            }
+
+            if (_panelDialog != null && !_panelDialog.ClassListContains("hidden"))
+            {
+                HideDialog();
+                evt.StopPropagation();
+                return;
+            }
+
+            if (_panelRoot != null && _panelRoot.ClassListContains("hidden"))
+            {
+                ShowOnly(_panelRoot);
+                evt.StopPropagation();
+            }
         }
 
         public void ShowLocalSavesPanel()
@@ -269,6 +303,13 @@ namespace BuildATower
             if (_aboutVersion != null)
                 _aboutVersion.text = $"Version {Application.version}";
             ShowOnly(_panelAbout);
+        }
+
+        void ResetBuildHudLayout()
+        {
+            HudFloatingPanel.ClearRect("bat.buildDock");
+            HudFloatingPanel.ClearRect("bat.buildInfo");
+            ShowDialog("Build menu layout reset. Dock and info panel will return to defaults next time you enter a tower.");
         }
 
         void ShowDialog(string message)
