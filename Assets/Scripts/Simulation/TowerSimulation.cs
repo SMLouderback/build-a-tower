@@ -190,6 +190,7 @@ namespace BuildATower
                 _stars.ForceStars(pending.stars);
                 if (pending.research != null)
                     _research.RestoreSnapshot(pending.research);
+                _weather.RestoreSnapshot(pending.weather, _clock.DayIndex, _clock.MinuteOfDay);
             }
             catch (ArgumentException)
             {

@@ -158,6 +158,103 @@ namespace BuildATower
             _segmentEnd = start + durationMinutes;
         }
 
+        public WeatherSnapshotV1 CaptureSnapshot() => new WeatherSnapshotV1
+        {
+            kind = Kind.ToString(),
+            segmentEndDayIndex = SegmentEndDayIndex,
+            segmentEndMinuteOfDay = SegmentEndMinuteOfDay,
+            hangover = Hangover.ToString(),
+            hangoverEndDayIndex = HangoverEndDayIndex
+        };
+
+        /// <summary>
+        /// Restore from a save. <paramref name="snapshot"/> null (older saves) → a fresh Clear segment
+        /// starting at the given time. Throws <see cref="ArgumentException"/> on invalid data.
+        /// </summary>
+        public void RestoreSnapshot(WeatherSnapshotV1 snapshot, int dayIndex, int minuteOfDay)
+        {
+            var now = Absolute(dayIndex, minuteOfDay);
+            CurrentSeason = SeasonForDay(dayIndex);
+            _started = true;
+
+            if (IsAbsent(snapshot))
+            {
+                Kind = WeatherKind.Clear;
+                Hangover = WeatherHangover.None;
+                HangoverEndDayIndex = 0;
+                _segmentStart = now;
+                _segmentEnd = now + MinSegmentMinutes;
+                return;
+            }
+
+            if (!TryValidateSnapshot(snapshot, out var error))
+                throw new ArgumentException(error, nameof(snapshot));
+
+            Enum.TryParse(snapshot.kind, false, out WeatherKind kind);
+            Enum.TryParse(snapshot.hangover, false, out WeatherHangover hangover);
+
+            Kind = kind;
+            Hangover = hangover;
+            HangoverEndDayIndex = hangover == WeatherHangover.None ? 0 : snapshot.hangoverEndDayIndex;
+            _segmentEnd = Absolute(snapshot.segmentEndDayIndex, snapshot.segmentEndMinuteOfDay);
+            _segmentStart = Math.Min(now, _segmentEnd);
+        }
+
+        /// <summary>
+        /// True for older saves with no weather block. <c>JsonUtility</c> materializes a missing
+        /// serializable class as an all-default object, so blank kind and hangover count as absent too.
+        /// </summary>
+        public static bool IsAbsent(WeatherSnapshotV1 snapshot) =>
+            snapshot == null
+            || (string.IsNullOrEmpty(snapshot.kind) && string.IsNullOrEmpty(snapshot.hangover));
+
+        public static bool TryValidateSnapshot(WeatherSnapshotV1 snapshot, out string error)
+        {
+            if (snapshot == null)
+            {
+                error = "Weather snapshot is missing.";
+                return false;
+            }
+
+            if (!TryParseDefined(snapshot.kind, out WeatherKind _))
+            {
+                error = "Weather kind is unknown.";
+                return false;
+            }
+
+            if (!TryParseDefined(snapshot.hangover, out WeatherHangover _))
+            {
+                error = "Weather hangover is unknown.";
+                return false;
+            }
+
+            if (snapshot.segmentEndDayIndex < 0
+                || snapshot.segmentEndMinuteOfDay < 0
+                || snapshot.segmentEndMinuteOfDay >= MinutesPerDay)
+            {
+                error = "Weather segment end is out of range.";
+                return false;
+            }
+
+            if (snapshot.hangoverEndDayIndex < 0)
+            {
+                error = "Weather hangover end day is out of range.";
+                return false;
+            }
+
+            error = null;
+            return true;
+        }
+
+        static bool TryParseDefined<T>(string value, out T result) where T : struct, Enum
+        {
+            result = default;
+            return !string.IsNullOrEmpty(value)
+                   && Enum.TryParse(value, false, out result)
+                   && Enum.IsDefined(typeof(T), result)
+                   && string.Equals(Enum.GetName(typeof(T), result), value, StringComparison.Ordinal);
+        }
+
         /// <summary>Roll a bucket with Fair 75 / Cloudy 10 / Wet 10 / Severe 5.</summary>
         public static WeatherBucket RollBucket(Random rng)
         {

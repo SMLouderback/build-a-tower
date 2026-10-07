@@ -61,6 +61,7 @@ namespace BuildATower
                         activeLevel = 0,
                         paused = false
                     },
+                weather = simulation.Weather?.CaptureSnapshot(),
                 rooms = build.Grid.CaptureRooms(Time.realtimeSinceStartup).ToArray()
             };
         }
@@ -90,6 +91,10 @@ namespace BuildATower
             if (snapshot.research != null
                 && !ResearchSystem.TryValidateSnapshot(snapshot.research, out _))
                 return Failure(SnapshotValidationError.InvalidResearch, "The saved research state is invalid.");
+
+            if (!WeatherSystem.IsAbsent(snapshot.weather)
+                && !WeatherSystem.TryValidateSnapshot(snapshot.weather, out _))
+                return Failure(SnapshotValidationError.InvalidWeather, "The saved weather state is invalid.");
 
             return SnapshotValidationResult.Succeeded();
         }

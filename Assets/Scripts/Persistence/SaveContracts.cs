@@ -46,7 +46,21 @@ namespace BuildATower
         public string gameVersion;
         public ClockSnapshotV1 clock;
         public ResearchSnapshotV1 research;
+        /// <summary>Optional: null (older saves) restores default Clear weather.</summary>
+        public WeatherSnapshotV1 weather;
         public RoomSnapshotV1[] rooms;
+    }
+
+    [Serializable]
+    public sealed class WeatherSnapshotV1
+    {
+        /// <summary><see cref="WeatherKind"/> enum name.</summary>
+        public string kind;
+        public int segmentEndDayIndex;
+        public int segmentEndMinuteOfDay;
+        /// <summary><see cref="WeatherHangover"/> enum name.</summary>
+        public string hangover;
+        public int hangoverEndDayIndex;
     }
 
     [Serializable]
@@ -176,7 +190,8 @@ namespace BuildATower
         InvalidClock,
         InvalidStars,
         NullRooms,
-        InvalidResearch
+        InvalidResearch,
+        InvalidWeather
     }
 
     public sealed class SnapshotValidationResult
