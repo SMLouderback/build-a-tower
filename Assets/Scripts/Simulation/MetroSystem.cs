@@ -83,5 +83,94 @@ namespace BuildATower
         }
 
         public void Clear() => _stations.Clear();
+
+        public MetroSnapshotV1 CaptureSnapshot()
+        {
+            var stations = new MetroStationFootprintV1[_stations.Count];
+            for (var i = 0; i < _stations.Count; i++)
+            {
+                var footprint = _stations[i];
+                stations[i] = new MetroStationFootprintV1
+                {
+                    x = footprint.x,
+                    y = footprint.y,
+                    width = footprint.width,
+                    height = footprint.height
+                };
+            }
+
+            return new MetroSnapshotV1
+            {
+                stations = stations,
+                hasTunnel = HasTunnel
+            };
+        }
+
+        /// <summary>
+        /// Restore station footprints. Null or an absent legacy block clears the metro.
+        /// Throws <see cref="ArgumentException"/> when the snapshot is present but invalid.
+        /// </summary>
+        public void RestoreSnapshot(MetroSnapshotV1 snapshot)
+        {
+            Clear();
+            if (IsAbsent(snapshot))
+                return;
+
+            if (!TryValidateSnapshot(snapshot, out var error))
+                throw new ArgumentException(error ?? "Metro snapshot is invalid.", nameof(snapshot));
+
+            for (var i = 0; i < snapshot.stations.Length; i++)
+            {
+                var station = snapshot.stations[i];
+                RegisterStation(new RectInt(station.x, station.y, station.width, station.height));
+            }
+        }
+
+        /// <summary>
+        /// True for older saves with no metro block. <c>JsonUtility</c> materializes a missing
+        /// serializable class as an all-default object, so a null station list and no tunnel count as absent.
+        /// </summary>
+        public static bool IsAbsent(MetroSnapshotV1 snapshot) =>
+            snapshot == null || (snapshot.stations == null && !snapshot.hasTunnel);
+
+        public static bool TryValidateSnapshot(MetroSnapshotV1 snapshot, out string error)
+        {
+            if (snapshot == null)
+            {
+                error = "Metro snapshot is missing.";
+                return false;
+            }
+
+            if (snapshot.stations == null)
+            {
+                error = "Metro station list is missing.";
+                return false;
+            }
+
+            for (var i = 0; i < snapshot.stations.Length; i++)
+            {
+                var station = snapshot.stations[i];
+                if (station == null)
+                {
+                    error = "A metro station footprint is missing.";
+                    return false;
+                }
+
+                if (station.width <= 0 || station.height <= 0)
+                {
+                    error = "A metro station footprint has a non-positive size.";
+                    return false;
+                }
+            }
+
+            if (snapshot.hasTunnel != (snapshot.stations.Length > 0))
+            {
+                error = "Metro tunnel flag does not match the station list.";
+                return false;
+            }
+
+            error = null;
+            return true;
+        }
     }
 }

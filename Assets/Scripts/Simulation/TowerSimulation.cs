@@ -149,7 +149,11 @@ namespace BuildATower
                 _shopDemand = new ShopDemandSystem();
                 _weather = new WeatherSystem();
                 _metro = new MetroSystem();
-                _agents = new AgentSystem(_router, shopDemand: _shopDemand, weather: _weather);
+                _agents = new AgentSystem(
+                    _router,
+                    shopDemand: _shopDemand,
+                    weather: _weather,
+                    metro: _metro);
                 _crime = new CrimeSystem();
                 _economy = new EconomySystem();
                 _research = new ResearchSystem();
@@ -165,6 +169,7 @@ namespace BuildATower
             else
             {
                 _metro ??= new MetroSystem();
+                _agents?.SetMetro(_metro);
             }
 
             SyncStructureArtToStars();
@@ -199,6 +204,7 @@ namespace BuildATower
                 if (pending.research != null)
                     _research.RestoreSnapshot(pending.research);
                 _weather.RestoreSnapshot(pending.weather, _clock.DayIndex, _clock.MinuteOfDay);
+                _metro.RestoreSnapshot(pending.metro);
             }
             catch (ArgumentException)
             {

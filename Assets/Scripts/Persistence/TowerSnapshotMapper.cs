@@ -62,6 +62,7 @@ namespace BuildATower
                         paused = false
                     },
                 weather = simulation.Weather?.CaptureSnapshot(),
+                metro = simulation.Metro?.CaptureSnapshot(),
                 rooms = build.Grid.CaptureRooms(Time.realtimeSinceStartup).ToArray()
             };
         }
@@ -95,6 +96,10 @@ namespace BuildATower
             if (!WeatherSystem.IsAbsent(snapshot.weather)
                 && !WeatherSystem.TryValidateSnapshot(snapshot.weather, out _))
                 return Failure(SnapshotValidationError.InvalidWeather, "The saved weather state is invalid.");
+
+            if (!MetroSystem.IsAbsent(snapshot.metro)
+                && !MetroSystem.TryValidateSnapshot(snapshot.metro, out _))
+                return Failure(SnapshotValidationError.InvalidMetro, "The saved metro state is invalid.");
 
             return SnapshotValidationResult.Succeeded();
         }

@@ -88,6 +88,7 @@ namespace BuildATower
         System.Action<RoomInstance> _onCondoResidentMovedIn;
         MarketClimate _climate;
         WeatherSystem _weather;
+        MetroSystem _metro;
         CrimeSystem _crime;
         ResearchSystem _research;
         int _nextId = 1;
@@ -137,7 +138,8 @@ namespace BuildATower
             MarketClimate climate = null,
             StairCapacity stairCapacity = null,
             ShopDemandSystem shopDemand = null,
-            WeatherSystem weather = null)
+            WeatherSystem weather = null,
+            MetroSystem metro = null)
         {
             _router = router;
             _elevators = router.Elevators;
@@ -145,11 +147,14 @@ namespace BuildATower
             _stairCapacity = stairCapacity ?? new StairCapacity(StairCapacity.DefaultCap);
             _shopDemand = shopDemand;
             _weather = weather;
+            _metro = metro;
         }
 
         public void SetClimate(MarketClimate climate) => _climate = climate;
 
         public void SetWeather(WeatherSystem weather) => _weather = weather;
+
+        public void SetMetro(MetroSystem metro) => _metro = metro;
 
         public void SyncHomes(
             TowerGrid grid,
@@ -1984,13 +1989,37 @@ namespace BuildATower
             BeginTrip(agent, agent.Cell, returnCell, after, grid);
         }
 
-        /// <summary>Per-interval street spawn probability: base x (1 + stars) x atrium x weather, clamped 0..1.</summary>
-        public static float StreetSpawnChance(int stars, float atriumMultiplier, float weatherMultiplier) =>
+        /// <summary>Per-interval street spawn probability: base x (1 + stars) x atrium x weather x metro, clamped 0..1.</summary>
+        public static float StreetSpawnChance(
+            int stars,
+            float atriumMultiplier,
+            float weatherMultiplier,
+            float metroMultiplier = 1f) =>
             Mathf.Clamp01(
                 StreetSpawnBaseChance *
                 (1 + Mathf.Max(0, stars)) *
                 atriumMultiplier *
-                Mathf.Max(0f, weatherMultiplier));
+                Mathf.Max(0f, weatherMultiplier) *
+                Mathf.Max(0f, metroMultiplier));
+
+        /// <summary>
+        /// Elevator-queue stress multiplier. Waits at or below
+        /// <see cref="ElevatorWaitStressStartMinutes"/> contribute nothing.
+        /// <paramref name="travelReliefMultiplier"/> above 1 (metro relief) reduces the rate.
+        /// </summary>
+        public static float ElevatorWaitStressMultiplier(float waitMinutes, float travelReliefMultiplier)
+        {
+            if (waitMinutes <= ElevatorWaitStressStartMinutes)
+                return 0f;
+
+            var t = Mathf.InverseLerp(
+                ElevatorWaitStressStartMinutes,
+                ElevatorWaitStressFullMinutes,
+                waitMinutes);
+            var stressMult = Mathf.Lerp(ElevatorWaitStressMinMult, ElevatorWaitStressMaxMult, t);
+            var relief = Mathf.Max(1f, travelReliefMultiplier);
+            return stressMult / relief;
+        }
 
         /// <summary>Street-visitor disposable multiplier: economic climate stacked with weather.</summary>
         public static float StreetSpendMultiplier(float climateMultiplier, float weatherMultiplier) =>
@@ -2010,7 +2039,8 @@ namespace BuildATower
                 var chance = StreetSpawnChance(
                     stars,
                     AtriumMarketing.StreetSpawnMultiplierFor(grid),
-                    _weather?.StreetTrafficMultiplier ?? 1f);
+                    _weather?.StreetTrafficMultiplier ?? 1f,
+                    _metro?.StreetTrafficMultiplier ?? 1f);
                 if (chance <= 0f) continue;
                 if (_rng.NextDouble() >= chance) continue;
 
@@ -2949,11 +2979,10 @@ namespace BuildATower
             if (agent.Phase == AgentPhase.WaitingAtElevator &&
                 agent.ElevatorWaitMinutes > ElevatorWaitStressStartMinutes)
             {
-                var t = Mathf.InverseLerp(
-                    ElevatorWaitStressStartMinutes,
-                    ElevatorWaitStressFullMinutes,
-                    agent.ElevatorWaitMinutes);
-                var mult = Mathf.Lerp(ElevatorWaitStressMinMult, ElevatorWaitStressMaxMult, t);
+                // Metro travel relief: divide elevator-wait stress by TravelReliefMultiplier.
+                var mult = ElevatorWaitStressMultiplier(
+                    agent.ElevatorWaitMinutes,
+                    _metro?.TravelReliefMultiplier ?? 1f);
                 agent.Stress = Mathf.Min(
                     100f,
                     agent.Stress + StressGainPerSecond * mult * deltaGameMinutes);

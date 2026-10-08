@@ -48,6 +48,8 @@ namespace BuildATower
         public ResearchSnapshotV1 research;
         /// <summary>Optional: null (older saves) restores default Clear weather.</summary>
         public WeatherSnapshotV1 weather;
+        /// <summary>Optional: null or absent (older saves) restores an empty metro.</summary>
+        public MetroSnapshotV1 metro;
         public RoomSnapshotV1[] rooms;
     }
 
@@ -61,6 +63,22 @@ namespace BuildATower
         /// <summary><see cref="WeatherHangover"/> enum name.</summary>
         public string hangover;
         public int hangoverEndDayIndex;
+    }
+
+    [Serializable]
+    public sealed class MetroStationFootprintV1
+    {
+        public int x;
+        public int y;
+        public int width;
+        public int height;
+    }
+
+    [Serializable]
+    public sealed class MetroSnapshotV1
+    {
+        public MetroStationFootprintV1[] stations;
+        public bool hasTunnel;
     }
 
     [Serializable]
@@ -191,7 +209,8 @@ namespace BuildATower
         InvalidStars,
         NullRooms,
         InvalidResearch,
-        InvalidWeather
+        InvalidWeather,
+        InvalidMetro
     }
 
     public sealed class SnapshotValidationResult
