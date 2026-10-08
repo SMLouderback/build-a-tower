@@ -188,6 +188,12 @@ namespace BuildATower
         {
             SyncConditionVisuals();
             if (worldCamera == null) return;
+
+            // Scaffold paints while dragging; mouse-up over the dock/info is otherwise missed
+            // and leaves _draggingScaffold sticky, which blocks all later placement.
+            if (ScaffoldDragRules.ShouldEndDrag(_draggingScaffold, Input.GetMouseButton(0)))
+                EndScaffoldDrag();
+
             if (hud != null && hud.BlocksWorldInput)
             {
                 if (!_draggingLobby && !_draggingSkyLobby && !_draggingElevator && !_draggingElevatorEdge && !_draggingScaffold)
@@ -216,6 +222,22 @@ namespace BuildATower
                 RefreshSelectionVisuals();
         }
 
+        void EndScaffoldDrag()
+        {
+            if (!_draggingScaffold) return;
+            _draggingScaffold = false;
+            _scaffoldPaintedThisDrag.Clear();
+            view.ClearGhost();
+            RefreshHelpText();
+            StateChanged?.Invoke();
+        }
+
+        void ClearScaffoldDrag()
+        {
+            _draggingScaffold = false;
+            _scaffoldPaintedThisDrag.Clear();
+        }
+
         public void SetTool(BuildTool tool)
         {
             CurrentTool = tool;
@@ -223,8 +245,7 @@ namespace BuildATower
                 SelectedRoomType = null;
             if (tool != BuildTool.Select)
                 ClearSelection();
-            _draggingScaffold = false;
-            _scaffoldPaintedThisDrag.Clear();
+            ClearScaffoldDrag();
             view.ClearGhost();
             RefreshHelpText();
             StateChanged?.Invoke();
@@ -246,6 +267,7 @@ namespace BuildATower
             SelectedRoomType = type;
             CurrentTool = BuildTool.PlaceRoom;
             ClearSelection();
+            ClearScaffoldDrag();
             RefreshHelpText();
             StateChanged?.Invoke();
         }
@@ -256,6 +278,7 @@ namespace BuildATower
             SelectedRoomType = lobbyType;
             CurrentTool = BuildTool.PlaceRoom;
             ClearSelection();
+            ClearScaffoldDrag();
             RefreshHelpText();
             StateChanged?.Invoke();
         }
@@ -266,6 +289,7 @@ namespace BuildATower
             SelectedRoomType = ResolveSkyLobbyType();
             CurrentTool = BuildTool.PlaceRoom;
             ClearSelection();
+            ClearScaffoldDrag();
             RefreshHelpText();
             StateChanged?.Invoke();
         }
@@ -274,6 +298,7 @@ namespace BuildATower
         {
             CurrentTool = BuildTool.Select;
             SelectedRoomType = null;
+            ClearScaffoldDrag();
             view.ClearGhost();
             RefreshHelpText();
             StateChanged?.Invoke();
@@ -284,8 +309,7 @@ namespace BuildATower
             CurrentTool = BuildTool.Scaffold;
             SelectedRoomType = null;
             ClearSelection();
-            _draggingScaffold = false;
-            _scaffoldPaintedThisDrag.Clear();
+            ClearScaffoldDrag();
             view.ClearGhost();
             RefreshHelpText();
             StateChanged?.Invoke();
@@ -971,7 +995,10 @@ namespace BuildATower
 
             if (!_draggingScaffold) return;
 
-            if (!_scaffoldPaintedThisDrag.Contains(cell) && TryPlaceScaffoldAt(cell))
+            // Only paint while the button is held — a stale drag flag must not place on hover.
+            if (ScaffoldDragRules.ShouldPaintCell(_draggingScaffold, Input.GetMouseButton(0)) &&
+                !_scaffoldPaintedThisDrag.Contains(cell) &&
+                TryPlaceScaffoldAt(cell))
                 _scaffoldPaintedThisDrag.Add(cell);
 
             var showValid =
@@ -987,13 +1014,7 @@ namespace BuildATower
                 showValid);
 
             if (Input.GetMouseButtonUp(0))
-            {
-                _draggingScaffold = false;
-                _scaffoldPaintedThisDrag.Clear();
-                view.ClearGhost();
-                RefreshHelpText();
-                StateChanged?.Invoke();
-            }
+                EndScaffoldDrag();
         }
 
         bool IsLobbyToolActive() =>
@@ -1465,7 +1486,9 @@ namespace BuildATower
         bool IsPointerOverHud(Vector3 screen)
         {
             var guiPoint = new Vector2(screen.x, Screen.height - screen.y);
-            return (hud != null && hud.PanelScreenRect.Contains(guiPoint)) ||
+            // Full HUD hit-test (dock, info panel, popout, top bar, maps) — not only the dock.
+            // Info-panel clicks (e.g. research Start) must not fall through to world selection.
+            return (hud != null && hud.ContainsGuiPoint(guiPoint)) ||
                    CutawayCamera.HorizontalScrollbarScreenRect.Contains(guiPoint) ||
                    CutawayCamera.VerticalScrollbarScreenRect.Contains(guiPoint);
         }
