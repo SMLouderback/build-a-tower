@@ -83,6 +83,15 @@ namespace BuildATower
             _ => null
         };
 
+        public static string MenuIconIdForRoom(RoomTypeSO room)
+        {
+            if (room == null || string.IsNullOrEmpty(room.id))
+                return string.Empty;
+            if (room.id == "metro_station")
+                return "transit_metro";
+            return room.id;
+        }
+
         public static string MenuIconIdForTool(BuildMenuTool tool) => tool switch
         {
             BuildMenuTool.Select => "tool_select",
@@ -2797,7 +2806,7 @@ namespace BuildATower
                     GUI.enabled = wasEnabled && canBuild;
                     if (DrawPictureButton(
                             IconRect(cx, cy, i, MenuStripColumns),
-                            room.id,
+                            MenuIconIdForRoom(room),
                             RoomGlyph(room),
                             tip,
                             color,

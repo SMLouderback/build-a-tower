@@ -16,6 +16,7 @@ namespace BuildATower
 
         public int StationCount => _stations.Count;
         public bool HasTunnel => StationCount > 0;
+        public IReadOnlyList<RectInt> Stations => _stations;
 
         public float StreetTrafficMultiplier =>
             1f + Mathf.Min(StreetBonusSoftCap, StationCount * StreetBonusPerStation);

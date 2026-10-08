@@ -139,6 +139,7 @@ namespace BuildATower
             EnsureDayNightSkyController();
             ParallaxBackdrop.EnsureInScene();
             WeatherFx.EnsureInScene();
+            MetroTunnelView.EnsureInScene();
 
             if (_clock == null)
             {
