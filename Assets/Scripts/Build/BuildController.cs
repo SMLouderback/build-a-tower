@@ -134,7 +134,11 @@ namespace BuildATower
             Wallet = new FundsWallet(DifficultyProfile.StartingFunds(GameSession.Difficulty));
         }
 
-        static void PlayBuildPlaceSfx() => TowerAudio.Ensure().PlayBuildSfx();
+        static void PlayBuildPlaceSfx()
+        {
+            if (!Application.isPlaying) return;
+            TowerAudio.Ensure().PlayBuildSfx();
+        }
 
         static void EnsureDayNightSkyOnMainCamera()
         {
@@ -621,6 +625,13 @@ namespace BuildATower
                 return false;
             }
 
+            if (!CanPlaceMetroStation(SelectedRoomType, cell, simulation, out var metroReason))
+            {
+                HelpText = metroReason;
+                StateChanged?.Invoke();
+                return false;
+            }
+
             var cost = SelectedRoomType.buildCost *
                        (SelectedRoomType.isElevatorShaft ? SelectedRoomType.size.y : 1);
             if (!Grid.CanPlace(SelectedRoomType, cell) ||
@@ -642,6 +653,7 @@ namespace BuildATower
                 view.ClearRoom(scaffold);
             // Transit sits on the rooms layer; keep it visible over rooms built behind.
             PaintRoomKeepingTransitOnTop(room);
+            simulation?.RegisterMetroStation(room);
 
             PlayBuildPlaceSfx();
             RefreshHelpText();
@@ -860,6 +872,7 @@ namespace BuildATower
         {
             if (!Grid.TryDemolishAt(cell, out var removed, out var scaffoldsPlaced, out _))
                 return false;
+            GetComponent<TowerSimulation>()?.UnregisterMetroStation(removed);
 
             var refundDelta = BuildGraceRefund.WalletDelta(removed, Time.realtimeSinceStartup);
             if (refundDelta > 0) Wallet.Add(refundDelta);
@@ -888,6 +901,35 @@ namespace BuildATower
             NotifyGridChanged();
             StateChanged?.Invoke();
             return true;
+        }
+
+        bool CanPlaceMetroStation(
+            RoomTypeSO type,
+            Vector2Int origin,
+            TowerSimulation simulation,
+            out string reason)
+        {
+            reason = string.Empty;
+            if (type == null || type.id != "metro_station")
+                return true;
+
+            var metro = simulation?.Metro;
+            if (metro == null)
+                return true;
+
+            var existing = new List<RectInt>();
+            if (Grid != null)
+            {
+                foreach (var room in Grid.Rooms)
+                {
+                    if (room?.Type == null || room.Type.id != "metro_station") continue;
+                    existing.Add(new RectInt(room.Origin.x, room.Origin.y, room.Size.x, room.Size.y));
+                }
+            }
+
+            var candidate = new RectInt(origin.x, origin.y, type.size.x, type.size.y);
+            var stars = simulation.Stars?.CurrentStars ?? 0;
+            return metro.CanPlace(existing, candidate, stars, out reason);
         }
 
         void HandleScaffoldDrag(Vector2Int cell)

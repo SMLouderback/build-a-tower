@@ -88,6 +88,7 @@ namespace BuildATower
         StarSystem _stars;
         MarketClimate _climate;
         WeatherSystem _weather;
+        MetroSystem _metro;
         readonly System.Random _climateRng = new();
         readonly System.Random _conferenceRng = new();
         readonly System.Random _newsRng = new();
@@ -107,6 +108,7 @@ namespace BuildATower
         public StarSystem Stars => _stars;
         public MarketClimate Climate => _climate;
         public WeatherSystem Weather => _weather;
+        public MetroSystem Metro => _metro;
         public StairsPathfinder Pathfinder => _pathfinder;
         public ElevatorSystem Elevators => _elevators;
         public TransitRouter Router => _router;
@@ -146,6 +148,7 @@ namespace BuildATower
                 _router = new TransitRouter(_pathfinder, _elevators);
                 _shopDemand = new ShopDemandSystem();
                 _weather = new WeatherSystem();
+                _metro = new MetroSystem();
                 _agents = new AgentSystem(_router, shopDemand: _shopDemand, weather: _weather);
                 _crime = new CrimeSystem();
                 _economy = new EconomySystem();
@@ -158,6 +161,10 @@ namespace BuildATower
                 _lastDayIndex = _clock.DayIndex;
                 _clock.DayRolled += OnDayRolled;
                 _clock.MonthRolled += OnMonthRolled;
+            }
+            else
+            {
+                _metro ??= new MetroSystem();
             }
 
             SyncStructureArtToStars();
@@ -215,6 +222,7 @@ namespace BuildATower
             TrySubscribe();
             if (GameSession.PendingLoad != null)
             {
+                SyncMetroStationsFromGrid();
                 RebuildRoutingAndAgents();
                 BeginDailyDemand();
                 if (build != null)
@@ -335,11 +343,44 @@ namespace BuildATower
 
         void OnGridChanged()
         {
+            SyncMetroStationsFromGrid();
             RebuildRoutingAndAgents();
             if (build == null || build.Grid == null || _agents == null) return;
             _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
             DrainStarCelebrationsAndSyncArt();
         }
+
+        public void RegisterMetroStation(RoomInstance room)
+        {
+            if (!IsMetroStation(room)) return;
+            _metro ??= new MetroSystem();
+            _metro.RegisterStation(RoomFootprint(room));
+        }
+
+        public void UnregisterMetroStation(RoomInstance room)
+        {
+            if (!IsMetroStation(room) || _metro == null) return;
+            _metro.UnregisterStation(RoomFootprint(room));
+        }
+
+        void SyncMetroStationsFromGrid()
+        {
+            _metro ??= new MetroSystem();
+            _metro.Clear();
+            if (build?.Grid == null) return;
+
+            foreach (var room in build.Grid.Rooms)
+            {
+                if (!IsMetroStation(room)) continue;
+                _metro.RegisterStation(RoomFootprint(room));
+            }
+        }
+
+        static bool IsMetroStation(RoomInstance room) =>
+            room?.Type != null && room.Type.id == "metro_station";
+
+        static RectInt RoomFootprint(RoomInstance room) =>
+            new RectInt(room.Origin.x, room.Origin.y, room.Size.x, room.Size.y);
 
         void RebuildRoutingAndAgents()
         {
