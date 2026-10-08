@@ -40,12 +40,12 @@ namespace BuildATower.Tests
 
             Assert.IsNotNull(leisure, "Leisure family should appear in build menu catalog");
             Assert.AreEqual("Leisure", leisure.Label);
-            Assert.AreEqual(9, leisure.Rooms.Count);
+            Assert.AreEqual(10, leisure.Rooms.Count);
             CollectionAssert.AreEquivalent(
                 new[]
                 {
                     "leisure_gym", "leisure_spa", "leisure_pool", "leisure_bowling", "leisure_theater",
-                    "leisure_casino", "leisure_nightclub", "leisure_chapel", "leisure_atrium"
+                    "leisure_casino", "leisure_nightclub", "leisure_chapel", "leisure_cathedral", "leisure_atrium"
                 },
                 leisure.Rooms.Select(room => room.id).ToArray());
         }

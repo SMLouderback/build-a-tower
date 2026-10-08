@@ -21,6 +21,7 @@ namespace BuildATower
             if (id.StartsWith("leisure_bowling", System.StringComparison.Ordinal)) return 2f;
             if (id.StartsWith("leisure_casino", System.StringComparison.Ordinal)) return 3f;
             if (id.StartsWith("leisure_nightclub", System.StringComparison.Ordinal)) return 2f;
+            if (id.StartsWith("leisure_cathedral", System.StringComparison.Ordinal)) return 6f;
             if (id.StartsWith("leisure_chapel", System.StringComparison.Ordinal)) return 4f;
             if (id.StartsWith("leisure_atrium", System.StringComparison.Ordinal)) return 5f;
             if (id == ParkingStalls.MailId) return 1f;

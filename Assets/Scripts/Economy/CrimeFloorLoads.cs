@@ -11,6 +11,7 @@ namespace BuildATower
             var id = type.id;
             if (id.StartsWith("leisure_casino", StringComparison.OrdinalIgnoreCase)) return 1.75f;
             if (id.StartsWith("leisure_nightclub", StringComparison.OrdinalIgnoreCase)) return 1.5f;
+            if (id.StartsWith("leisure_cathedral", StringComparison.OrdinalIgnoreCase)) return 0.35f;
             if (id.StartsWith("leisure_chapel", StringComparison.OrdinalIgnoreCase)) return 0.5f;
             return 1f;
         }

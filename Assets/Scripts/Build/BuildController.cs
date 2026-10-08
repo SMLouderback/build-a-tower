@@ -632,6 +632,13 @@ namespace BuildATower
                 return false;
             }
 
+            if (!CanPlaceCathedral(SelectedRoomType, cell, out var cathedralReason))
+            {
+                HelpText = cathedralReason;
+                StateChanged?.Invoke();
+                return false;
+            }
+
             var cost = SelectedRoomType.buildCost *
                        (SelectedRoomType.isElevatorShaft ? SelectedRoomType.size.y : 1);
             if (!Grid.CanPlace(SelectedRoomType, cell) ||
@@ -930,6 +937,26 @@ namespace BuildATower
             var candidate = new RectInt(origin.x, origin.y, type.size.x, type.size.y);
             var stars = simulation.Stars?.CurrentStars ?? 0;
             return metro.CanPlace(existing, candidate, stars, out reason);
+        }
+
+        bool CanPlaceCathedral(RoomTypeSO type, Vector2Int origin, out string reason)
+        {
+            reason = string.Empty;
+            if (type == null || type.id != "leisure_cathedral")
+                return true;
+
+            var existing = new List<RectInt>();
+            if (Grid != null)
+            {
+                foreach (var room in Grid.Rooms)
+                {
+                    if (room?.Type == null || room.Type.id != "leisure_cathedral") continue;
+                    existing.Add(new RectInt(room.Origin.x, room.Origin.y, room.Size.x, room.Size.y));
+                }
+            }
+
+            var candidate = new RectInt(origin.x, origin.y, type.size.x, type.size.y);
+            return CathedralPlacement.CanPlace(existing, candidate, out reason);
         }
 
         void HandleScaffoldDrag(Vector2Int cell)

@@ -242,6 +242,12 @@ namespace BuildATower
                 return true;
             }
 
+            if (id.StartsWith("leisure_cathedral", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (80, 120);
+                return true;
+            }
+
             if (id.StartsWith("leisure_chapel", StringComparison.OrdinalIgnoreCase))
             {
                 range = (20, 40);
