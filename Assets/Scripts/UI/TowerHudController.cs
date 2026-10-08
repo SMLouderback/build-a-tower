@@ -119,6 +119,7 @@ namespace BuildATower
         Rect _goalsDropdownRect;
         Rect _infoDropdownRect;
         Rect _mapsDropdownRect;
+        Rect _researchDropdownRect;
         Rect _mapsGraphRect;
         Rect _mapsLegendRect;
         readonly List<RoomTypeSO> _roomButtons = new();
@@ -135,6 +136,7 @@ namespace BuildATower
         TopInfoPanel _infoPanel;
         bool _goalsOpen;
         bool _mapsOpen;
+        bool _researchOpen;
         BuildFamily? _expandedFamily;
         BuildSubgroup? _expandedShopSubgroup;
         bool _buildLayoutInitialized;
@@ -338,6 +340,7 @@ namespace BuildATower
             (_goalsOpen && _goalsDropdownRect.Contains(guiPoint)) ||
             (_infoPanel != TopInfoPanel.None && _infoDropdownRect.Contains(guiPoint)) ||
             (_mapsOpen && _mapsDropdownRect.Contains(guiPoint)) ||
+            (_researchOpen && _researchDropdownRect.Contains(guiPoint)) ||
             (_mapsGraphRect.width > 0f && _mapsGraphRect.Contains(guiPoint)) ||
             (_mapsLegendRect.width > 0f && _mapsLegendRect.Contains(guiPoint)) ||
             _newsHud.ContainsGuiPoint(guiPoint);
@@ -1265,6 +1268,7 @@ namespace BuildATower
             _goalsDropdownRect = Rect.zero;
             _infoDropdownRect = Rect.zero;
             _mapsDropdownRect = Rect.zero;
+            _researchDropdownRect = Rect.zero;
             _mapsGraphRect = Rect.zero;
             _mapsLegendRect = Rect.zero;
             GUI.Box(_topBarRect, GUIContent.none);
@@ -1317,9 +1321,12 @@ namespace BuildATower
 
             DrawChip(GameSession.Difficulty.ToString(), 88f);
 
-            // Reserve space for right-cluster Menu/Maps/Info/Goals buttons.
+            // Reserve space for right-cluster Menu/Maps/Research/Info/Goals buttons.
             var clusterW = 56f + 8f; // Menu
             clusterW += 64f + 8f; // Maps
+            var researchLabs = build.Grid != null ? EconomySystem.CountResearchLabs(build.Grid) : 0;
+            if (researchLabs >= 1)
+                clusterW += 180f + 8f; // Research status caption
             if (economyUnlocked) clusterW += 64f + 8f + 56f + 8f;
             if (goalsUnlocked) clusterW += 64f + 8f + 72f;
             else if (economyUnlocked) clusterW = Mathf.Max(56f + 8f + 64f + 8f, clusterW - 8f);
@@ -1393,7 +1400,11 @@ namespace BuildATower
                 var goalsRect = new Rect(cursor, y, goalsW, lineH);
                 var goalsArrow = _goalsOpen ? "▼" : "▶";
                 if (GUI.Button(goalsRect, $"{goalsArrow} Goals", barButton))
+                {
                     _goalsOpen = !_goalsOpen;
+                    if (_goalsOpen)
+                        _researchOpen = false;
+                }
                 cursor -= btnGap;
             }
 
@@ -1404,7 +1415,11 @@ namespace BuildATower
                 var towerOpen = _infoPanel == TopInfoPanel.Tower;
                 var towerArrow = towerOpen ? "▼" : "▶";
                 if (GUI.Button(towerRect, $"{towerArrow} Tower", barButton))
+                {
                     _infoPanel = towerOpen ? TopInfoPanel.None : TopInfoPanel.Tower;
+                    if (_infoPanel != TopInfoPanel.None)
+                        _researchOpen = false;
+                }
                 cursor -= btnGap;
             }
 
@@ -1415,7 +1430,11 @@ namespace BuildATower
                 var elevOpen = _infoPanel == TopInfoPanel.Elev;
                 var elevArrow = elevOpen ? "▼" : "▶";
                 if (GUI.Button(elevRect, $"{elevArrow} Elev", barButton))
+                {
                     _infoPanel = elevOpen ? TopInfoPanel.None : TopInfoPanel.Elev;
+                    if (_infoPanel != TopInfoPanel.None)
+                        _researchOpen = false;
+                }
                 cursor -= btnGap;
 
                 cursor -= shopsW;
@@ -1423,7 +1442,11 @@ namespace BuildATower
                 var shopsOpen = _infoPanel == TopInfoPanel.Shops;
                 var shopsArrow = shopsOpen ? "▼" : "▶";
                 if (GUI.Button(shopsRect, $"{shopsArrow} Shops", barButton))
+                {
                     _infoPanel = shopsOpen ? TopInfoPanel.None : TopInfoPanel.Shops;
+                    if (_infoPanel != TopInfoPanel.None)
+                        _researchOpen = false;
+                }
                 cursor -= btnGap;
             }
 
@@ -1431,7 +1454,38 @@ namespace BuildATower
             var mapsRect = new Rect(cursor, y, mapsW, lineH);
             var mapsArrow = _mapsOpen ? "▼" : "▶";
             if (GUI.Button(mapsRect, $"{mapsArrow} Maps", barButton))
+            {
                 _mapsOpen = !_mapsOpen;
+                if (_mapsOpen)
+                    _researchOpen = false;
+            }
+
+            var researchLabs = build.Grid != null ? EconomySystem.CountResearchLabs(build.Grid) : 0;
+            if (researchLabs < 1)
+                _researchOpen = false;
+            else
+            {
+                var caption = ResearchHudPanel.StatusCaption(simulation?.Research);
+                var researchArrow = _researchOpen ? "▼" : "▶";
+                var researchLabel = $"{researchArrow} {caption}";
+                var researchW = Mathf.Clamp(
+                    barButton.CalcSize(new GUIContent(researchLabel)).x + 14f,
+                    118f,
+                    210f);
+                cursor -= btnGap;
+                cursor -= researchW;
+                var researchRect = new Rect(cursor, y, researchW, lineH);
+                if (GUI.Button(researchRect, researchLabel, barButton))
+                {
+                    _researchOpen = !_researchOpen;
+                    if (_researchOpen)
+                    {
+                        _goalsOpen = false;
+                        _mapsOpen = false;
+                        _infoPanel = TopInfoPanel.None;
+                    }
+                }
+            }
 
             if (!economyUnlocked && _infoPanel is TopInfoPanel.Shops or TopInfoPanel.Elev)
                 _infoPanel = TopInfoPanel.None;
@@ -1471,6 +1525,46 @@ namespace BuildATower
                     gy += 18f;
                 }
             }
+
+            if (_researchOpen && researchLabs >= 1)
+                DrawResearchDropdown(right, barTopY, barH, barWidth, wrapLabel);
+        }
+
+        void DrawResearchDropdown(
+            float right,
+            float barTopY,
+            float barH,
+            float barWidth,
+            GUIStyle wrapLabel)
+        {
+            const float pad = 8f;
+            const float row = 20f;
+            const float btnH = 22f;
+            var dropW = Mathf.Min(360f, barWidth);
+            // Full drawer: pool + 5 branches + effect + Start/Pause + ETA/costs + climate + notes.
+            var dropH = Mathf.Min(420f, Mathf.Max(120f, Screen.height - (barTopY + barH) - 8f));
+            _researchDropdownRect = new Rect(right - dropW, barTopY + barH, dropW, dropH);
+            GUI.Box(_researchDropdownRect, GUIContent.none);
+
+            var research = simulation?.Research;
+            if (research == null || build.Grid == null)
+                return;
+
+            var cx = _researchDropdownRect.x + pad;
+            var cy = _researchDropdownRect.y + pad;
+            var inner = dropW - pad * 2f;
+            ResearchHudPanel.Draw(
+                cx,
+                cy,
+                inner,
+                btnH,
+                row,
+                research,
+                build.Grid,
+                simulation.Climate,
+                ref _researchPickBranch,
+                ref _researchPickLevel,
+                wrapLabel);
         }
 
         void DrawMapsDropdown(
@@ -2623,7 +2717,13 @@ namespace BuildATower
                 cy = DrawStaffStepper(cx, cy, inner, btnH, row, label);
 
             if (build.SelectedRoom?.Type?.id == EconomySystem.ResearchId)
-                cy = DrawResearchSelection(cx, cy, inner, btnH, row, label);
+            {
+                GUI.Label(
+                    new Rect(cx, cy, inner, row * 2f),
+                    "Use Research in the top bar to start or pause projects.",
+                    label);
+                cy += row * 2f;
+            }
 
             var elevStatus = build.GetElevatorStatusText();
             if (elevStatus == null) return;
@@ -3265,32 +3365,6 @@ namespace BuildATower
 
             cy += btnH + 4f;
             return cy;
-        }
-
-        float DrawResearchSelection(
-            float cx,
-            float cy,
-            float inner,
-            float btnH,
-            float row,
-            GUIStyle label)
-        {
-            var research = simulation?.Research;
-            if (research == null || build.Grid == null)
-                return cy;
-
-            return ResearchHudPanel.Draw(
-                cx,
-                cy,
-                inner,
-                btnH,
-                row,
-                research,
-                build.Grid,
-                simulation.Climate,
-                ref _researchPickBranch,
-                ref _researchPickLevel,
-                label);
         }
 
         void DrawTimeSpeedButtons(float x, float y, float width, float height)
