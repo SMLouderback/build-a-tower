@@ -219,6 +219,19 @@ namespace BuildATower
             return count;
         }
 
+        public static int CountResearchLabs(TowerGrid grid)
+        {
+            if (grid == null) return 0;
+            var count = 0;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type?.id == ResearchId)
+                    count++;
+            }
+
+            return count;
+        }
+
         public static int CountResearcherPool(TowerGrid grid)
         {
             if (grid == null) return 0;
