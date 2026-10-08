@@ -1326,7 +1326,7 @@ namespace BuildATower
             clusterW += 64f + 8f; // Maps
             var researchLabs = build.Grid != null ? EconomySystem.CountResearchLabs(build.Grid) : 0;
             if (researchLabs >= 1)
-                clusterW += 180f + 8f; // Research status caption
+                clusterW += 210f + 8f; // Research status caption (matches button max)
             if (economyUnlocked) clusterW += 64f + 8f + 56f + 8f;
             if (goalsUnlocked) clusterW += 64f + 8f + 72f;
             else if (economyUnlocked) clusterW = Mathf.Max(56f + 8f + 64f + 8f, clusterW - 8f);
@@ -1548,7 +1548,10 @@ namespace BuildATower
 
             var research = simulation?.Research;
             if (research == null || build.Grid == null)
+            {
+                _researchOpen = false;
                 return;
+            }
 
             var cx = _researchDropdownRect.x + pad;
             var cy = _researchDropdownRect.y + pad;
