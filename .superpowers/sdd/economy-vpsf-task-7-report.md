@@ -44,6 +44,28 @@ EditMode filter (worktree `economy-vpsf-task7`): **39/39 passed** (GREEN).
 - Elev wait maps `ElevatorWaitMinutes` 1:1 to `TenantClassStress` “seconds” (1x clock); Mid living now waits to 25 before elev stress (was 5 for everyone).
 - Clash scan is vertical floor-delta only (same as rules); horizontal neighbors not scored.
 
+---
+
+## Follow-up — elev wait minutes→seconds (CRITICAL)
+
+**Status:** FIXED
+
+**Commit:** *(pending hash)* — `fix: convert elev wait minutes to seconds for class stress`
+
+### Bug
+
+`AgentSystem.ShouldApplyElevatorWaitStress` passed `agent.ElevatorWaitMinutes` into `TenantClassStress.ElevWaitStress`, which expects **seconds**. Upper therefore stressed at 15 **minutes**, not 15 seconds.
+
+### Fix
+
+- Call site converts minutes→seconds: `agent.ElevatorWaitMinutes * 60f`.
+- `TenantClassStress` remains seconds-based (Upper=15s, Mid=25s).
+- Comment above `ShouldApplyElevatorWaitStress` corrected; method made `public static` for EditMode coverage.
+
+### Test
+
+`ClassClashRulesTests.Upper_elev_wait_stresses_above_15s_not_at_14s` now also drives `AgentSystem.ShouldApplyElevatorWaitStress` with an Upper condo resident: no stress at `14/60` and `0.25` minutes; stress at `16/60` minutes.
+
 ## Files touched (committed)
 
 - `Assets/Scripts/UI/RoomEconomyFormat.cs`

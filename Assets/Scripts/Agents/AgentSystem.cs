@@ -2996,14 +2996,15 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Living tenants use <see cref="TenantClassStress"/> (Upper &gt; 15s game time at 1x =
-        /// ElevatorWaitMinutes). Staff/street keep the legacy start-minute threshold.
+        /// Living tenants use <see cref="TenantClassStress"/> (Upper wait &gt; 15 game seconds).
+        /// Converts <see cref="Agent.ElevatorWaitMinutes"/> to seconds (* 60) before the
+        /// seconds-based class thresholds. Staff/street keep the legacy start-minute threshold.
         /// </summary>
-        static bool ShouldApplyElevatorWaitStress(Agent agent)
+        public static bool ShouldApplyElevatorWaitStress(Agent agent)
         {
             if (agent == null) return false;
             if (TryLivingTenantClass(agent, out var tenantClass))
-                return TenantClassStress.ElevWaitStress(tenantClass, agent.ElevatorWaitMinutes);
+                return TenantClassStress.ElevWaitStress(tenantClass, agent.ElevatorWaitMinutes * 60f);
 
             return agent.ElevatorWaitMinutes > ElevatorWaitStressStartMinutes;
         }

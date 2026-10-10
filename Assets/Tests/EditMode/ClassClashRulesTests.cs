@@ -1,5 +1,6 @@
 using BuildATower;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace BuildATower.Tests
 {
@@ -91,6 +92,22 @@ namespace BuildATower.Tests
             Assert.IsFalse(TenantClassStress.ElevWaitStress(TenantClass.Upper, waitSeconds: 14f));
             Assert.IsFalse(TenantClassStress.ElevWaitStress(TenantClass.Upper, waitSeconds: 15f));
             Assert.IsTrue(TenantClassStress.ElevWaitStress(TenantClass.Upper, waitSeconds: 16f));
+
+            // AgentSystem stores wait in minutes; converts to seconds (* 60) at the call site.
+            var homeType = ScriptableObject.CreateInstance<RoomTypeSO>();
+            homeType.id = CondoLuxury.UpperStandardId;
+            homeType.category = RoomCategory.Condo;
+            homeType.luxuryBand = LuxuryBand.Upper;
+            homeType.size = Vector2Int.one;
+            var home = new RoomInstance(1, homeType, Vector2Int.zero, Vector2Int.one);
+            var agent = new Agent(1, AgentRole.CondoResident, home, Vector2Int.zero);
+
+            agent.ElevatorWaitMinutes = 14f / 60f; // 14s — below Upper threshold
+            Assert.IsFalse(AgentSystem.ShouldApplyElevatorWaitStress(agent));
+            agent.ElevatorWaitMinutes = 0.25f; // 15s — exclusive threshold, not yet stressed
+            Assert.IsFalse(AgentSystem.ShouldApplyElevatorWaitStress(agent));
+            agent.ElevatorWaitMinutes = 16f / 60f; // 16s — stresses
+            Assert.IsTrue(AgentSystem.ShouldApplyElevatorWaitStress(agent));
         }
 
         [Test]
