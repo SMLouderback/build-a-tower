@@ -66,6 +66,8 @@ EditMode filter (worktree `economy-vpsf-task7`): **39/39 passed** (GREEN).
 
 `ClassClashRulesTests.Upper_elev_wait_stresses_above_15s_not_at_14s` now also drives `AgentSystem.ShouldApplyElevatorWaitStress` with an Upper condo resident: no stress at `14/60` and `0.25` minutes; stress at `16/60` minutes.
 
+EditMode (worktree `economy-vpsf-task7` @ `02f7cb4`): **1/1 passed** (`result="Passed" total="1" passed="1" failed="0"`).
+
 ## Files touched (committed)
 
 - `Assets/Scripts/UI/RoomEconomyFormat.cs`
