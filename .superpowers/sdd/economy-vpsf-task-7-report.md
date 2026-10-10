@@ -50,7 +50,7 @@ EditMode filter (worktree `economy-vpsf-task7`): **39/39 passed** (GREEN).
 
 **Status:** FIXED
 
-**Commit:** *(pending hash)* — `fix: convert elev wait minutes to seconds for class stress`
+**Commit:** `02f7cb4` — `fix: convert elev wait minutes to seconds for class stress`
 
 ### Bug
 
