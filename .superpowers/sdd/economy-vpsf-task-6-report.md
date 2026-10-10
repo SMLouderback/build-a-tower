@@ -2,7 +2,7 @@
 
 **Status:** DONE
 
-**Commit:** $commit — feat: route build and midnight economy through VPSF balancer
+**Commit:** `5519219` — feat: route build and midnight economy through VPSF balancer
 
 ## Summary
 
