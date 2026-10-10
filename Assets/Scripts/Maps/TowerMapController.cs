@@ -172,10 +172,13 @@ namespace BuildATower
                 foreach (var cell in room.OccupiedCells())
                 {
                     var traffic = Analytics.GetScore(TowerMapMode.Traffic, cell);
+                    var floorCrime01 = crime != null
+                        ? crime.GetCrime(cell.y) / CrimeSystem.MaxCrime
+                        : 0f;
                     var criminal = CriminalProximity(agents, cell);
                     var patrol = PatrolCoverage(agents, cell);
                     var eventBoost = eventBusy ? 0.6f : 0f;
-                    crimeMap[cell] = TowerMapAnalytics.CrimeScore(traffic, criminal, eventBoost, patrol);
+                    crimeMap[cell] = TowerMapAnalytics.CrimeScore(floorCrime01, criminal, eventBoost, patrol);
 
                     var noise = emit * bother + traffic * 0.25f;
                     noiseMap[cell] = TowerMapAnalytics.Clamp01(noise);

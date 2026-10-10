@@ -262,9 +262,13 @@ namespace BuildATower
             }
         }
 
-        public static float CrimeScore(float traffic, float criminal, float eventBoost, float patrol)
+        /// <summary>
+        /// Heat for Crime map mode. <paramref name="floorCrime01"/> is
+        /// <c>CrimeSystem.GetCrime(floor) / MaxCrime</c>; criminal/event/patrol are local accents.
+        /// </summary>
+        public static float CrimeScore(float floorCrime01, float criminal, float eventBoost, float patrol)
         {
-            return Clamp01(traffic * 0.45f + criminal * 0.4f + eventBoost * 0.25f - patrol * 0.35f);
+            return Clamp01(floorCrime01 * 0.85f + criminal * 0.2f + eventBoost * 0.1f - patrol * 0.15f);
         }
 
         public static float TrafficCapacityStress(float occupancy, float capacity, float researchEfficiencyMult = 1f)

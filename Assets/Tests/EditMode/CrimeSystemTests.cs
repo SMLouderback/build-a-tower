@@ -86,6 +86,52 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void AverageCrime_dilutes_with_tower_floor_count()
+        {
+            var crime = new CrimeSystem();
+            crime.SetCrime(3, 100f);
+            Assert.AreEqual(100f, crime.AverageCrime, 0.01f);
+
+            crime.Tick(
+                0.01f,
+                new Dictionary<int, float>(),
+                new Dictionary<int, float>(),
+                totalStaffedSecurityWorkers: 0,
+                Array.Empty<int>(),
+                Array.Empty<int>(),
+                towerFloorCount: 10);
+            Assert.Less(crime.AverageCrime, 15f);
+            Assert.Greater(crime.GetCrime(3), 90f);
+        }
+
+        [Test]
+        public void Four_staff_decay_beats_three_full_fast_food_on_one_floor()
+        {
+            // Design: 1–2 lightly staffed posts cover a quiet retail floor.
+            const float threeFastFoodVisitors = 12f;
+            var crime = new CrimeSystem();
+            crime.SetCrime(2, 80f);
+            var shop = new Dictionary<int, float> { [2] = threeFastFoodVisitors };
+            var empty = new Dictionary<int, float>();
+            crime.Tick(60f, shop, empty, totalStaffedSecurityWorkers: 4,
+                Array.Empty<int>(), Array.Empty<int>(), towerFloorCount: 8);
+            Assert.Less(crime.GetCrime(2), 70f);
+        }
+
+        [Test]
+        public void Twelve_staff_keeps_quiet_tower_average_low()
+        {
+            var crime = new CrimeSystem();
+            crime.SetCrime(2, 100f);
+            var shop = new Dictionary<int, float> { [2] = 12f };
+            var hotel = new Dictionary<int, float> { [3] = 20f, [4] = 20f };
+            crime.Tick(30f, shop, hotel, totalStaffedSecurityWorkers: 12,
+                Array.Empty<int>(), Array.Empty<int>(), towerFloorCount: 12);
+            Assert.Less(crime.AverageCrime, 25f);
+            Assert.Less(crime.GetCrime(2), 40f);
+        }
+
+        [Test]
         public void ShopLoadByFloor_counts_concurrent_visitors_on_shop_floor()
         {
             var grid = new TowerGrid();

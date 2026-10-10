@@ -2294,7 +2294,7 @@ namespace BuildATower
                 ? "Red = loss · grey = break-even · green = profit (scaled to today’s tower)"
                 : maps.Mode switch
                 {
-                    TowerMapMode.Crime => "Blue = low risk · red = high risk",
+                    TowerMapMode.Crime => "Blue = low floor crime · red = high (matches HUD)",
                     TowerMapMode.Noise => "Blue = quiet · red = louder / bother",
                     TowerMapMode.Traffic => "Blue = light · red = busy",
                     TowerMapMode.Economic => "Blue = low stress · red = high stress",
@@ -2442,7 +2442,7 @@ namespace BuildATower
                     var stress = agents != null ? agents.AverageStress : averageStress;
                     lines.Add($"Pop {pop}");
                     lines.Add($"Stress {stress:0}");
-                    lines.Add($"Crime {simulation?.Crime?.DisplayCrime ?? 0f:0}");
+                    lines.Add($"Crime {simulation?.Crime?.AverageCrime ?? 0f:0}");
                     if (agents?.Agents != null)
                     {
                         var inTower = 0;

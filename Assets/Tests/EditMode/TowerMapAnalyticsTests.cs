@@ -21,6 +21,15 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void CrimeScore_floor_crime_is_primary_signal()
+        {
+            var quiet = TowerMapAnalytics.CrimeScore(0f, 0f, 0f, 0f);
+            var hot = TowerMapAnalytics.CrimeScore(1f, 0f, 0f, 0f);
+            Assert.AreEqual(0f, quiet, 0.0001f);
+            Assert.Greater(hot, 0.8f);
+        }
+
+        [Test]
         public void CrimeScore_criminal_raises_patrol_lowers()
         {
             var baseScore = TowerMapAnalytics.CrimeScore(0.5f, 0f, 0f, 0f);

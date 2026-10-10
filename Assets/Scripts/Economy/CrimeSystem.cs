@@ -6,13 +6,16 @@ namespace BuildATower
     public sealed class CrimeSystem
     {
         public const float MaxCrime = 100f;
-        /// <summary>Per concurrent shop visitor on a floor (retuned 2026-08 soft early-game crime).</summary>
-        public const float ShopRaisePerVisitorPerMinute = 0.22f;
+        /// <summary>
+        /// Per concurrent shop/leisure visitor on a floor.
+        /// Retuned 2026-10: 3 full fast-food (12 visitors) must lose to ~4 staffed guards.
+        /// </summary>
+        public const float ShopRaisePerVisitorPerMinute = 0.08f;
         /// <summary>Per in-tower hotel guest / hotel-home event visitor on a floor.</summary>
-        public const float HotelRaisePerGuestPerMinute = 0.10f;
+        public const float HotelRaisePerGuestPerMinute = 0.035f;
         public const float NaturalDecayPerMinute = 0.08f;
-        /// <summary>Tower-wide decay shared across all floors with crime, per staffed security worker.</summary>
-        public const float BaselineDecayPerStaffPerMinute = 0.14f;
+        /// <summary>Applied to each floor with crime, per staffed security worker.</summary>
+        public const float BaselineDecayPerStaffPerMinute = 0.25f;
         public const float PatrolDecayPerMinute = 0.7f;
         public const float PatrolAdjacentFactor = 0.5f;
         public const float CriminalRaisePerMinute = 1.2f;
@@ -26,20 +29,22 @@ namespace BuildATower
         public float GetCrime(int floor) =>
             _crime.TryGetValue(floor, out var value) ? value : 0f;
 
-        public void SetCrime(int floor, float value) =>
-            _crime[floor] = Clamp(value);
-
-        public float AverageCrime
+        public void SetCrime(int floor, float value)
         {
-            get
-            {
-                if (_crime.Count == 0) return 0f;
-                var sum = 0f;
-                foreach (var kv in _crime)
-                    sum += kv.Value;
-                return sum / _crime.Count;
-            }
+            var clamped = Clamp(value);
+            if (Mathf.Approximately(clamped, 0f))
+                _crime.Remove(floor);
+            else
+                _crime[floor] = clamped;
+            AverageCrime = ComputeAverage(0);
         }
+
+        /// <summary>
+        /// Mean crime across the tower. When <see cref="Tick"/> is given
+        /// <c>towerFloorCount</c>, zero-crime floors dilute the average so a few
+        /// hot floors cannot report as “100% tower crime.”
+        /// </summary>
+        public float AverageCrime { get; private set; }
 
         /// <summary>Smoothed tower crime for HUD / “sentiment” (lags raw <see cref="AverageCrime"/>).</summary>
         public float DisplayCrime => _sentiment;
@@ -51,7 +56,8 @@ namespace BuildATower
             int totalStaffedSecurityWorkers,
             IReadOnlyList<int> patrolFloors,
             IReadOnlyList<int> criminalFloors,
-            float crimeSuppressionMultiplier = 1f)
+            float crimeSuppressionMultiplier = 1f,
+            int towerFloorCount = 0)
         {
             if (deltaGameMinutes <= 0f) return;
 
@@ -95,9 +101,22 @@ namespace BuildATower
                 Add(floor, -decay);
             }
 
+            AverageCrime = ComputeAverage(towerFloorCount);
+
             // Smooth HUD sentiment toward the current tower average.
             var blend = 1f - Mathf.Exp(-SentimentAlphaPerMinute * deltaGameMinutes);
             _sentiment = Mathf.Lerp(_sentiment, AverageCrime, blend);
+        }
+
+        float ComputeAverage(int towerFloorCount)
+        {
+            var sum = 0f;
+            foreach (var kv in _crime)
+                sum += kv.Value;
+            if (towerFloorCount > 0)
+                return sum / towerFloorCount;
+            if (_crime.Count == 0) return 0f;
+            return sum / _crime.Count;
         }
 
         public void ApplyCaptureDrop(int floor) =>

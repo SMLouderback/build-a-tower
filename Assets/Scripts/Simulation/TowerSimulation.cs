@@ -303,7 +303,8 @@ namespace BuildATower
                 CountStaffedSecurity(build.Grid),
                 _patrolFloors,
                 _criminalFloors,
-                ResearchEffects.CrimeSuppressionMultiplier(research));
+                ResearchEffects.CrimeSuppressionMultiplier(research),
+                CountFloorsWithRooms(build.Grid));
             research?.TickProgress(
                 _clock.LastTickGameMinutes,
                 EconomySystem.CountResearcherPool(build.Grid));
@@ -651,6 +652,22 @@ namespace BuildATower
             }
 
             return total;
+        }
+
+        static int CountFloorsWithRooms(TowerGrid grid)
+        {
+            if (grid == null) return 0;
+            var floors = new HashSet<int>();
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                var minY = room.Origin.y;
+                var maxY = room.Origin.y + room.Size.y - 1;
+                for (var y = minY; y <= maxY; y++)
+                    floors.Add(y);
+            }
+
+            return floors.Count;
         }
 
         static int CountHotelGuests(IReadOnlyList<Agent> agents)

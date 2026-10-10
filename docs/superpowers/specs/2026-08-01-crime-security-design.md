@@ -224,10 +224,10 @@ Keep crime math out of `StarSystem`. Prefer pure helpers testable without Play M
 | Constant | Suggested start | Live (2026-08-03 retune) |
 |----------|-----------------|--------------------------|
 | Crime clamp | 0–100 | 0–100 |
-| Shop raise / visitor / min | Busy floor stays elevated without security | `0.22` (was `0.55`) |
-| Hotel raise / guest / min | — | `0.10` (was `0.25`) |
+| Shop raise / visitor / min | Busy floor stays elevated without security | `0.08` (was `0.22` / `0.55`) |
+| Hotel raise / guest / min | — | `0.035` (was `0.10` / `0.25`) |
 | Natural decay / min | Low | `0.08` (was `0.04`) |
-| Baseline per staff / min | Mild tower-wide | `0.14` (was `0.06`) |
+| Baseline per staff / min | Mild tower-wide | `0.25` (was `0.14` / `0.06`) |
 | Patrol decay | Clearly stronger than baseline on local floor | `0.7` |
 | ±1 floor patrol bleed | 50% of patrol rate (optional) | 50% |
 | Criminal spawn min avg crime | — | `28` (was `15`) |
@@ -238,7 +238,7 @@ Keep crime math out of `StarSystem`. Prefer pure helpers testable without Play M
 | Capture | Same floor | Same floor |
 | Crime stress | Noticeable at crime ≥ 40 on populated floors | unchanged |
 
-Exact numbers locked during implementation/tests; behavior and relative strengths above are normative. Intent of the 2026-08-03 retune: **1–2 lightly staffed Security Posts** should cover a quiet / low-pop tower; heavy shop floors and criminals still reward patrols.
+Exact numbers locked during implementation/tests; behavior and relative strengths above are normative. Intent: **1–2 lightly staffed Security Posts** (~4 guards) should cover a quiet retail floor (e.g. three full fast-food); heavy nightlife / crowded hotel stacks and criminals still reward more posts and patrols. HUD average dilutes across all floors with rooms (2026-10).
 
 ## 11. Test plan (acceptance)
 
