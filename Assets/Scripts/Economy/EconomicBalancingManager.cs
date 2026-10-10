@@ -8,9 +8,15 @@ namespace BuildATower
     /// </summary>
     public static class EconomicBalancingManager
     {
-        public static int BuildCost(RoomTypeSO type, GameDifficulty difficulty)
+        public static int BuildCost(RoomTypeSO type, GameDifficulty difficulty) =>
+            BuildCost(type, difficulty, VpsfCatalog.Cells(type));
+
+        /// <summary>
+        /// Build cost for an explicit cell count (lobby/scaffold cell, elevator floor strip).
+        /// </summary>
+        public static int BuildCost(RoomTypeSO type, GameDifficulty difficulty, int cells)
         {
-            if (!TryRentEquivalent(type, out var rentEq))
+            if (!TryRentEquivalent(type, cells, out var rentEq))
                 return 0;
 
             var nominal = (int)Math.Round(rentEq * VpsfCatalog.BuildCostPerIncomeCell);
@@ -41,7 +47,7 @@ namespace BuildATower
 
         public static int PeriodUpkeep(RoomTypeSO type, GameDifficulty difficulty, float pulseMult)
         {
-            if (!TryIdentityRent(type, out var rentEq, out var tenantClass))
+            if (!TryIdentityRent(type, VpsfCatalog.Cells(type), out var rentEq, out var tenantClass))
                 return 0;
 
             var scaled = rentEq
@@ -54,9 +60,16 @@ namespace BuildATower
         }
 
         static bool TryRentEquivalent(RoomTypeSO type, out float rentEq) =>
-            TryIdentityRent(type, out rentEq, out _);
+            TryRentEquivalent(type, VpsfCatalog.Cells(type), out rentEq);
 
-        static bool TryIdentityRent(RoomTypeSO type, out float rentEq, out TenantClass tenantClass)
+        static bool TryRentEquivalent(RoomTypeSO type, int cells, out float rentEq) =>
+            TryIdentityRent(type, cells, out rentEq, out _);
+
+        static bool TryIdentityRent(
+            RoomTypeSO type,
+            int cells,
+            out float rentEq,
+            out TenantClass tenantClass)
         {
             rentEq = 0f;
             tenantClass = TenantClass.Mid;
@@ -64,7 +77,6 @@ namespace BuildATower
             if (!VpsfCatalog.TryIdentity(type, out var family, out var tier, out tenantClass))
                 return false;
 
-            var cells = VpsfCatalog.Cells(type);
             if (cells <= 0) return false;
 
             var basePerCell = VpsfCatalog.BasePerCell(family);

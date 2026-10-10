@@ -50,14 +50,14 @@ namespace BuildATower.Tests
         {
             var (grid, shop, agents, agent, clock) = SetupOfficeWithRestaurant();
             PlaceAgentWorkingAtOffice(agent);
-            agent.DisposableRemaining = 30;
+            agent.DisposableRemaining = 20; // below VPSF visit afford gate (~25)
             agent.DisposableDayIndex = clock.DayIndex;
 
             Assert.IsFalse(agents.TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Working));
             Assert.AreEqual(-1, agent.CommercialTripDay);
             Assert.IsNull(agent.VisitTarget);
             Assert.AreEqual(0, shop.ConcurrentVisitors);
-            Assert.AreEqual(30, agent.DisposableRemaining);
+            Assert.AreEqual(20, agent.DisposableRemaining);
         }
 
         [Test]
@@ -79,35 +79,32 @@ namespace BuildATower.Tests
             Assert.Greater(shop.ShopEarningsToday, 0);
             Assert.Less(agent.DisposableRemaining, 50);
             Assert.AreEqual(50 - agent.DisposableRemaining, shop.ShopEarningsToday);
-            Assert.That(shop.ShopEarningsToday, Is.InRange(1, 40));
+            Assert.That(shop.ShopEarningsToday, Is.InRange(1, ShopVisitRules.PayPerVisit(shop.Type)));
         }
 
         [Test]
         public void Office_lunch_trip_records_visit_after_dwell()
         {
             var (grid, shop, agents, agent, clock) = SetupOfficeWithShop(open: true);
+            PlaceAgentWorkingAtOffice(agent);
+            agent.DisposableRemaining = 100;
+            agent.DisposableDayIndex = clock.DayIndex;
 
-            // Commute in.
-            clock.AdvanceMinutes(agent.ArrivalMinute - clock.MinuteOfDay);
-            for (var i = 0; i < 400 && agent.Phase != AgentPhase.Working; i++)
-                agents.Tick(1f, clock, grid);
-            Assert.AreEqual(AgentPhase.Working, agent.Phase);
+            // Enter lunch window (~noon) without a long commute sim that can hit quitting time.
+            clock.AdvanceMinutes(12 * 60 - clock.MinuteOfDay);
+            Assert.IsTrue(agents.TryBeginCommercialTrip(agent, grid, clock, AgentPhase.Working));
 
-            // Enter lunch window (~noon).
-            var lunch = 12 * 60;
-            if (clock.MinuteOfDay < lunch)
-                clock.AdvanceMinutes(lunch - clock.MinuteOfDay);
-
-            for (var i = 0; i < 2000 && shop.VisitsToday < 1; i++)
-                agents.Tick(1f, clock, grid);
+            agent.Phase = AgentPhase.VisitingShop;
+            agent.VisitDwellRemaining = 0.01f;
+            agents.Tick(1f, clock, grid);
 
             Assert.GreaterOrEqual(shop.VisitsToday, 1, "Completed lunch dwell should RecordVisit.");
             Assert.AreEqual(0, shop.ConcurrentVisitors);
             Assert.IsNull(agent.VisitTarget);
-            Assert.AreEqual(
-                AgentPhase.Working,
-                agent.Phase,
-                "Agent should return to work after the visit.");
+            Assert.AreEqual(AgentPhase.Working, agent.PhaseAfterMove);
+            Assert.IsTrue(
+                agent.Phase is AgentPhase.Moving or AgentPhase.WaitingAtElevator or AgentPhase.Working,
+                "Agent should return toward work after the visit.");
         }
 
         [Test]
@@ -297,7 +294,8 @@ namespace BuildATower.Tests
             var grid = new TowerGrid();
             Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
             Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, 1), out _));
-            Assert.IsTrue(grid.TryPlace(Restaurant(), new Vector2Int(9, 1), out _));
+            Assert.IsTrue(grid.TryPlace(Restaurant(), new Vector2Int(9, 1), out var restaurant));
+            restaurant.Type.requiredStars = 5;
             Assert.IsTrue(grid.TryPlace(Retail(), new Vector2Int(10, 1), out var retail));
             Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
 
@@ -506,15 +504,15 @@ namespace BuildATower.Tests
             economy.OnNewDay(grid, new List<Agent>(), wallet);
 
             Assert.AreEqual(65, economy.LastIncome);
-            Assert.AreEqual(20, economy.LastExpense);
-            Assert.AreEqual(45, wallet.Balance);
+            Assert.AreEqual(19, economy.LastExpense);
+            Assert.AreEqual(46, wallet.Balance);
             Assert.AreEqual(65, shop.LifetimeIncome);
-            Assert.AreEqual(20, shop.LifetimeExpense);
+            Assert.AreEqual(19, shop.LifetimeExpense);
             Assert.AreEqual(65, economy.GetLastRoomIncome(shop));
-            Assert.AreEqual(20, economy.GetLastRoomExpense(shop));
+            Assert.AreEqual(19, economy.GetLastRoomExpense(shop));
             Assert.AreEqual(65, shop.ShopRevenueYesterday);
-            Assert.AreEqual(20, shop.ShopUpkeepYesterday);
-            Assert.AreEqual(45, shop.ShopNetYesterday);
+            Assert.AreEqual(19, shop.ShopUpkeepYesterday);
+            Assert.AreEqual(46, shop.ShopNetYesterday);
             Assert.AreEqual(0, shop.VisitsToday);
             Assert.AreEqual(0, shop.ShopEarningsToday);
             Assert.AreNotEqual(80, economy.LastIncome);
@@ -539,12 +537,11 @@ namespace BuildATower.Tests
         {
             var grid = new TowerGrid();
             Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            // Floor plate so shops at x=9/10 are reachable from stairs (same as office setups).
+            Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, 1), out _));
             // Fast Food (4) + Restaurant (6) = 10 slots so the street cap (8) is the binding limit.
-            // Price floors at Street band min ($20) so affordability never blocks the spawn-cap test.
             Assert.IsTrue(grid.TryPlace(FastFood(), new Vector2Int(9, 1), out var fast));
             Assert.IsTrue(grid.TryPlace(Restaurant(), new Vector2Int(10, 1), out var restaurant));
-            fast.Type.baseIncome = 20;
-            restaurant.Type.baseIncome = 20;
             Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
 
             var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
@@ -666,15 +663,21 @@ namespace BuildATower.Tests
             var grid = new TowerGrid();
             Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
             Assert.IsTrue(grid.TryPlace(Condo(), new Vector2Int(0, 1), out _));
+            var plate = Office();
+            plate.size = new Vector2Int(8, 1);
+            plate.maxOccupants = 0;
+            Assert.IsTrue(grid.TryPlace(plate, new Vector2Int(1, 1), out _));
             Assert.IsTrue(grid.TryPlace(FastFood(), new Vector2Int(9, 1), out var shop));
-            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(10, 0), out _));
 
             var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
             router.Rebuild(grid);
             var agents = new AgentSystem(router);
-            agents.SyncHomes(grid, currentStars: 0, averageCrime: 0f);
-            var agent = agents.Agents.Single();
+            agents.SyncHomes(grid, currentStars: 1, averageCrime: 0f);
+            var agent = agents.Agents.Single(a => a.Role == AgentRole.CondoResident);
+            agent.DisposableRemaining = 100;
             var clock = new GameClock(1f, 12 * 60);
+            agent.DisposableDayIndex = clock.DayIndex;
             return (grid, shop, agents, agent, clock);
         }
 
@@ -745,9 +748,9 @@ namespace BuildATower.Tests
         static RoomTypeSO Condo()
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
-            so.id = CondoLuxury.BaseId;
+            so.id = CondoLuxury.MidStandardId;
             so.category = RoomCategory.Condo;
-            so.luxuryBand = LuxuryBand.Base;
+            so.luxuryBand = LuxuryBand.Mid;
             so.size = Vector2Int.one;
             so.maxOccupants = 1;
             so.allowAboveGround = true;

@@ -401,7 +401,12 @@ namespace BuildATower
             _agents.SyncHomes(
                 build.Grid,
                 GameSession.PendingLoad == null
-                    ? room => _economy?.TrySellCondo(room, build.Wallet)
+                    ? room => _economy?.TrySellCondo(
+                        room,
+                        build.Wallet,
+                        _climate?.SpendMultiplier ?? 1f,
+                        _macro?.LivingPulseMult ?? 1f,
+                        _stars?.CurrentStars ?? 0)
                     : null,
                 _stars?.CurrentStars ?? 0,
                 _climate?.ComfortTierOffset ?? 0,
@@ -467,6 +472,8 @@ namespace BuildATower
 
             var climateOffset = _climate?.ComfortTierOffset ?? 0;
             var climateSpendMult = _climate?.SpendMultiplier ?? 1f;
+            var livingPulse = _macro?.LivingPulseMult ?? 1f;
+            var commercialPulse = _macro?.CommercialPulseMult ?? 1f;
             for (var day = _lastDayIndex + 1; day <= _clock.DayIndex; day++)
             {
                 _shopDemand.ArchiveAndApplyStress(_agents.Agents);
@@ -490,7 +497,9 @@ namespace BuildATower
                     climateOffset,
                     _research,
                     climateSpendMult,
-                    _conference);
+                    _conference,
+                    livingPulse,
+                    commercialPulse);
 
                 _shopDemand.BeginDay(
                     _agents.Agents,

@@ -17,17 +17,22 @@ namespace BuildATower.Tests
             return so;
         }
 
-        RoomTypeSO Office(int baseIncome)
+        // Mid office 9x1: rentEq 120*9*1*1 = 1080; upkeep Mid 25% = 270
+        RoomTypeSO Office(int baseIncome = 0)
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
-            so.id = "office";
+            so.id = OfficeLuxury.MidStandardId;
             so.category = RoomCategory.Office;
+            so.luxuryBand = LuxuryBand.Mid;
             so.size = new Vector2Int(9, 1);
             so.allowAboveGround = true;
             so.incomeModel = IncomeModel.QuarterlyRent;
-            so.baseIncome = baseIncome;
+            so.baseIncome = baseIncome; // unused by sim money
             return so;
         }
+
+        const int MidOfficeIncome = 810; // 1080 * street Mid fit 0.75
+        const int MidOfficeUpkeep = 270;
 
         RoomTypeSO Elevator()
         {
@@ -40,16 +45,20 @@ namespace BuildATower.Tests
             return so;
         }
 
-        RoomTypeSO Condo(int baseIncome)
+        // Condo base 1x1 Mid: rentEq 160*0.90 = 144
+        RoomTypeSO Condo(int baseIncome = 0)
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
-            so.id = "condo";
+            so.id = CondoLuxury.BaseId;
             so.category = RoomCategory.Condo;
+            so.luxuryBand = LuxuryBand.Base;
             so.size = Vector2Int.one;
             so.incomeModel = IncomeModel.UpfrontSale;
-            so.baseIncome = baseIncome;
+            so.baseIncome = baseIncome; // unused by sim money
             return so;
         }
+
+        const int CondoBaseSale = 108; // 144 * street Mid fit 0.75
 
         [Test]
         public void Midnight_pays_daily_rent_for_occupied_office()
@@ -61,17 +70,17 @@ namespace BuildATower.Tests
             var wallet = new FundsWallet(100_000);
             var economy = new EconomySystem();
 
-            economy.OnNewDay(grid, agents, wallet);
+            economy.OnNewDay(grid, agents, wallet, currentStars: 1);
 
-            Assert.AreEqual(103_000, wallet.Balance);
-            Assert.AreEqual(3000, economy.LastIncome);
-            Assert.AreEqual(0, economy.LastExpense);
-            Assert.AreEqual(3000, economy.LastNet);
-            Assert.AreEqual(3000, economy.GetLastRoomIncome(office));
-            Assert.AreEqual(0, economy.GetLastRoomExpense(office));
-            Assert.AreEqual(3000, economy.GetLastRoomNet(office));
-            Assert.AreEqual(3000, office.LifetimeIncome);
-            Assert.AreEqual(0, office.LifetimeExpense);
+            Assert.AreEqual(100_000 + MidOfficeIncome - MidOfficeUpkeep, wallet.Balance);
+            Assert.AreEqual(MidOfficeIncome, economy.LastIncome);
+            Assert.AreEqual(MidOfficeUpkeep, economy.LastExpense);
+            Assert.AreEqual(MidOfficeIncome - MidOfficeUpkeep, economy.LastNet);
+            Assert.AreEqual(MidOfficeIncome, economy.GetLastRoomIncome(office));
+            Assert.AreEqual(MidOfficeUpkeep, economy.GetLastRoomExpense(office));
+            Assert.AreEqual(MidOfficeIncome - MidOfficeUpkeep, economy.GetLastRoomNet(office));
+            Assert.AreEqual(MidOfficeIncome, office.LifetimeIncome);
+            Assert.AreEqual(MidOfficeUpkeep, office.LifetimeExpense);
         }
 
         [Test]
@@ -105,10 +114,10 @@ namespace BuildATower.Tests
             Assert.IsTrue(economy.TrySellCondo(condoRoom, wallet));
             Assert.IsFalse(economy.TrySellCondo(condoRoom, wallet));
 
-            Assert.AreEqual(150_000, wallet.Balance);
+            Assert.AreEqual(CondoBaseSale, wallet.Balance);
             Assert.IsTrue(condoRoom.CondoSold);
-            Assert.AreEqual(150_000, economy.GetLastRoomIncome(condoRoom));
-            Assert.AreEqual(150_000, condoRoom.LifetimeIncome);
+            Assert.AreEqual(CondoBaseSale, economy.GetLastRoomIncome(condoRoom));
+            Assert.AreEqual(CondoBaseSale, condoRoom.LifetimeIncome);
             Assert.IsTrue(economy.HasRecordedEconomyEvent);
         }
 
@@ -125,8 +134,9 @@ namespace BuildATower.Tests
 
             economy.OnNewDay(grid, agents, wallet, currentStars: 3);
 
-            Assert.AreEqual(3900, economy.LastIncome);
-            Assert.AreEqual(103_900, wallet.Balance);
+            // High tier 1.3x * street fit 0.75 → 1053; upkeep still 270
+            Assert.AreEqual(1053, economy.LastIncome);
+            Assert.AreEqual(100_000 + 1053 - MidOfficeUpkeep, wallet.Balance);
         }
 
         [Test]
@@ -138,7 +148,8 @@ namespace BuildATower.Tests
             var economy = new EconomySystem();
 
             Assert.IsTrue(economy.TrySellCondo(condoRoom, wallet));
-            Assert.AreEqual(105_000, wallet.Balance);
+            // Low tier 0.7x * street fit 0.75 → Round(75.6)=76
+            Assert.AreEqual(76, wallet.Balance);
         }
 
         RoomTypeSO FastFoodShop(int baseIncome = 40)
@@ -154,12 +165,11 @@ namespace BuildATower.Tests
             return so;
         }
 
-        [TestCase(28, 14)]
-        [TestCase(65, 33)]
-        [TestCase(100, 50)]
-        public void Shop_upkeep_rounds_half_pay_cap_away_from_zero(int cap, int expected)
+        [Test]
+        public void Shop_upkeep_uses_vpsf_period_upkeep()
         {
-            Assert.AreEqual(expected, ShopDemandBalance.DailyUpkeep(FastFoodShop(cap)));
+            // tier1 Mid: rentEq 110*0.70=77; upkeep 25% → 19
+            Assert.AreEqual(19, ShopDemandBalance.DailyUpkeep(FastFoodShop()));
         }
 
         [Test]
@@ -173,12 +183,12 @@ namespace BuildATower.Tests
 
             economy.OnNewDay(grid, new List<Agent>(), wallet);
 
-            Assert.AreEqual(25, economy.GetLastRoomExpense(shop));
+            Assert.AreEqual(19, economy.GetLastRoomExpense(shop));
             Assert.AreEqual(0, shop.ShopRevenueYesterday);
-            Assert.AreEqual(25, shop.ShopUpkeepYesterday);
-            Assert.AreEqual(-25, shop.ShopNetYesterday);
-            Assert.AreEqual(25, shop.LifetimeExpense);
-            Assert.AreEqual(99_975, wallet.Balance);
+            Assert.AreEqual(19, shop.ShopUpkeepYesterday);
+            Assert.AreEqual(-19, shop.ShopNetYesterday);
+            Assert.AreEqual(19, shop.LifetimeExpense);
+            Assert.AreEqual(99_981, wallet.Balance);
         }
 
         [Test]
@@ -195,10 +205,10 @@ namespace BuildATower.Tests
             economy.OnNewDay(grid, new List<Agent>(), wallet);
 
             Assert.AreEqual(0, shop.ShopRevenueYesterday);
-            Assert.AreEqual(25, shop.ShopUpkeepYesterday);
-            Assert.AreEqual(-25, shop.ShopNetYesterday);
+            Assert.AreEqual(19, shop.ShopUpkeepYesterday);
+            Assert.AreEqual(-19, shop.ShopNetYesterday);
             Assert.AreEqual(0, shop.ShopEarningsToday);
-            Assert.AreEqual(99_975, wallet.Balance);
+            Assert.AreEqual(99_981, wallet.Balance);
         }
 
         [Test]
@@ -222,16 +232,16 @@ namespace BuildATower.Tests
             economy.OnNewDay(grid, new List<Agent>(), wallet);
 
             Assert.AreEqual(120, economy.LastIncome);
-            Assert.AreEqual(20, economy.LastExpense);
-            Assert.AreEqual(100_100, wallet.Balance);
+            Assert.AreEqual(19, economy.LastExpense);
+            Assert.AreEqual(100_101, wallet.Balance);
             Assert.AreEqual(0, shop.VisitsToday);
             Assert.AreEqual(0, shop.ShopEarningsToday);
             Assert.AreEqual(120, shop.LifetimeIncome);
-            Assert.AreEqual(20, shop.LifetimeExpense);
+            Assert.AreEqual(19, shop.LifetimeExpense);
             Assert.AreEqual(120, economy.GetLastRoomIncome(shop));
             Assert.AreEqual(120, shop.ShopRevenueYesterday);
-            Assert.AreEqual(20, shop.ShopUpkeepYesterday);
-            Assert.AreEqual(100, shop.ShopNetYesterday);
+            Assert.AreEqual(19, shop.ShopUpkeepYesterday);
+            Assert.AreEqual(101, shop.ShopNetYesterday);
             Assert.IsTrue(economy.HasRecordedEconomyEvent);
         }
 
@@ -251,7 +261,8 @@ namespace BuildATower.Tests
 
                 Assert.AreEqual(BuildEconomy.ApplyIncome(101), shop.ShopRevenueYesterday);
                 Assert.AreEqual(81, shop.ShopRevenueYesterday);
-                Assert.AreEqual(100_061, wallet.Balance);
+                // Hard upkeep Round(77*0.25*0.8)=15
+                Assert.AreEqual(100_000 + 81 - 15, wallet.Balance);
             }
             finally
             {
@@ -274,7 +285,8 @@ namespace BuildATower.Tests
 
             // Max at 0★ → 10% demand; seed 7 first roll is ~0.38 so income is skipped.
             Assert.AreEqual(0, economy.LastIncome);
-            Assert.AreEqual(100_000, wallet.Balance);
+            Assert.AreEqual(MidOfficeUpkeep, economy.LastExpense);
+            Assert.AreEqual(100_000 - MidOfficeUpkeep, wallet.Balance);
         }
 
         RoomTypeSO HotelBase()
@@ -453,7 +465,8 @@ namespace BuildATower.Tests
             economy.OnNewDay(grid, agents, wallet);
 
             Assert.AreEqual(0, economy.LastIncome);
-            Assert.AreEqual(100_000, wallet.Balance);
+            Assert.AreEqual(MidOfficeUpkeep, economy.LastExpense);
+            Assert.AreEqual(100_000 - MidOfficeUpkeep, wallet.Balance);
             Assert.AreEqual(38, office.Condition);
 
             office.Condition = 0;
@@ -477,12 +490,12 @@ namespace BuildATower.Tests
             economy.OnNewDay(grid, new List<Agent>(), wallet);
 
             Assert.AreEqual(0, economy.LastIncome);
-            Assert.AreEqual(20, economy.LastExpense);
-            Assert.AreEqual(99_980, wallet.Balance);
+            Assert.AreEqual(19, economy.LastExpense);
+            Assert.AreEqual(99_981, wallet.Balance);
             Assert.AreEqual(0, shop.VisitsToday);
             Assert.AreEqual(0, shop.ShopEarningsToday);
             Assert.AreEqual(0, shop.ShopRevenueYesterday);
-            Assert.AreEqual(20, shop.ShopUpkeepYesterday);
+            Assert.AreEqual(19, shop.ShopUpkeepYesterday);
         }
 
         [Test]
@@ -540,14 +553,16 @@ namespace BuildATower.Tests
 
             Assert.AreEqual(0f, economy.AverageDailyProfit);
 
-            economy.OnNewDay(grid, agents, wallet);
-            Assert.AreEqual(3000, economy.LastNet);
-            Assert.AreEqual(3000f, economy.AverageDailyProfit);
+            economy.OnNewDay(grid, agents, wallet, currentStars: 1);
+            Assert.AreEqual(MidOfficeIncome - MidOfficeUpkeep, economy.LastNet);
+            Assert.AreEqual((float)(MidOfficeIncome - MidOfficeUpkeep), economy.AverageDailyProfit);
 
-            // Second midnight with no occupants → LastNet 0; average falls to 1500.
-            economy.OnNewDay(grid, new List<Agent>(), wallet);
-            Assert.AreEqual(0, economy.LastNet);
-            Assert.AreEqual(1500f, economy.AverageDailyProfit);
+            // Second midnight vacant: upkeep only.
+            economy.OnNewDay(grid, new List<Agent>(), wallet, currentStars: 1);
+            Assert.AreEqual(-MidOfficeUpkeep, economy.LastNet);
+            Assert.AreEqual(
+                (MidOfficeIncome - MidOfficeUpkeep - MidOfficeUpkeep) / 2f,
+                economy.AverageDailyProfit);
         }
 
         [Test]

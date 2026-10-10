@@ -2701,7 +2701,11 @@ namespace BuildATower
                          simulation?.ShopDemand,
                          ShopDemandFormat.CountOpenShopsInPool(
                              build.Grid?.Rooms,
-                             build.SelectedRoom?.Type)))
+                             build.SelectedRoom?.Type),
+                         simulation?.Stars?.CurrentStars ?? 0,
+                         simulation?.Climate?.SpendMultiplier ?? 1f,
+                         simulation?.MacroEconomy?.LivingPulseMult ?? 1f,
+                         simulation?.MacroEconomy?.CommercialPulseMult ?? 1f))
             {
                 GUI.Label(new Rect(cx, cy, inner, row), line, label);
                 cy += row;

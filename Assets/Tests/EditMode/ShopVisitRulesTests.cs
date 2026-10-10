@@ -59,11 +59,15 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void PayPerVisit_returns_base_income()
+        public void PayPerVisit_returns_vpsf_period_income()
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
-            so.baseIncome = 40;
-            Assert.AreEqual(40, ShopVisitRules.PayPerVisit(so));
+            so.id = "shop_food_fast";
+            so.category = RoomCategory.Commercial;
+            so.incomeModel = IncomeModel.TrafficVariable;
+            so.size = Vector2Int.one;
+            // tier1 Mid period 77 * VisitPriceOfPeriodIncome 0.5 → 39
+            Assert.AreEqual(27, ShopVisitRules.PayPerVisit(so)); // Round(77*0.35)
             Assert.AreEqual(0, ShopVisitRules.PayPerVisit(null));
         }
 

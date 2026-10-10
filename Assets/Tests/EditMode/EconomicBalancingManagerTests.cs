@@ -118,20 +118,35 @@ namespace BuildATower.Tests
         [Test]
         public void Unknown_or_null_type_returns_zero()
         {
-            var shop = ScriptableObject.CreateInstance<RoomTypeSO>();
-            shop.id = "shop_fast_food";
-            shop.category = RoomCategory.Commercial;
-            shop.size = new Vector2Int(2, 1);
+            var unknown = ScriptableObject.CreateInstance<RoomTypeSO>();
+            unknown.id = "totally_unknown_room_xyz";
+            unknown.category = RoomCategory.Structure;
+            unknown.size = new Vector2Int(2, 1);
 
-            Assert.AreEqual(0, EconomicBalancingManager.BuildCost(shop, GameDifficulty.Normal));
+            Assert.AreEqual(0, EconomicBalancingManager.BuildCost(unknown, GameDifficulty.Normal));
             Assert.AreEqual(0, EconomicBalancingManager.PeriodIncome(
-                shop, PricePricing.TierNormal, GameDifficulty.Normal, 1f, 1f, 1f));
-            Assert.AreEqual(0, EconomicBalancingManager.PeriodUpkeep(shop, GameDifficulty.Normal, 1f));
+                unknown, PricePricing.TierNormal, GameDifficulty.Normal, 1f, 1f, 1f));
+            Assert.AreEqual(0, EconomicBalancingManager.PeriodUpkeep(unknown, GameDifficulty.Normal, 1f));
 
             Assert.AreEqual(0, EconomicBalancingManager.BuildCost(null, GameDifficulty.Normal));
             Assert.AreEqual(0, EconomicBalancingManager.PeriodIncome(
                 null, PricePricing.TierNormal, GameDifficulty.Normal, 1f, 1f, 1f));
             Assert.AreEqual(0, EconomicBalancingManager.PeriodUpkeep(null, GameDifficulty.Normal, 1f));
+        }
+
+        [Test]
+        public void Shop_identity_returns_non_zero_money()
+        {
+            var shop = ScriptableObject.CreateInstance<RoomTypeSO>();
+            shop.id = "shop_food_fast";
+            shop.category = RoomCategory.Commercial;
+            shop.size = new Vector2Int(2, 1);
+            // tier1 Mid: 110*2*0.70 = 154 income; build 154*18 = 2772
+            Assert.AreEqual(2772, EconomicBalancingManager.BuildCost(shop, GameDifficulty.Normal));
+            Assert.AreEqual(154, EconomicBalancingManager.PeriodIncome(
+                shop, PricePricing.TierNormal, GameDifficulty.Normal, 1f, 1f, 1f));
+            // 154 * 0.25 = 38.5 → banker's round to 38
+            Assert.AreEqual(38, EconomicBalancingManager.PeriodUpkeep(shop, GameDifficulty.Normal, 1f));
         }
 
         static RoomTypeSO MidOffice(int cellsW, int cellsH) =>

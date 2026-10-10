@@ -7,42 +7,74 @@ namespace BuildATower.Tests
 {
     public class RoomEconomyFormatTests
     {
-        static RoomTypeSO Room(int buildCost, IncomeModel incomeModel, int baseIncome)
+        [SetUp]
+        public void SetUp() => GameSession.ResetForTests();
+
+        static RoomTypeSO MidOffice()
         {
             var type = ScriptableObject.CreateInstance<RoomTypeSO>();
-            type.buildCost = buildCost;
-            type.incomeModel = incomeModel;
-            type.baseIncome = baseIncome;
+            type.id = OfficeLuxury.MidStandardId;
+            type.category = RoomCategory.Office;
+            type.luxuryBand = LuxuryBand.Mid;
+            type.size = new Vector2Int(4, 1);
+            type.incomeModel = IncomeModel.QuarterlyRent;
+            return type;
+        }
+
+        static RoomTypeSO CondoBase()
+        {
+            var type = ScriptableObject.CreateInstance<RoomTypeSO>();
+            type.id = CondoLuxury.BaseId;
+            type.category = RoomCategory.Condo;
+            type.luxuryBand = LuxuryBand.Base;
+            type.size = Vector2Int.one;
+            type.incomeModel = IncomeModel.UpfrontSale;
+            return type;
+        }
+
+        static RoomTypeSO FastFood()
+        {
+            var type = ScriptableObject.CreateInstance<RoomTypeSO>();
+            type.id = "shop_food_fast";
+            type.category = RoomCategory.Commercial;
+            type.buildFamily = BuildFamily.Shops;
+            type.buildSubgroup = BuildSubgroup.Food;
+            type.size = Vector2Int.one;
+            type.incomeModel = IncomeModel.TrafficVariable;
             return type;
         }
 
         [Test]
         public void Recurring_room_shows_daily_income()
         {
-            var office = Room(40_000, IncomeModel.QuarterlyRent, 3000);
-
-            Assert.AreEqual("Cost: $40,000", RoomEconomyFormat.CostLine(office));
-            StringAssert.Contains("$3,000 / day", RoomEconomyFormat.IncomeLine(office));
-            Assert.AreEqual("$40k · $3k/d", RoomEconomyFormat.ButtonTag(office));
+            var office = MidOffice();
+            // rentEq 480; build 8640; income 480
+            Assert.AreEqual("Cost: $8,640", RoomEconomyFormat.CostLine(office));
+            StringAssert.Contains("$480 / day", RoomEconomyFormat.IncomeLine(office));
+            Assert.AreEqual("$8.6k · $480/d", RoomEconomyFormat.ButtonTag(office));
         }
 
         [Test]
         public void Upfront_sale_room_shows_one_time_income()
         {
-            var condo = Room(80_000, IncomeModel.UpfrontSale, 150_000);
-
-            StringAssert.Contains("$150,000 once", RoomEconomyFormat.IncomeLine(condo));
-            Assert.AreEqual("$80k · $150k once", RoomEconomyFormat.ButtonTag(condo));
-            Assert.IsNull(RoomEconomyFormat.UpkeepLine(condo));
+            var condo = CondoBase();
+            // rentEq 144; build 2592; sale 144
+            StringAssert.Contains("$144 once", RoomEconomyFormat.IncomeLine(condo));
+            Assert.AreEqual("$2.6k · $144 once", RoomEconomyFormat.ButtonTag(condo));
+            StringAssert.Contains("Upkeep:", RoomEconomyFormat.UpkeepLine(condo));
         }
 
         [Test]
         public void Elevator_shows_per_floor_cost_and_upkeep()
         {
-            var elevator = Room(100_000, IncomeModel.None, 0);
+            var elevator = ScriptableObject.CreateInstance<RoomTypeSO>();
+            elevator.id = "elevator_normal";
             elevator.isElevatorShaft = true;
+            elevator.category = RoomCategory.Transit;
+            elevator.size = new Vector2Int(1, 2);
 
-            Assert.AreEqual("Cost: $100,000 / floor", RoomEconomyFormat.CostLine(elevator));
+            var unit = BuildEconomy.UnitBuildCost(elevator);
+            Assert.AreEqual($"Cost: ${unit:N0} / floor", RoomEconomyFormat.CostLine(elevator));
             StringAssert.Contains($"${EconomySystem.ElevatorDailyUpkeep:N0} / day", RoomEconomyFormat.UpkeepLine(elevator));
             StringAssert.Contains("/fl", RoomEconomyFormat.ButtonTag(elevator));
         }
@@ -50,8 +82,7 @@ namespace BuildATower.Tests
         [Test]
         public void Format_shows_per_visit_and_visits_today()
         {
-            var shop = Room(100_000, IncomeModel.TrafficVariable, 40);
-            shop.id = "shop_food_fast";
+            var shop = FastFood();
             var instance = new RoomInstance(7, shop, Vector2Int.zero, Vector2Int.one);
             instance.RecordVisit();
             instance.RecordShopSpend(25);
@@ -70,23 +101,21 @@ namespace BuildATower.Tests
         [Test]
         public void Selected_unit_shows_tier_scaled_income()
         {
-            var office = Room(40_000, IncomeModel.QuarterlyRent, 3000);
-            var instance = new RoomInstance(9, office, Vector2Int.zero, Vector2Int.one);
+            var office = MidOffice();
+            var instance = new RoomInstance(9, office, Vector2Int.zero, office.size);
             instance.PriceTier = PricePricing.TierHigh;
 
             var lines = RoomEconomyFormat.SelectedUnitLines(instance, null, new EconomySystem());
-            CollectionAssert.Contains(lines, "Income: $3,900 / day occupied");
+            CollectionAssert.Contains(lines, "Income: $468 / day occupied"); // 624 * street Mid fit 0.75
         }
 
         [Test]
         public void Selected_shop_lines_show_pool_upkeep_and_negative_net()
         {
-            var shop = Room(100_000, IncomeModel.TrafficVariable, 50);
-            shop.buildFamily = BuildFamily.Shops;
-            shop.buildSubgroup = BuildSubgroup.Food;
+            var shop = FastFood();
             shop.requiredStars = 0;
             var instance = new RoomInstance(10, shop, Vector2Int.zero, Vector2Int.one);
-            instance.ArchiveShopDay(creditedRevenue: 10, upkeep: 25);
+            instance.ArchiveShopDay(creditedRevenue: 10, upkeep: 19);
             var demand = new ShopDemandSystem();
             demand.BeginDay(new List<Agent>(), stars: 0, climateMultiplier: 1f);
 
@@ -100,8 +129,8 @@ namespace BuildATower.Tests
             CollectionAssert.Contains(lines, "Demand: Food / Budget");
             CollectionAssert.Contains(lines, "Visits yesterday: 0");
             CollectionAssert.Contains(lines, "Yesterday revenue: $10");
-            CollectionAssert.Contains(lines, "Daily upkeep: $25");
-            CollectionAssert.Contains(lines, "Yesterday net: -$15");
+            CollectionAssert.Contains(lines, "Daily upkeep: $19");
+            CollectionAssert.Contains(lines, "Yesterday net: -$9");
             CollectionAssert.Contains(lines, "Competition: Underserved");
 
             Object.DestroyImmediate(shop);
@@ -110,14 +139,13 @@ namespace BuildATower.Tests
         [Test]
         public void Newly_built_shop_shows_known_daily_upkeep_before_first_rollover()
         {
-            var shop = Room(100_000, IncomeModel.TrafficVariable, 65);
-            shop.buildFamily = BuildFamily.Shops;
+            var shop = FastFood();
             shop.buildSubgroup = BuildSubgroup.Retail;
             var instance = new RoomInstance(11, shop, Vector2Int.zero, Vector2Int.one);
 
             var lines = RoomEconomyFormat.SelectedUnitLines(instance, null, null);
 
-            CollectionAssert.Contains(lines, "Daily upkeep: $33");
+            CollectionAssert.Contains(lines, "Daily upkeep: $19");
             CollectionAssert.Contains(lines, "Yesterday net: $0");
 
             Object.DestroyImmediate(shop);
@@ -126,7 +154,7 @@ namespace BuildATower.Tests
         [Test]
         public void Selected_condo_reports_sale_state()
         {
-            var condo = Room(80_000, IncomeModel.UpfrontSale, 150_000);
+            var condo = CondoBase();
             var instance = new RoomInstance(8, condo, Vector2Int.zero, Vector2Int.one);
 
             var beforeSale = RoomEconomyFormat.SelectedUnitLines(instance, null, new EconomySystem());

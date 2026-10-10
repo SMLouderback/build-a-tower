@@ -51,7 +51,9 @@ namespace BuildATower
             int climateOffset = 0,
             ResearchSystem research = null,
             float climateSpendMult = 1f,
-            ConferenceSystem conference = null)
+            ConferenceSystem conference = null,
+            float livingPulseMult = 1f,
+            float commercialPulseMult = 1f)
         {
             LastIncome = 0;
             LastExpense = 0;
@@ -60,6 +62,7 @@ namespace BuildATower
             _lastIncomeByRoom.Clear();
             _lastExpenseByRoom.Clear();
             var towerShopVisits = 0;
+            var difficulty = GameSession.Difficulty;
 
             foreach (var room in grid.Rooms)
                 RoomConditionRules.ApplyMidnightDecay(room);
@@ -92,14 +95,21 @@ namespace BuildATower
                 }
 
                 var incomeBlocked = RoomConditionRules.IncomePaused(room) || room.IsBroken;
+                var pulse = PulseFor(room.Type, livingPulseMult, commercialPulseMult);
+                var floorFit = FloorFitFor(room, currentStars);
 
                 if (!incomeBlocked &&
                     IsRecurringIncomeRoom(room) &&
                     HasHomeAgent(room, agents) &&
                     PassesDemand(room, currentStars, climateOffset))
                 {
-                    var amount = BuildEconomy.ApplyIncome(
-                        PricePricing.ScaledIncome(room.Type.baseIncome, room.PriceTier));
+                    var amount = EconomicBalancingManager.PeriodIncome(
+                        room.Type,
+                        room.PriceTier,
+                        difficulty,
+                        climateSpendMult,
+                        pulse,
+                        floorFit);
                     LastIncome += amount;
                     _lastIncomeByRoom[room.InstanceId] = amount;
                     room.RecordLifetimeIncome(amount);
@@ -110,14 +120,22 @@ namespace BuildATower
                     var creditedRevenue = 0;
                     if (!incomeBlocked && room.ShopEarningsToday > 0)
                     {
+                        // Visit spend is catalog list price; difficulty scales at credit time.
                         creditedRevenue = BuildEconomy.ApplyIncome(room.ShopEarningsToday);
                         AddRoomIncome(room, creditedRevenue);
                     }
 
-                    var upkeep = ShopDemandBalance.DailyUpkeep(room.Type);
+                    var upkeep = EconomicBalancingManager.PeriodUpkeep(
+                        room.Type, difficulty, commercialPulseMult);
                     AddRoomExpense(room, upkeep);
                     towerShopVisits += room.VisitsToday;
                     room.ArchiveShopDay(creditedRevenue, upkeep);
+                }
+                else if (IsLivingVpsfUpkeepRoom(room))
+                {
+                    var upkeep = EconomicBalancingManager.PeriodUpkeep(
+                        room.Type, difficulty, livingPulseMult);
+                    AddRoomExpense(room, upkeep);
                 }
 
                 var wage = WageForRoom(room);
@@ -259,7 +277,12 @@ namespace BuildATower
             return (int)Math.Round(burn * climateSpendMult);
         }
 
-        public bool TrySellCondo(RoomInstance room, FundsWallet wallet)
+        public bool TrySellCondo(
+            RoomInstance room,
+            FundsWallet wallet,
+            float climateSpendMult = 1f,
+            float livingPulseMult = 1f,
+            int currentStars = 0)
         {
             if (room == null ||
                 room.Type == null ||
@@ -267,8 +290,13 @@ namespace BuildATower
                 room.CondoSold)
                 return false;
 
-            var amount = BuildEconomy.ApplyIncome(
-                PricePricing.ScaledIncome(room.Type.baseIncome, room.PriceTier));
+            var amount = EconomicBalancingManager.PeriodIncome(
+                room.Type,
+                room.PriceTier,
+                GameSession.Difficulty,
+                climateSpendMult,
+                livingPulseMult,
+                FloorFitFor(room, currentStars));
             wallet.Add(amount);
             room.CondoSold = true;
             room.RecordLifetimeIncome(amount);
@@ -337,6 +365,23 @@ namespace BuildATower
         public int GetLastRoomNet(RoomInstance room) =>
             GetLastRoomIncome(room) - GetLastRoomExpense(room);
 
+        public static float FloorFitFor(RoomInstance room, int stars)
+        {
+            if (room?.Type == null) return 1f;
+            if (!VpsfCatalog.TryIdentity(room.Type, out var family, out _, out var tenantClass))
+                return 1f;
+            return FloorValueRules.Fit01(family, tenantClass, room.Origin.y, stars);
+        }
+
+        public static float PulseFor(RoomTypeSO type, float livingPulseMult, float commercialPulseMult)
+        {
+            if (type != null &&
+                VpsfCatalog.TryIdentity(type, out var family, out _, out _) &&
+                VpsfCatalog.IsLivingFamily(family))
+                return livingPulseMult;
+            return commercialPulseMult;
+        }
+
         void AddRoomIncome(RoomInstance room, int amount)
         {
             if (room == null || amount <= 0) return;
@@ -375,10 +420,19 @@ namespace BuildATower
 
         static bool IsRecurringIncomeRoom(RoomInstance room)
         {
-            return room.Type != null &&
-                   room.Type.baseIncome > 0 &&
-                   (room.Type.incomeModel == IncomeModel.QuarterlyRent ||
-                    room.Type.incomeModel == IncomeModel.NightlyRate);
+            if (room?.Type == null) return false;
+            if (room.Type.incomeModel != IncomeModel.QuarterlyRent &&
+                room.Type.incomeModel != IncomeModel.NightlyRate)
+                return false;
+            return VpsfCatalog.TryIdentity(room.Type, out _, out _, out _);
+        }
+
+        static bool IsLivingVpsfUpkeepRoom(RoomInstance room)
+        {
+            if (room?.Type == null) return false;
+            if (!VpsfCatalog.TryIdentity(room.Type, out var family, out _, out _))
+                return false;
+            return VpsfCatalog.IsLivingFamily(family);
         }
 
         static bool HasHomeAgent(RoomInstance room, IReadOnlyList<Agent> agents)

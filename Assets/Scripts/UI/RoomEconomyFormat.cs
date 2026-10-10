@@ -4,31 +4,52 @@ namespace BuildATower
 {
     /// <summary>
     /// Shared money strings so room buttons and the selected-tool detail agree.
+    /// Sim money comes from <see cref="EconomicBalancingManager"/> / <see cref="BuildEconomy"/>.
     /// </summary>
     public static class RoomEconomyFormat
     {
         public static string CostLine(RoomTypeSO type)
         {
             if (type == null) return "Cost: —";
-            if (type.isElevatorShaft) return $"Cost: ${type.buildCost:N0} / floor";
-            if (type.isLobby) return $"Cost: ${type.buildCost:N0} / cell";
-            return $"Cost: ${type.buildCost:N0}";
+            var cost = BuildEconomy.UnitBuildCost(type);
+            if (type.isElevatorShaft) return $"Cost: ${cost:N0} / floor";
+            if (type.isLobby) return $"Cost: ${cost:N0} / cell";
+            return $"Cost: ${cost:N0}";
         }
 
-        public static string IncomeLine(RoomTypeSO type, int tier = PricePricing.TierNormal)
+        public static string IncomeLine(
+            RoomTypeSO type,
+            int tier = PricePricing.TierNormal,
+            float climateSpendMult = 1f,
+            float pulseMult = 1f,
+            float floorFit01 = 1f)
         {
             if (type == null) return "Income: —";
 
-            var amount = PricePricing.ScaledIncome(type.baseIncome, tier);
             switch (type.incomeModel)
             {
-                case IncomeModel.UpfrontSale when type.baseIncome > 0:
-                    return $"Income: ${amount:N0} once";
-                case IncomeModel.QuarterlyRent when type.baseIncome > 0:
-                case IncomeModel.NightlyRate when type.baseIncome > 0:
+                case IncomeModel.UpfrontSale:
+                case IncomeModel.QuarterlyRent:
+                case IncomeModel.NightlyRate:
+                {
+                    var amount = EconomicBalancingManager.PeriodIncome(
+                        type,
+                        tier,
+                        GameSession.Difficulty,
+                        climateSpendMult,
+                        pulseMult,
+                        floorFit01);
+                    if (amount <= 0) return "Income: —";
+                    if (type.incomeModel == IncomeModel.UpfrontSale)
+                        return $"Income: ${amount:N0} once";
                     return $"Income: ${amount:N0} / day occupied";
-                case IncomeModel.TrafficVariable when type.baseIncome > 0:
-                    return $"Income: up to ${type.baseIncome:N0} / visit (spent dollars at midnight)";
+                }
+                case IncomeModel.TrafficVariable:
+                {
+                    var visit = ShopVisitRules.PayPerVisit(type);
+                    if (visit <= 0) return "Income: —";
+                    return $"Income: up to ${visit:N0} / visit (spent dollars at midnight)";
+                }
                 default:
                     return "Income: —";
             }
@@ -39,17 +60,23 @@ namespace BuildATower
             IReadOnlyList<Agent> agents,
             EconomySystem economy,
             ShopDemandSystem demand = null,
-            int openShopCountInPool = 0)
+            int openShopCountInPool = 0,
+            int currentStars = 0,
+            float climateSpendMult = 1f,
+            float livingPulseMult = 1f,
+            float commercialPulseMult = 1f)
         {
             var lines = new List<string>();
             if (room?.Type == null) return lines;
 
             var type = room.Type;
             var tier = room.PriceTier;
+            var pulse = EconomySystem.PulseFor(type, livingPulseMult, commercialPulseMult);
+            var floorFit = EconomySystem.FloorFitFor(room, currentStars);
             lines.Add($"Built cost: ${ConstructionCost(room):N0}");
-            lines.Add(IncomeLine(type, tier));
+            lines.Add(IncomeLine(type, tier, climateSpendMult, pulse, floorFit));
 
-            var upkeep = UpkeepLine(type);
+            var upkeep = UpkeepLine(type, pulse);
             if (upkeep != null)
                 lines.Add(upkeep);
 
@@ -85,7 +112,9 @@ namespace BuildATower
                     lines.Add($"Avg visits (7d): {room.AverageVisitsLast7Days:0.#}");
                     lines.Add($"Earnings today: ${room.ShopEarningsToday:N0}");
                     lines.Add($"Yesterday revenue: ${room.ShopRevenueYesterday:N0}");
-                    lines.Add($"Daily upkeep: ${ShopDemandBalance.DailyUpkeep(type):N0}");
+                    var shopUpkeep = EconomicBalancingManager.PeriodUpkeep(
+                        type, GameSession.Difficulty, commercialPulseMult);
+                    lines.Add($"Daily upkeep: ${shopUpkeep:N0}");
                     lines.Add($"Yesterday net: {SignedMoney(room.ShopNetYesterday)}");
                     if (ShopVisitRules.IsShop(type) && demand != null)
                     {
@@ -122,10 +151,10 @@ namespace BuildATower
         static int ConstructionCost(RoomInstance room)
         {
             if (room.Type.isElevatorShaft)
-                return room.Type.buildCost * room.Size.y;
+                return BuildEconomy.UnitBuildCost(room.Type) * room.Size.y;
             if (room.Type.isLobby)
-                return room.Type.buildCost * room.Size.x;
-            return room.Type.buildCost;
+                return BuildEconomy.UnitBuildCost(room.Type) * room.Size.x;
+            return BuildEconomy.BuildCost(room.Type);
         }
 
         static int CountHomeAgents(RoomInstance room, IReadOnlyList<Agent> agents)
@@ -176,7 +205,7 @@ namespace BuildATower
         }
 
         /// <summary>Returns null for room types that carry no recurring upkeep.</summary>
-        public static string UpkeepLine(RoomTypeSO type)
+        public static string UpkeepLine(RoomTypeSO type, float pulseMult = 1f)
         {
             if (type == null) return null;
             if (type.isElevatorShaft)
@@ -187,6 +216,16 @@ namespace BuildATower
                 return $"Upkeep: ${ParkingStalls.ValetDailyUpkeep:N0} / day";
             if (ParkingStalls.IsRamp(type))
                 return $"Upkeep: ${ParkingStalls.RampDailyUpkeep:N0} / day";
+
+            if (VpsfCatalog.TryIdentity(type, out var family, out _, out _) &&
+                VpsfCatalog.IsLivingFamily(family))
+            {
+                var upkeep = EconomicBalancingManager.PeriodUpkeep(
+                    type, GameSession.Difficulty, pulseMult);
+                if (upkeep > 0)
+                    return $"Upkeep: ${upkeep:N0} / day";
+            }
+
             return null;
         }
 
@@ -195,9 +234,10 @@ namespace BuildATower
         {
             if (type == null) return "—";
 
+            var unitCost = BuildEconomy.UnitBuildCost(type);
             var cost = type.isElevatorShaft
-                ? $"{Abbreviate(type.buildCost)}/fl"
-                : Abbreviate(type.buildCost);
+                ? $"{Abbreviate(unitCost)}/fl"
+                : Abbreviate(type.isLobby ? unitCost : BuildEconomy.BuildCost(type));
 
             if (type.isElevatorShaft)
                 return $"{cost} · -{Abbreviate(EconomySystem.ElevatorDailyUpkeep)}/d";
@@ -210,13 +250,28 @@ namespace BuildATower
 
             switch (type.incomeModel)
             {
-                case IncomeModel.UpfrontSale when type.baseIncome > 0:
-                    return $"{cost} · {Abbreviate(type.baseIncome)} once";
-                case IncomeModel.QuarterlyRent when type.baseIncome > 0:
-                case IncomeModel.NightlyRate when type.baseIncome > 0:
-                    return $"{cost} · {Abbreviate(type.baseIncome)}/d";
-                case IncomeModel.TrafficVariable when type.baseIncome > 0:
-                    return $"{cost} · {Abbreviate(type.baseIncome)}/visit";
+                case IncomeModel.UpfrontSale:
+                case IncomeModel.QuarterlyRent:
+                case IncomeModel.NightlyRate:
+                {
+                    var income = EconomicBalancingManager.PeriodIncome(
+                        type,
+                        PricePricing.TierNormal,
+                        GameSession.Difficulty,
+                        climateSpendMult: 1f,
+                        pulseMult: 1f,
+                        floorFit01: 1f);
+                    if (income <= 0) return cost;
+                    if (type.incomeModel == IncomeModel.UpfrontSale)
+                        return $"{cost} · {Abbreviate(income)} once";
+                    return $"{cost} · {Abbreviate(income)}/d";
+                }
+                case IncomeModel.TrafficVariable:
+                {
+                    var visit = ShopVisitRules.PayPerVisit(type);
+                    if (visit <= 0) return cost;
+                    return $"{cost} · {Abbreviate(visit)}/visit";
+                }
                 default:
                     return cost;
             }

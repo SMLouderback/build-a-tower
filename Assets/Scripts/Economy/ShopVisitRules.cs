@@ -25,8 +25,23 @@ namespace BuildATower
         public static int SlotCount(RoomTypeSO type) =>
             type == null ? 0 : Mathf.Max(1, type.maxOccupants);
 
-        public static int PayPerVisit(RoomTypeSO type) =>
-            type == null ? 0 : Math.Max(0, type.baseIncome);
+        /// <summary>
+        /// Catalog list price per visit (fraction of VPSF period income; Normal difficulty, neutral mults).
+        /// Midnight still applies <see cref="BuildEconomy.ApplyIncome"/> for difficulty.
+        /// </summary>
+        public static int PayPerVisit(RoomTypeSO type)
+        {
+            if (type == null) return 0;
+            var period = EconomicBalancingManager.PeriodIncome(
+                type,
+                PricePricing.TierNormal,
+                GameDifficulty.Normal,
+                climateSpendMult: 1f,
+                pulseMult: 1f,
+                floorFit01: 1f);
+            if (period <= 0) return 0;
+            return Math.Max(1, (int)Math.Round(period * VpsfCatalog.VisitPriceOfPeriodIncome));
+        }
 
         public static int PickDwellMinutes(RoomTypeSO type, System.Random rng)
         {

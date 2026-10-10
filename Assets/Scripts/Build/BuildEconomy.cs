@@ -1,8 +1,11 @@
+using System;
+
 namespace BuildATower
 {
     /// <summary>
     /// Placement spend/afford gated by <see cref="GameSession"/> difficulty.
-    /// Applies <see cref="DifficultyProfile"/> build-cost multipliers; Sandbox is free.
+    /// Room money routes through <see cref="EconomicBalancingManager"/> (VPSF).
+    /// Integer overloads remain for legacy nominal amounts (tests / non-room charges).
     /// </summary>
     public static class BuildEconomy
     {
@@ -11,6 +14,61 @@ namespace BuildATower
 
         public static int ApplyIncome(int nominalAmount) =>
             DifficultyProfile.ApplyIncome(nominalAmount);
+
+        /// <summary>Full-footprint build charge (difficulty already applied).</summary>
+        public static int BuildCost(RoomTypeSO type) =>
+            EconomicBalancingManager.BuildCost(type, GameSession.Difficulty);
+
+        /// <summary>
+        /// Per billable unit already difficulty-scaled: elevator floor strip, lobby/sky/scaffold cell,
+        /// otherwise full footprint.
+        /// </summary>
+        public static int UnitBuildCost(RoomTypeSO type)
+        {
+            if (type == null) return 0;
+            if (type.isElevatorShaft)
+                return EconomicBalancingManager.BuildCost(
+                    type, GameSession.Difficulty, Math.Max(1, type.size.x));
+            if (type.isLobby || type.isSkyLobby || type.isScaffolding)
+                return EconomicBalancingManager.BuildCost(type, GameSession.Difficulty, 1);
+            return EconomicBalancingManager.BuildCost(type, GameSession.Difficulty);
+        }
+
+        /// <summary>
+        /// Placement charge for <paramref name="units"/> billable units (floors/cells).
+        /// Already difficulty-scaled — do not pass through <see cref="EffectiveBuildCost"/>.
+        /// </summary>
+        public static int PlacementCost(RoomTypeSO type, int units = 1)
+        {
+            if (type == null || units <= 0) return 0;
+            if (type.isElevatorShaft || type.isLobby || type.isSkyLobby || type.isScaffolding)
+                return UnitBuildCost(type) * units;
+            return UnitBuildCost(type);
+        }
+
+        public static bool CanAffordCharged(FundsWallet wallet, int chargedAmount)
+        {
+            if (GameSession.IsSandbox) return true;
+            if (chargedAmount <= 0) return true;
+            return wallet != null && wallet.CanAfford(chargedAmount);
+        }
+
+        public static bool TrySpendCharged(FundsWallet wallet, int chargedAmount)
+        {
+            if (GameSession.IsSandbox) return true;
+            if (chargedAmount <= 0) return true;
+            return wallet != null && wallet.TrySpend(chargedAmount);
+        }
+
+        public static void RefundCharged(FundsWallet wallet, int chargedAmount)
+        {
+            if (GameSession.IsSandbox) return;
+            if (chargedAmount <= 0) return;
+            wallet?.Add(chargedAmount);
+        }
+
+        public static int RecordedChargedSpend(int chargedAmount) =>
+            GameSession.IsSandbox ? 0 : Math.Max(0, chargedAmount);
 
         public static bool CanAffordBuild(FundsWallet wallet, int nominalCost)
         {

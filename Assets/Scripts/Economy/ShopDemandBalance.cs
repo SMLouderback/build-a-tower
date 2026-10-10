@@ -51,10 +51,12 @@ namespace BuildATower
             return roll < foodChance ? ShopDemandFamily.Food : ShopDemandFamily.Retail;
         }
 
+        /// <summary>Preview upkeep at neutral pulse; midnight uses live commercial pulse.</summary>
         public static int DailyUpkeep(RoomTypeSO type) =>
-            type == null ? 0 : (int)System.Math.Round(
-                System.Math.Max(0, type.baseIncome) * ShopUpkeepRate,
-                System.MidpointRounding.AwayFromZero);
+            type == null
+                ? 0
+                : EconomicBalancingManager.PeriodUpkeep(
+                    type, GameSession.Difficulty, pulseMult: 1f);
 
         public static float TowerStress(float towerUnmetRatio) =>
             TowerStressMax * UnityEngine.Mathf.Clamp01(towerUnmetRatio);

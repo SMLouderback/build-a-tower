@@ -1,10 +1,9 @@
 using System;
-using UnityEngine;
 
 namespace BuildATower
 {
     /// <summary>
-    /// Living identity map + placeholder VPSF rate tables for the economic balancer.
+    /// Living + commercial/infra identity map + placeholder VPSF rate tables.
     /// Money numbers live only as named constants here (never scattered in place/midnight code).
     /// </summary>
     public static class VpsfCatalog
@@ -34,6 +33,12 @@ namespace BuildATower
 
         // --- Build-cost factor vs income base (placeholder) ---
         public const float BuildCostPerIncomeCell = 18f;
+
+        /// <summary>
+        /// Per-visit list price as a fraction of period rent-equivalent (shops/leisure).
+        /// Full <see cref="EconomicBalancingManager.PeriodIncome"/> is a daily/period figure, not one ticket.
+        /// </summary>
+        public const float VisitPriceOfPeriodIncome = 0.35f;
 
         static readonly float[] TierMult =
         {
@@ -66,14 +71,19 @@ namespace BuildATower
             tier = 0;
             tenantClass = TenantClass.Mid;
 
-            if (type == null || string.IsNullOrEmpty(type.id))
+            if (type == null)
                 return false;
 
-            if (!TryMapLivingId(type.id, out family, out tier))
-                return false;
+            if (TryMapLivingId(type.id, out family, out tier))
+            {
+                tenantClass = ResolveTenantClass(type.luxuryBand, type.id);
+                return true;
+            }
 
-            tenantClass = ResolveTenantClass(type.luxuryBand, type.id);
-            return true;
+            if (TryMapNonLiving(type, out family, out tier, out tenantClass))
+                return true;
+
+            return false;
         }
 
         public static int Cells(RoomTypeSO type)
@@ -117,6 +127,85 @@ namespace BuildATower
             TenantClass.Upper => UpkeepRatioUpper,
             _ => UpkeepRatioMid
         };
+
+        public static bool IsLivingFamily(EconomicFamily family) =>
+            family == EconomicFamily.Office
+            || family == EconomicFamily.Hotel
+            || family == EconomicFamily.Condo;
+
+        static bool TryMapNonLiving(
+            RoomTypeSO type,
+            out EconomicFamily family,
+            out int tier,
+            out TenantClass tenantClass)
+        {
+            family = EconomicFamily.None;
+            tier = 0;
+            tenantClass = TenantClass.Mid;
+
+            if (type.isLobby || type.isSkyLobby || type.isScaffolding ||
+                Eq(type.id, "lobby") || Eq(type.id, "sky_lobby") || Eq(type.id, "scaffolding"))
+            {
+                family = EconomicFamily.Infrastructure;
+                tier = TierFromStars(type.requiredStars);
+                tenantClass = TenantClass.Mid;
+                return true;
+            }
+
+            if (type.isElevatorShaft || type.isStairs || type.isParkingRamp ||
+                IsParkingOrMetroId(type.id) ||
+                type.ResolvedBuildFamily() == BuildFamily.Transit ||
+                type.category == RoomCategory.Parking ||
+                type.category == RoomCategory.Transit)
+            {
+                family = EconomicFamily.Transit;
+                tier = TierFromStars(type.requiredStars);
+                tenantClass = ResolveTenantClass(type.luxuryBand, type.id);
+                return true;
+            }
+
+            var buildFamily = type.ResolvedBuildFamily();
+            if (buildFamily == BuildFamily.Shops || type.category == RoomCategory.Commercial)
+            {
+                family = EconomicFamily.Shops;
+                tier = TierFromStars(type.requiredStars);
+                tenantClass = ResolveTenantClass(type.luxuryBand, type.id);
+                return true;
+            }
+
+            if (buildFamily == BuildFamily.Leisure ||
+                (!string.IsNullOrEmpty(type.id) &&
+                 type.id.StartsWith("leisure_", StringComparison.OrdinalIgnoreCase)))
+            {
+                family = EconomicFamily.Leisure;
+                tier = TierFromStars(type.requiredStars);
+                tenantClass = ResolveTenantClass(type.luxuryBand, type.id);
+                return true;
+            }
+
+            if (buildFamily == BuildFamily.Utility || type.category == RoomCategory.Service)
+            {
+                family = EconomicFamily.Service;
+                tier = TierFromStars(type.requiredStars);
+                tenantClass = ResolveTenantClass(type.luxuryBand, type.id);
+                return true;
+            }
+
+            return false;
+        }
+
+        static bool IsParkingOrMetroId(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return false;
+            if (id == ParkingStalls.ParkingId ||
+                id == ParkingStalls.ValetId ||
+                id == ParkingStalls.RampId)
+                return true;
+            return id.IndexOf("metro", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        static int TierFromStars(int requiredStars) =>
+            Math.Clamp(Math.Max(0, requiredStars) + 1, MinTier, MaxTier);
 
         static bool TryMapLivingId(string id, out EconomicFamily family, out int tier)
         {

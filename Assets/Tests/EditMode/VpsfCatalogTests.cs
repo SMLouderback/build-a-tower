@@ -78,8 +78,22 @@ namespace BuildATower.Tests
         [Test]
         public void TryIdentity_unknown_id_returns_false()
         {
-            var so = Room("shop_fast_food", RoomCategory.Commercial, LuxuryBand.None);
+            var so = Room("totally_unknown_room_xyz", RoomCategory.Structure, LuxuryBand.None);
             Assert.IsFalse(VpsfCatalog.TryIdentity(so, out _, out _, out _));
+        }
+
+        [Test]
+        public void TryIdentity_maps_shops_and_infrastructure()
+        {
+            var shop = Room("shop_food_fast", RoomCategory.Commercial, LuxuryBand.None);
+            Assert.IsTrue(VpsfCatalog.TryIdentity(shop, out var shopFamily, out var shopTier, out _));
+            Assert.AreEqual(EconomicFamily.Shops, shopFamily);
+            Assert.AreEqual(1, shopTier);
+
+            var lobby = Room("lobby", RoomCategory.Structure, LuxuryBand.None);
+            lobby.isLobby = true;
+            Assert.IsTrue(VpsfCatalog.TryIdentity(lobby, out var lobbyFamily, out _, out _));
+            Assert.AreEqual(EconomicFamily.Infrastructure, lobbyFamily);
         }
 
         [Test]

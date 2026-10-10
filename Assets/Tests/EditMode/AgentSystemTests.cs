@@ -40,7 +40,8 @@ namespace BuildATower.Tests
             var grid = new TowerGrid();
             Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
             Assert.IsTrue(grid.TryPlace(Condo(), new Vector2Int(0, 1), out var condo));
-            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(10, 0), out _));
+            // Stairs beside condo (not overlapping its cell) so lobby→home is reachable.
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(1, 0), out _));
             var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
             router.Rebuild(grid);
             var agents = new AgentSystem(router);
@@ -48,11 +49,12 @@ namespace BuildATower.Tests
             var wallet = new FundsWallet(0);
             var economy = new EconomySystem();
 
+            // Mid-band condo matches Mid buyer rolls; stars>=1 keeps Normal price tier comfortable.
             agents.SyncHomes(grid, room =>
             {
                 notifiedRooms.Add(room);
                 economy.TrySellCondo(room, wallet);
-            }, currentStars: 0, averageCrime: 0f);
+            }, currentStars: 2, averageCrime: 0f);
 
             var buyer = agents.Agents.Single();
             Assert.AreEqual(AgentPhase.Outside, buyer.Phase);
@@ -68,7 +70,15 @@ namespace BuildATower.Tests
             Assert.AreEqual(AgentPhase.AtHome, buyer.Phase);
             Assert.AreEqual(1, agents.Population);
             Assert.IsTrue(condo.CondoSold);
-            Assert.AreEqual(condo.Type.baseIncome, wallet.Balance);
+            Assert.AreEqual(
+                EconomicBalancingManager.PeriodIncome(
+                    condo.Type,
+                    PricePricing.TierNormal,
+                    GameSession.Difficulty,
+                    1f,
+                    1f,
+                    EconomySystem.FloorFitFor(condo, stars: 1)),
+                wallet.Balance);
             CollectionAssert.AreEqual(new[] { condo }, notifiedRooms);
         }
 
@@ -382,9 +392,9 @@ namespace BuildATower.Tests
         static RoomTypeSO Condo()
         {
             var room = ScriptableObject.CreateInstance<RoomTypeSO>();
-            room.id = CondoLuxury.BaseId;
+            room.id = CondoLuxury.MidStandardId;
             room.category = RoomCategory.Condo;
-            room.luxuryBand = LuxuryBand.Base;
+            room.luxuryBand = LuxuryBand.Mid;
             room.size = Vector2Int.one;
             room.maxOccupants = 1;
             room.allowAboveGround = true;
