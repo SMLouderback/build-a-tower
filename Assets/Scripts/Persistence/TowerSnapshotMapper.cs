@@ -63,6 +63,7 @@ namespace BuildATower
                     },
                 weather = simulation.Weather?.CaptureSnapshot(),
                 metro = simulation.Metro?.CaptureSnapshot(),
+                marketPulse = simulation.MacroEconomy?.CaptureSnapshot(),
                 rooms = build.Grid.CaptureRooms(Time.realtimeSinceStartup).ToArray()
             };
         }
@@ -100,6 +101,10 @@ namespace BuildATower
             if (!MetroSystem.IsAbsent(snapshot.metro)
                 && !MetroSystem.TryValidateSnapshot(snapshot.metro, out _))
                 return Failure(SnapshotValidationError.InvalidMetro, "The saved metro state is invalid.");
+
+            if (!MacroEconomicController.IsAbsent(snapshot.marketPulse)
+                && !MacroEconomicController.TryValidateSnapshot(snapshot.marketPulse, out _))
+                return Failure(SnapshotValidationError.InvalidMarketPulse, "The saved market pulse state is invalid.");
 
             return SnapshotValidationResult.Succeeded();
         }

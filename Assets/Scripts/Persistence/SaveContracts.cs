@@ -50,7 +50,17 @@ namespace BuildATower
         public WeatherSnapshotV1 weather;
         /// <summary>Optional: null or absent (older saves) restores an empty metro.</summary>
         public MetroSnapshotV1 metro;
+        /// <summary>Optional: null or absent (older saves) restores neutral weekly market pulse.</summary>
+        public MarketPulseSnapshotV1 marketPulse;
         public RoomSnapshotV1[] rooms;
+    }
+
+    [Serializable]
+    public sealed class MarketPulseSnapshotV1
+    {
+        public float livingPulseMult;
+        public float commercialPulseMult;
+        public int nextPulseDayIndex;
     }
 
     [Serializable]
@@ -210,7 +220,8 @@ namespace BuildATower
         NullRooms,
         InvalidResearch,
         InvalidWeather,
-        InvalidMetro
+        InvalidMetro,
+        InvalidMarketPulse
     }
 
     public sealed class SnapshotValidationResult

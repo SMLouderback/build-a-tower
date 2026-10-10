@@ -87,6 +87,7 @@ namespace BuildATower
         TowerNews _news;
         StarSystem _stars;
         MarketClimate _climate;
+        MacroEconomicController _macro;
         WeatherSystem _weather;
         MetroSystem _metro;
         readonly System.Random _climateRng = new();
@@ -107,6 +108,7 @@ namespace BuildATower
         public TowerNews News => _news;
         public StarSystem Stars => _stars;
         public MarketClimate Climate => _climate;
+        public MacroEconomicController MacroEconomy => _macro;
         public WeatherSystem Weather => _weather;
         public MetroSystem Metro => _metro;
         public StairsPathfinder Pathfinder => _pathfinder;
@@ -162,6 +164,7 @@ namespace BuildATower
                 _news = new TowerNews();
                 _stars = new StarSystem();
                 _climate = new MarketClimate();
+                _macro = new MacroEconomicController();
                 RestorePendingClockAndStars();
                 _lastDayIndex = _clock.DayIndex;
                 _clock.DayRolled += OnDayRolled;
@@ -206,6 +209,7 @@ namespace BuildATower
                     _research.RestoreSnapshot(pending.research);
                 _weather.RestoreSnapshot(pending.weather, _clock.DayIndex, _clock.MinuteOfDay);
                 _metro.RestoreSnapshot(pending.metro);
+                _macro?.RestoreSnapshot(pending.marketPulse, _clock.DayIndex);
             }
             catch (ArgumentException)
             {
@@ -457,6 +461,9 @@ namespace BuildATower
                 return;
 
             GameSession.MarkGameplaySaveDirty();
+
+            // Weekly pulse is independent of monthly climate; stack happens at balancer wire-up.
+            _macro?.Tick(_clock);
 
             var climateOffset = _climate?.ComfortTierOffset ?? 0;
             var climateSpendMult = _climate?.SpendMultiplier ?? 1f;
