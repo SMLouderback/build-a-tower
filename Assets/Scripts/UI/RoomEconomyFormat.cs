@@ -17,6 +17,20 @@ namespace BuildATower
             return $"Cost: ${cost:N0}";
         }
 
+        /// <summary>
+        /// Soft floor-fit copy for HUD when <see cref="FloorValueRules.TryWarning"/> fires.
+        /// Null when identity unknown or fit is above the warning threshold.
+        /// </summary>
+        public static string FloorFitWarningOrNull(RoomTypeSO type, int floorY, int stars)
+        {
+            if (type == null) return null;
+            if (!VpsfCatalog.TryIdentity(type, out var family, out _, out var tenantClass))
+                return null;
+            return FloorValueRules.TryWarning(family, tenantClass, floorY, stars, out var reason)
+                ? reason
+                : null;
+        }
+
         public static string IncomeLine(
             RoomTypeSO type,
             int tier = PricePricing.TierNormal,

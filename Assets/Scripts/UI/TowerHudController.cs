@@ -2694,6 +2694,7 @@ namespace BuildATower
                 }
             }
 
+            var starsNow = stars?.CurrentStars ?? simulation?.Stars?.CurrentStars ?? 0;
             foreach (var line in RoomEconomyFormat.SelectedUnitLines(
                          build.SelectedRoom,
                          agents?.Agents,
@@ -2702,12 +2703,22 @@ namespace BuildATower
                          ShopDemandFormat.CountOpenShopsInPool(
                              build.Grid?.Rooms,
                              build.SelectedRoom?.Type),
-                         simulation?.Stars?.CurrentStars ?? 0,
+                         starsNow,
                          simulation?.Climate?.SpendMultiplier ?? 1f,
                          simulation?.MacroEconomy?.LivingPulseMult ?? 1f,
                          simulation?.MacroEconomy?.CommercialPulseMult ?? 1f))
             {
                 GUI.Label(new Rect(cx, cy, inner, row), line, label);
+                cy += row;
+            }
+
+            var fitWarn = RoomEconomyFormat.FloorFitWarningOrNull(
+                build.SelectedRoom?.Type,
+                build.SelectedRoom?.Origin.y ?? 0,
+                starsNow);
+            if (fitWarn != null)
+            {
+                GUI.Label(new Rect(cx, cy, inner, row), fitWarn, label);
                 cy += row;
             }
 
@@ -2756,6 +2767,7 @@ namespace BuildATower
         void DrawCatalogPickInfo(float cx, float cy, float inner, float row, GUIStyle label)
         {
             var room = build.CurrentTool == BuildTool.PlaceRoom ? build.SelectedRoomType : null;
+            var starsNow = simulation?.Stars?.CurrentStars ?? 0;
             if (room != null)
             {
                 GUI.Label(new Rect(cx, cy, inner, row), room.displayName, label);
@@ -2764,6 +2776,17 @@ namespace BuildATower
                 {
                     GUI.Label(new Rect(cx, cy, inner, row), economyLine, label);
                     cy += row;
+                }
+
+                if (build.HoverCell.HasValue)
+                {
+                    var ghostWarn = RoomEconomyFormat.FloorFitWarningOrNull(
+                        room, build.HoverCell.Value.y, starsNow);
+                    if (ghostWarn != null)
+                    {
+                        GUI.Label(new Rect(cx, cy, inner, row), ghostWarn, label);
+                        cy += row;
+                    }
                 }
 
                 GUI.Label(new Rect(cx, cy, inner, row), $"Size {room.size.x}x{room.size.y}", label);
@@ -3102,7 +3125,7 @@ namespace BuildATower
 
         static float Luminance(Color c) => 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
 
-        static string RoomTooltip(RoomTypeSO room, bool canBuild)
+        string RoomTooltip(RoomTypeSO room, bool canBuild)
         {
             var lines = $"{room.displayName}";
             if (!canBuild)
@@ -3119,6 +3142,13 @@ namespace BuildATower
             foreach (var line in hotelLines)
                 lines += $"\n{line}";
             lines += $"\nSize {room.size.x}×{room.size.y}";
+            var floorY = build != null && build.HoverCell.HasValue
+                ? build.HoverCell.Value.y
+                : 0;
+            var starsNow = simulation?.Stars?.CurrentStars ?? 0;
+            var fitWarn = RoomEconomyFormat.FloorFitWarningOrNull(room, floorY, starsNow);
+            if (fitWarn != null)
+                lines += $"\n{fitWarn}";
             return lines;
         }
 

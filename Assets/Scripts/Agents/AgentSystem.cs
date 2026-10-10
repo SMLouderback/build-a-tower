@@ -378,6 +378,7 @@ namespace BuildATower
             if (best == null) return false;
 
             var fill = LivingLuxury.CheckInFillMultiplier(EffectiveOfficeLuxuryBand(best.Type), climateStep);
+            fill *= ClassClashFillMultiplier(grid, best);
             if (fill < 1f && rng.NextDouble() >= fill)
                 return false;
 
@@ -496,6 +497,7 @@ namespace BuildATower
             fill = Mathf.Clamp01(fill +
                                   AmenitySystem.HotelDemandBonus(grid, best) +
                                   AtriumMarketing.HotelFillBonusFor(grid));
+            fill *= ClassClashFillMultiplier(grid, best);
             if (fill < 1f && rng.NextDouble() >= fill)
                 return false;
 
@@ -613,6 +615,7 @@ namespace BuildATower
             if (best == null) return false;
 
             var fill = LivingLuxury.CheckInFillMultiplier(EffectiveCondoLuxuryBand(best.Type), climateStep);
+            fill *= ClassClashFillMultiplier(grid, best);
             if (fill < 1f && rng.NextDouble() >= fill)
                 return false;
 
@@ -2977,7 +2980,7 @@ namespace BuildATower
             }
 
             if (agent.Phase == AgentPhase.WaitingAtElevator &&
-                agent.ElevatorWaitMinutes > ElevatorWaitStressStartMinutes)
+                ShouldApplyElevatorWaitStress(agent))
             {
                 // Metro travel relief: divide elevator-wait stress by TravelReliefMultiplier.
                 var mult = ElevatorWaitStressMultiplier(
@@ -2990,6 +2993,58 @@ namespace BuildATower
             }
 
             agent.Stress = Mathf.Max(0f, agent.Stress - StressDecayPerSecond * deltaGameMinutes);
+        }
+
+        /// <summary>
+        /// Living tenants use <see cref="TenantClassStress"/> (Upper &gt; 15s game time at 1x =
+        /// ElevatorWaitMinutes). Staff/street keep the legacy start-minute threshold.
+        /// </summary>
+        static bool ShouldApplyElevatorWaitStress(Agent agent)
+        {
+            if (agent == null) return false;
+            if (TryLivingTenantClass(agent, out var tenantClass))
+                return TenantClassStress.ElevWaitStress(tenantClass, agent.ElevatorWaitMinutes);
+
+            return agent.ElevatorWaitMinutes > ElevatorWaitStressStartMinutes;
+        }
+
+        static bool TryLivingTenantClass(Agent agent, out TenantClass tenantClass)
+        {
+            tenantClass = TenantClass.Mid;
+            var type = agent?.HomeRoom?.Type;
+            if (ReferenceEquals(type, null)) return false;
+            if (!VpsfCatalog.TryIdentity(type, out var family, out _, out tenantClass))
+                return false;
+            return VpsfCatalog.IsLivingFamily(family);
+        }
+
+        /// <summary>
+        /// Soft fill gate: Upper living/work near Lower living/work or noisy Service/Leisure.
+        /// </summary>
+        static float ClassClashFillMultiplier(TowerGrid grid, RoomInstance subject)
+        {
+            if (grid == null || subject?.Type == null)
+                return ClassClashRules.NoPenalty;
+            if (!VpsfCatalog.TryIdentity(subject.Type, out _, out _, out var subjectClass))
+                return ClassClashRules.NoPenalty;
+            if (subjectClass != TenantClass.Upper)
+                return ClassClashRules.NoPenalty;
+
+            var mult = ClassClashRules.NoPenalty;
+            var y = subject.Origin.y;
+            foreach (var other in grid.Rooms)
+            {
+                if (other == null || ReferenceEquals(other, subject) || ReferenceEquals(other.Type, null))
+                    continue;
+                if (!VpsfCatalog.TryIdentity(other.Type, out var neighborFamily, out _, out var neighborClass))
+                    continue;
+                var penalty = ClassClashRules.PenaltyMult(
+                    subjectClass, neighborFamily, neighborClass, other.Origin.y - y);
+                if (penalty < mult)
+                    mult = penalty;
+            }
+
+            return mult;
         }
 
         void StartLeg(Agent agent, TransitLeg leg, bool allowReplan = true)
