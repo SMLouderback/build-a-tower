@@ -113,6 +113,32 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void KeyMagentaKeepCanvas_preserves_dimensions()
+        {
+            const int w = 64;
+            const int h = 32;
+            var src = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            var px = new Color[w * h];
+            for (var i = 0; i < px.Length; i++)
+                px[i] = Color.gray;
+            // Magenta plate rim
+            for (var x = 0; x < w; x++)
+            {
+                px[x] = new Color(1f, 0f, 1f, 1f);
+                px[(h - 1) * w + x] = new Color(1f, 0f, 1f, 1f);
+            }
+            src.SetPixels(px);
+            src.Apply(false, false);
+
+            var keyed = RoomDollhouseArt.KeyMagentaKeepCanvas(src, destroySource: true);
+            Assert.AreEqual(w, keyed.width);
+            Assert.AreEqual(h, keyed.height);
+            Assert.Less(keyed.GetPixel(0, 0).a, 0.1f);
+            Assert.Greater(keyed.GetPixel(w / 2, h / 2).a, 0.9f);
+            UnityEngine.Object.DestroyImmediate(keyed);
+        }
+
+        [Test]
         public void OverlayScale_fits_native_pixels_into_cell_footprint_without_assuming_128()
         {
             // 9×1 catalog cell box; native pan is ~918×176 (not 1152×128).

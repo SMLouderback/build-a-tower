@@ -277,7 +277,12 @@ namespace BuildATower
 
         static Sprite LoadSprite(string resourcePath, Vector2Int cellSize)
         {
-            var tex = LoadTexture(resourcePath);
+            var tex = DecodeTexture(resourcePath);
+            if (tex == null) return null;
+
+            // Keep canvas size — opaque-bounds crop was re-stretching face variants
+            // to different aspects and misaligning neighbor floors/ceilings.
+            tex = KeyMagentaKeepCanvas(tex, destroySource: true);
             if (tex == null) return null;
 
             if (cellSize.x > 0 && cellSize.y > 0)
@@ -299,7 +304,7 @@ namespace BuildATower
                 PixelsPerUnit);
         }
 
-        static Texture2D LoadTexture(string resourcePath)
+        static Texture2D DecodeTexture(string resourcePath)
         {
             var bytesAsset = Resources.Load<TextAsset>(resourcePath);
             byte[] png = bytesAsset != null ? bytesAsset.bytes : null;
@@ -314,8 +319,7 @@ namespace BuildATower
                 }
                 catch (UnityException)
                 {
-                    var copy = SpriteTextureFromImported(srcTex);
-                    return copy == null ? null : KeyCropMagentaPlate(copy, destroySource: copy != srcTex);
+                    return SpriteTextureFromImported(srcTex);
                 }
             }
 
@@ -333,12 +337,57 @@ namespace BuildATower
                 return null;
             }
 
+            return decoded;
+        }
+
+        static Texture2D LoadTexture(string resourcePath)
+        {
+            var decoded = DecodeTexture(resourcePath);
+            if (decoded == null) return null;
             return KeyCropMagentaPlate(decoded, destroySource: true);
+        }
+
+        /// <summary>
+        /// Clear magenta plate/fringe in place — preserves width/height so cell canvases stay aligned.
+        /// </summary>
+        public static Texture2D KeyMagentaKeepCanvas(Texture2D source, bool destroySource)
+        {
+            if (source == null) return null;
+
+            Color[] px;
+            try
+            {
+                px = source.GetPixels();
+            }
+            catch (UnityException)
+            {
+                return source;
+            }
+
+            var w = source.width;
+            var h = source.height;
+            FloodKeyMagentaPlate(px, w, h);
+            KeyHotMagenta(px);
+            ScrubNearMagentaFringe(px, w, h);
+
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                name = source.name
+            };
+            tex.SetPixels(px);
+            tex.Apply(false, false);
+
+            if (destroySource)
+                UnityEngine.Object.Destroy(source);
+            return tex;
         }
 
         /// <summary>
         /// Flood-key hot magenta/pink plates (AI chroma), scrub fringe, crop to opaque bounds.
         /// Reuses <see cref="MenuIconArt.IsHotMagenta"/> so dollhouse and menu share one detector.
+        /// Prefer <see cref="KeyMagentaKeepCanvas"/> for cell-aligned dollhouse overlays.
         /// </summary>
         public static Texture2D KeyCropMagentaPlate(Texture2D source, bool destroySource)
         {
