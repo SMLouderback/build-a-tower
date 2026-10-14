@@ -241,6 +241,16 @@ namespace BuildATower.Tests
             }
         }
 
+        [Test]
+        public void Committed_png_bytes_exist_for_condo_face_variants()
+        {
+            foreach (var (id, leaf) in Catalog)
+            {
+                if (!id.StartsWith("condo_")) continue;
+                AssertFaceVariantsExist(id, leaf);
+            }
+        }
+
         static void AssertFaceVariantsExist(string typeId, string expectedStem)
         {
             var dir = System.IO.Path.Combine(Application.dataPath, "Resources/Art/Dollhouse");
@@ -293,12 +303,12 @@ namespace BuildATower.Tests
             ("condo_studio", "studio_condo_4x1"),
             ("condo_alcove", "alcove_studio_5x1"),
             ("condo_base", "one_bedroom_condo_8x1"),
-            ("condo_mid_standard", "mid_condo_10x1"),
-            ("condo_mid_loft", "loft_condo_12x1"),
-            ("condo_mid_family", "family_condo_14x1"),
-            ("condo_upper_standard", "upper_condo_12x1"),
-            ("condo_upper_corner", "corner_condo_14x1"),
-            ("condo_upper_penthouse", "penthouse_18x1"),
+            ("condo_mid_standard", "mid_condo_9x1"),
+            ("condo_mid_loft", "loft_condo_10x1"),
+            ("condo_mid_family", "family_condo_12x1"),
+            ("condo_upper_standard", "upper_condo_10x1"),
+            ("condo_upper_corner", "corner_condo_12x1"),
+            ("condo_upper_penthouse", "penthouse_14x1"),
             ("shop_food_fast", "fast_food_16x1"),
             ("shop_food_taco", "taco_counter_12x1"),
             ("shop_food_chicken", "chicken_shack_12x1"),
