@@ -43,6 +43,7 @@ namespace BuildATower
         Transform _dollhouseOverlayRoot;
         Transform _condemnedOverlayRoot;
         int _lastLightingBucket = int.MinValue;
+        bool _suppressDollhouseNeighborRepaint;
 
         void Awake()
         {
@@ -126,6 +127,9 @@ namespace BuildATower
         {
             if (room?.Type == null) return;
 
+            var repaintNeighbors = !_suppressDollhouseNeighborRepaint;
+            try
+            {
             var color = RoomPaintColor(room);
             var occupied = CollectOccupied(room);
             if (IsVisibleTransit(room))
@@ -198,6 +202,12 @@ namespace BuildATower
                 FinishOfficeBrokenVisuals(room, occupied, skipCell, artTilesPainted: false);
             else if (HotelCutawayArt.IsHotel(room.Type))
                 FinishHotelConditionVisuals(room, occupied, skipCell, artTilesPainted: false);
+            }
+            finally
+            {
+                if (repaintNeighbors)
+                    RepaintDollhouseEdgeNeighbors(room, skipCell);
+            }
         }
 
         public void PaintCell(Vector2Int cell, RoomInstance room)
@@ -319,6 +329,9 @@ namespace BuildATower
 
         public void ClearRoom(RoomInstance room)
         {
+            var repaintNeighbors = room != null && !_suppressDollhouseNeighborRepaint;
+            try
+            {
             if (room != null)
             {
                 ClearCondemnedOverlay(room.InstanceId);
@@ -363,6 +376,12 @@ namespace BuildATower
             var map = UsesStructureMap(room) ? structureTilemap : roomsTilemap;
             foreach (var cell in room.OccupiedCells())
                 map.SetTile(ToTileCell(cell), null);
+            }
+            finally
+            {
+                if (repaintNeighbors)
+                    RepaintDollhouseEdgeNeighbors(room, skipCell: null);
+            }
         }
 
         public void ClearCell(Vector2Int cell, bool structureMap)
@@ -928,7 +947,24 @@ namespace BuildATower
             HashSet<Vector2Int> occupied,
             System.Func<Vector2Int, bool> skipCell)
         {
-            if (!RoomDollhouseArt.TrySprite(room, out var sprite))
+            if (!RoomDollhouseArt.TrySprite(room, out var baseSprite))
+                return false;
+
+            var grid = ResolveTowerGrid();
+            var leftExterior = true;
+            var rightExterior = true;
+            if (grid != null)
+                RoomExteriorFaces.Evaluate(grid, room, out leftExterior, out rightExterior);
+            var atriumRole = AtriumStackRoles.RoleFor(grid, room);
+            var family = room.Type.ResolvedBuildFamily();
+            var sprite = DollhouseContextArt.GetSprite(
+                room.Type,
+                leftExterior,
+                rightExterior,
+                atriumRole,
+                family,
+                baseSprite);
+            if (sprite == null)
                 return false;
 
             // Overlay-only: leave rooms-layer tiles empty so transparent edges
@@ -944,6 +980,50 @@ namespace BuildATower
 
             SetDollhouseOverlay(room, sprite, DollhouseTint(room));
             return true;
+        }
+
+        TowerGrid ResolveTowerGrid()
+        {
+            if (build == null)
+                build = FindAnyObjectByType<BuildController>();
+            return build?.Grid;
+        }
+
+        void RepaintDollhouseEdgeNeighbors(
+            RoomInstance changedRoom,
+            System.Func<Vector2Int, bool> skipCell)
+        {
+            var grid = ResolveTowerGrid();
+            var neighbors = DollhouseRepaintSet.Collect(grid, changedRoom);
+            if (neighbors.Count == 0)
+                return;
+
+            _suppressDollhouseNeighborRepaint = true;
+            try
+            {
+                foreach (var neighbor in neighbors)
+                {
+                    if (neighbor?.Type == null)
+                        continue;
+                    var occupied = CollectOccupied(neighbor);
+                    TryPaintDollhouseArt(
+                        neighbor,
+                        occupied,
+                        skipCell ?? IsOpaqueTransitOwnedCell);
+                }
+            }
+            finally
+            {
+                _suppressDollhouseNeighborRepaint = false;
+            }
+        }
+
+        bool IsOpaqueTransitOwnedCell(Vector2Int cell)
+        {
+            var grid = ResolveTowerGrid();
+            return grid != null &&
+                   grid.TryGetRoomAt(cell, out var at) &&
+                   IsVisibleTransit(at);
         }
 
         void SetDollhouseOverlay(RoomInstance room, Sprite sprite, Color tint)
