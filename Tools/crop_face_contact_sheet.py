@@ -9,8 +9,9 @@ from PIL import Image
 
 
 def is_magenta_rgb(r: int, g: int, b: int) -> bool:
-    # Hot #FF00FF and generator pinks like #F507B6 / #EE0791.
-    return r >= 200 and g <= 90 and b >= 130 and r >= g + 80
+    # Hot #FF00FF plus generator pinks (#FF007C / #DB017C / #F507B6).
+    # JPG often lands b just under 130 on key plates.
+    return r >= 180 and g <= 100 and b >= 95 and r >= g + 70
 
 
 def find_content_bands(im: Image.Image, mag_frac_thresh: float = 0.72) -> list[tuple[int, int]]:

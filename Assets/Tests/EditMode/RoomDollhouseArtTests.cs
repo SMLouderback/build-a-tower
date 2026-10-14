@@ -228,9 +228,24 @@ namespace BuildATower.Tests
         [Test]
         public void Committed_png_bytes_exist_for_office_micro_face_variants()
         {
+            AssertFaceVariantsExist("office_micro", "micro_office_3x1");
+        }
+
+        [Test]
+        public void Committed_png_bytes_exist_for_hotel_face_variants()
+        {
+            foreach (var (id, leaf) in Catalog)
+            {
+                if (!id.StartsWith("hotel_")) continue;
+                AssertFaceVariantsExist(id, leaf);
+            }
+        }
+
+        static void AssertFaceVariantsExist(string typeId, string expectedStem)
+        {
             var dir = System.IO.Path.Combine(Application.dataPath, "Resources/Art/Dollhouse");
-            var stem = RoomDollhouseArt.ResourceLeaf("office_micro");
-            Assert.AreEqual("micro_office_3x1", stem);
+            var stem = RoomDollhouseArt.ResourceLeaf(typeId);
+            Assert.AreEqual(expectedStem, stem, typeId);
             foreach (var suffix in new[] { "_ext", "_L", "_R", "_int" })
             {
                 var png = System.IO.Path.Combine(dir, stem + suffix + ".png");
