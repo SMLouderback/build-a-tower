@@ -195,7 +195,10 @@ def rewrite_guid_meta(template: Path, dest: Path) -> None:
 def parse_stem_cells(stem: str) -> tuple[int, int] | None:
     import re
 
-    m = re.search(r"(\d+)x(\d+)$", stem)
+    leaf = stem
+    if leaf.endswith("_mid"):
+        leaf = leaf[: -len("_mid")]
+    m = re.search(r"(\d+)x(\d+)$", leaf)
     if not m:
         return None
     return int(m.group(1)), int(m.group(2))

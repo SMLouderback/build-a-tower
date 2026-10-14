@@ -86,7 +86,12 @@ namespace BuildATower.Tests
 
         [Test]
         public void TryParseCellSizeFromLeaf_reads_stem_and_strips_face_suffix(
-            [Values("micro_office_3x1", "micro_office_3x1_ext", "Art/Dollhouse/studio_office_4x1_L", "atrium_8x3_mid")]
+            [Values(
+                "micro_office_3x1",
+                "micro_office_3x1_ext",
+                "Art/Dollhouse/studio_office_4x1_L",
+                "atrium_8x3_mid",
+                "atrium_8x3_mid_ext")]
             string leaf)
         {
             Assert.IsTrue(RoomDollhouseArt.TryParseCellSizeFromLeaf(leaf, out var size));
@@ -268,6 +273,29 @@ namespace BuildATower.Tests
             {
                 if (!id.StartsWith("service_") && id != "parking_underground") continue;
                 AssertFaceVariantsExist(id, leaf);
+            }
+        }
+
+        [Test]
+        public void Committed_png_bytes_exist_for_leisure_and_metro_face_variants()
+        {
+            foreach (var (id, leaf) in Catalog)
+            {
+                if (!id.StartsWith("leisure_") && id != "metro_station") continue;
+                AssertFaceVariantsExist(id, leaf);
+            }
+
+            // Atrium mid open-well leaf also has face plates.
+            var dir = System.IO.Path.Combine(Application.dataPath, "Resources/Art/Dollhouse");
+            var midStem = RoomDollhouseArt.ResourceLeafForContext("leisure_atrium", AtriumStackRole.Mid);
+            Assert.AreEqual("atrium_8x3_mid", midStem);
+            foreach (var suffix in new[] { "_ext", "_L", "_R", "_int" })
+            {
+                var png = System.IO.Path.Combine(dir, midStem + suffix + ".png");
+                var bytes = System.IO.Path.Combine(dir, midStem + suffix + ".bytes");
+                Assert.IsTrue(System.IO.File.Exists(png), "Missing face PNG " + png);
+                Assert.IsTrue(System.IO.File.Exists(bytes), "Missing face bytes " + bytes);
+                Assert.Greater(new System.IO.FileInfo(png).Length, 1024, png + " is too small");
             }
         }
 

@@ -174,7 +174,8 @@ namespace BuildATower
             else if (leaf.EndsWith("_L", StringComparison.Ordinal) ||
                      leaf.EndsWith("_R", StringComparison.Ordinal))
                 leaf = leaf.Substring(0, leaf.Length - 2);
-            else if (leaf.EndsWith("_mid", StringComparison.Ordinal))
+            // Atrium mid faces are stem_mid_{ext|L|R|int}; strip context after face.
+            if (leaf.EndsWith("_mid", StringComparison.Ordinal))
                 leaf = leaf.Substring(0, leaf.Length - 4);
 
             var m = Regex.Match(leaf, @"(\d+)x(\d+)$", RegexOptions.CultureInvariant);
