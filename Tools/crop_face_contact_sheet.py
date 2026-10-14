@@ -119,6 +119,21 @@ def rewrite_guid_meta(template: Path, dest: Path) -> None:
     dest.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def parse_stem_cells(stem: str) -> tuple[int, int] | None:
+    import re
+
+    m = re.search(r"(\d+)x(\d+)$", stem)
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2))
+
+
+def fit_to_cell_canvas(strip: Image.Image, cells_w: int, cells_h: int, ppu: int = 128) -> Image.Image:
+    """Stretch strip to exact catalog canvas so floor/ceiling align across face variants."""
+    tw, th = max(1, cells_w * ppu), max(1, cells_h * ppu)
+    return strip.convert("RGBA").resize((tw, th), Image.Resampling.BILINEAR)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--sheet", required=True, type=Path)
@@ -144,6 +159,11 @@ def main() -> None:
         "--clear-flat-glass",
         action="store_true",
         help="Also clear opaque grey/white window fills to alpha",
+    )
+    ap.add_argument(
+        "--no-fit-canvas",
+        action="store_true",
+        help="Skip stretch-to-cells×128 canvas (default fits)",
     )
     args = ap.parse_args()
 
@@ -181,6 +201,9 @@ def main() -> None:
         strip = key_magenta_to_alpha(strip)
         if args.clear_flat_glass:
             strip = clear_flat_glass_panes(strip)
+        cells = parse_stem_cells(args.stem)
+        if cells and not args.no_fit_canvas:
+            strip = fit_to_cell_canvas(strip, cells[0], cells[1])
         png_path = args.out_dir / f"{leaf}.png"
         bytes_path = args.out_dir / f"{leaf}.bytes"
         strip.save(png_path, format="PNG")

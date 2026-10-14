@@ -45,16 +45,18 @@ namespace BuildATower
             if (type == null)
                 return baseSprite;
 
+            var cells = type.size.x > 0 && type.size.y > 0 ? type.size : new Vector2Int(1, 1);
+
             if (IsAtrium(type) && atriumRole == AtriumStackRole.Mid)
             {
                 var faceMidPath = RoomDollhouseArt.ResourcePathForFaces(
                     type.id, leftExterior, rightExterior, atriumRole);
-                var faceMid = RoomDollhouseArt.LoadSpriteAtResourcePath(faceMidPath);
+                var faceMid = RoomDollhouseArt.LoadSpriteAtResourcePath(faceMidPath, cells);
                 if (faceMid != null)
                     return faceMid;
 
                 var midPath = RoomDollhouseArt.ResourcePathForContext(type.id, atriumRole);
-                var mid = RoomDollhouseArt.LoadSpriteAtResourcePath(midPath);
+                var mid = RoomDollhouseArt.LoadSpriteAtResourcePath(midPath, cells);
                 if (mid != null)
                     return mid;
 
@@ -63,7 +65,7 @@ namespace BuildATower
 
             var facePath = RoomDollhouseArt.ResourcePathForFaces(
                 type.id, leftExterior, rightExterior, atriumRole);
-            var faceSprite = RoomDollhouseArt.LoadSpriteAtResourcePath(facePath);
+            var faceSprite = RoomDollhouseArt.LoadSpriteAtResourcePath(facePath, cells);
             if (faceSprite != null)
                 return faceSprite;
 
@@ -71,7 +73,7 @@ namespace BuildATower
                 return baseSprite;
 
             var legacyPath = RoomDollhouseArt.ResourcePathForContext(type.id, atriumRole);
-            return RoomDollhouseArt.LoadSpriteAtResourcePath(legacyPath);
+            return RoomDollhouseArt.LoadSpriteAtResourcePath(legacyPath, cells);
         }
 
         static Sprite Bake(Sprite source)

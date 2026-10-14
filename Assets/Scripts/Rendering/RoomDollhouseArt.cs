@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace BuildATower
@@ -133,10 +134,13 @@ namespace BuildATower
             return stem == null ? null : ResourceRoot + stem + FaceSuffix(leftExterior, rightExterior);
         }
 
-        public static Sprite LoadSpriteAtResourcePath(string resourcePath)
+        public static Sprite LoadSpriteAtResourcePath(string resourcePath) =>
+            LoadSpriteAtResourcePath(resourcePath, default);
+
+        public static Sprite LoadSpriteAtResourcePath(string resourcePath, Vector2Int cellSize)
         {
             if (string.IsNullOrEmpty(resourcePath)) return null;
-            return GetOrLoadSprite(resourcePath);
+            return GetOrLoadSprite(resourcePath, cellSize);
         }
 
         public static bool IsMapped(RoomTypeSO type)
@@ -154,6 +158,83 @@ namespace BuildATower
             return new Vector3(sx, sy, 1f);
         }
 
+        /// <summary>
+        /// Parses <c>3x1</c> from leaves like <c>micro_office_3x1_ext</c> / <c>atrium_8x3_mid</c>.
+        /// </summary>
+        public static bool TryParseCellSizeFromLeaf(string leafOrPath, out Vector2Int cellSize)
+        {
+            cellSize = default;
+            if (string.IsNullOrEmpty(leafOrPath)) return false;
+            var leaf = leafOrPath;
+            var slash = leaf.LastIndexOf('/');
+            if (slash >= 0) leaf = leaf.Substring(slash + 1);
+            if (leaf.EndsWith("_ext", StringComparison.Ordinal) ||
+                leaf.EndsWith("_int", StringComparison.Ordinal))
+                leaf = leaf.Substring(0, leaf.Length - 4);
+            else if (leaf.EndsWith("_L", StringComparison.Ordinal) ||
+                     leaf.EndsWith("_R", StringComparison.Ordinal))
+                leaf = leaf.Substring(0, leaf.Length - 2);
+            else if (leaf.EndsWith("_mid", StringComparison.Ordinal))
+                leaf = leaf.Substring(0, leaf.Length - 4);
+
+            var m = Regex.Match(leaf, @"(\d+)x(\d+)$", RegexOptions.CultureInvariant);
+            if (!m.Success) return false;
+            if (!int.TryParse(m.Groups[1].Value, out var w) ||
+                !int.TryParse(m.Groups[2].Value, out var h))
+                return false;
+            if (w < 1 || h < 1) return false;
+            cellSize = new Vector2Int(w, h);
+            return true;
+        }
+
+        /// <summary>
+        /// Stretch-resamples art onto a fixed cell canvas so every plate for a footprint
+        /// shares floor/ceiling alignment (avoids neighbor morph when face leaves swap).
+        /// </summary>
+        public static Texture2D NormalizeToCellCanvas(Texture2D source, Vector2Int cellSize)
+        {
+            if (source == null || cellSize.x < 1 || cellSize.y < 1)
+                return source;
+
+            var tw = Mathf.Max(1, Mathf.RoundToInt(cellSize.x * PixelsPerUnit));
+            var th = Mathf.Max(1, Mathf.RoundToInt(cellSize.y * PixelsPerUnit));
+            if (source.width == tw && source.height == th)
+                return source;
+
+            Color[] srcPx;
+            try
+            {
+                srcPx = source.GetPixels();
+            }
+            catch (UnityException)
+            {
+                return source;
+            }
+
+            var sw = source.width;
+            var sh = source.height;
+            var dstPx = new Color[tw * th];
+            for (var y = 0; y < th; y++)
+            for (var x = 0; x < tw; x++)
+            {
+                var u = (x + 0.5f) / tw;
+                var v = (y + 0.5f) / th;
+                var sx = Mathf.Clamp(Mathf.FloorToInt(u * sw), 0, sw - 1);
+                var sy = Mathf.Clamp(Mathf.FloorToInt(v * sh), 0, sh - 1);
+                dstPx[y * tw + x] = srcPx[sy * sw + sx];
+            }
+
+            var tex = new Texture2D(tw, th, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                name = source.name + "_cell"
+            };
+            tex.SetPixels(dstPx);
+            tex.Apply(false, false);
+            return tex;
+        }
+
         public static bool TrySprite(RoomInstance room, out Sprite sprite)
         {
             sprite = null;
@@ -162,7 +243,8 @@ namespace BuildATower
             var path = ResourcePath(room.Type.id);
             if (string.IsNullOrEmpty(path)) return false;
 
-            sprite = GetOrLoadSprite(path);
+            var cells = room.Size.x > 0 && room.Size.y > 0 ? room.Size : room.Type.size;
+            sprite = GetOrLoadSprite(path, cells);
             return sprite != null;
         }
 
@@ -172,27 +254,44 @@ namespace BuildATower
             SpriteCache.Clear();
         }
 
-        static Sprite GetOrLoadSprite(string resourcePath)
+        static Sprite GetOrLoadSprite(string resourcePath, Vector2Int cellSize)
         {
             if (LoadSpriteForTests != null)
                 return LoadSpriteForTests(resourcePath);
 
-            if (SpriteCache.TryGetValue(resourcePath, out var cached) && cached != null)
+            if (cellSize.x < 1 || cellSize.y < 1)
+                TryParseCellSizeFromLeaf(resourcePath, out cellSize);
+
+            var cacheKey = cellSize.x > 0
+                ? resourcePath + "@" + cellSize.x + "x" + cellSize.y
+                : resourcePath;
+
+            if (SpriteCache.TryGetValue(cacheKey, out var cached) && cached != null)
                 return cached;
 
-            var loaded = LoadSprite(resourcePath);
+            var loaded = LoadSprite(resourcePath, cellSize);
             if (loaded != null)
-                SpriteCache[resourcePath] = loaded;
+                SpriteCache[cacheKey] = loaded;
             return loaded;
         }
 
-        static Sprite LoadSprite(string resourcePath)
+        static Sprite LoadSprite(string resourcePath, Vector2Int cellSize)
         {
             var tex = LoadTexture(resourcePath);
             if (tex == null) return null;
 
-            // Bottom-left pivot: overlay pins to the room origin and scales to the
-            // cell footprint. Native pixel size is not resampled to catalog 128×N.
+            if (cellSize.x > 0 && cellSize.y > 0)
+            {
+                var normalized = NormalizeToCellCanvas(tex, cellSize);
+                if (normalized != null && normalized != tex)
+                {
+                    UnityEngine.Object.Destroy(tex);
+                    tex = normalized;
+                }
+            }
+
+            // Bottom-left pivot: overlay pins to the room origin. Canvas matches
+            // catalog cells×PPU so OverlayScale is ~identity across face variants.
             return Sprite.Create(
                 tex,
                 new Rect(0f, 0f, tex.width, tex.height),

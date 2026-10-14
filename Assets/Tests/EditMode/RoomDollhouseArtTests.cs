@@ -85,6 +85,34 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void TryParseCellSizeFromLeaf_reads_stem_and_strips_face_suffix(
+            [Values("micro_office_3x1", "micro_office_3x1_ext", "Art/Dollhouse/studio_office_4x1_L", "atrium_8x3_mid")]
+            string leaf)
+        {
+            Assert.IsTrue(RoomDollhouseArt.TryParseCellSizeFromLeaf(leaf, out var size));
+            if (leaf.Contains("atrium"))
+                Assert.AreEqual(new Vector2Int(8, 3), size);
+            else if (leaf.Contains("studio"))
+                Assert.AreEqual(new Vector2Int(4, 1), size);
+            else
+                Assert.AreEqual(new Vector2Int(3, 1), size);
+        }
+
+        [Test]
+        public void NormalizeToCellCanvas_matches_cells_times_ppu()
+        {
+            var src = new Texture2D(50, 20, TextureFormat.RGBA32, false);
+            src.SetPixels(new Color[50 * 20]);
+            src.Apply(false, false);
+            var normalized = RoomDollhouseArt.NormalizeToCellCanvas(src, new Vector2Int(3, 1));
+            Assert.AreEqual(3 * (int)RoomDollhouseArt.PixelsPerUnit, normalized.width);
+            Assert.AreEqual(1 * (int)RoomDollhouseArt.PixelsPerUnit, normalized.height);
+            UnityEngine.Object.DestroyImmediate(src);
+            if (normalized != src)
+                UnityEngine.Object.DestroyImmediate(normalized);
+        }
+
+        [Test]
         public void OverlayScale_fits_native_pixels_into_cell_footprint_without_assuming_128()
         {
             // 9×1 catalog cell box; native pan is ~918×176 (not 1152×128).
