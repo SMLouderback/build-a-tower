@@ -1,10 +1,10 @@
 # Build-A-Tower — Visual Polish (Cutaway Truth, Atrium Stack, Family Accents)
 
 **Date:** 2026-10-12  
-**Status:** Approved design  
+**Status:** Implemented (EditMode green; Play Mode eyeball smoke recommended)  
 **Depends on:** `RoomDollhouseArt` / `TilemapTowerView` dollhouse overlays; `BuildingShellEnvelope`; atrium `isAtrium` + fatigue-free climb; build-menu `FamilyColor`; metro/sky/weather WIP  
 **Parent:** Preferred feature order — visual polish after economy + heatmaps  
-**Follow-ups:** Value heatmap toggles; land expansion; tutorial tips; casino/bowling minigames; full room art reauthor
+**Follow-ups:** Value heatmap toggles; land expansion; tutorial tips; casino/bowling minigames; full room art reauthor → see `2026-10-14-room-art-face-variants-design.md` (mask + family accent bake superseded)
 
 ## 1. Goals
 
