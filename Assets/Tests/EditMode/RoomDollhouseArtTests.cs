@@ -261,6 +261,16 @@ namespace BuildATower.Tests
             }
         }
 
+        [Test]
+        public void Committed_png_bytes_exist_for_service_and_parking_face_variants()
+        {
+            foreach (var (id, leaf) in Catalog)
+            {
+                if (!id.StartsWith("service_") && id != "parking_underground") continue;
+                AssertFaceVariantsExist(id, leaf);
+            }
+        }
+
         static void AssertFaceVariantsExist(string typeId, string expectedStem)
         {
             var dir = System.IO.Path.Combine(Application.dataPath, "Resources/Art/Dollhouse");
@@ -329,10 +339,10 @@ namespace BuildATower.Tests
             ("shop_retail_gifts", "gag_gifts_6x1"),
             ("shop_retail_shoes", "shoe_store_6x1"),
             ("shop_retail_department", "department_store_12x2"),
-            ("service_housekeeping", "housekeeping_3x1"),
-            ("service_maintenance", "maintenance_3x1"),
+            ("service_housekeeping", "housekeeping_4x1"),
+            ("service_maintenance", "maintenance_4x1"),
             ("service_security", "security_post_2x1"),
-            ("service_research", "research_lab_4x1"),
+            ("service_research", "research_lab_8x1"),
             ("service_conference", "conference_8x1"),
             ("service_event_hall", "event_hall_12x2"),
             ("service_mail", "mail_4x1"),
