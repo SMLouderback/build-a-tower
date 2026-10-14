@@ -251,6 +251,16 @@ namespace BuildATower.Tests
             }
         }
 
+        [Test]
+        public void Committed_png_bytes_exist_for_shop_face_variants()
+        {
+            foreach (var (id, leaf) in Catalog)
+            {
+                if (!id.StartsWith("shop_")) continue;
+                AssertFaceVariantsExist(id, leaf);
+            }
+        }
+
         static void AssertFaceVariantsExist(string typeId, string expectedStem)
         {
             var dir = System.IO.Path.Combine(Application.dataPath, "Resources/Art/Dollhouse");
@@ -309,16 +319,16 @@ namespace BuildATower.Tests
             ("condo_upper_standard", "upper_condo_10x1"),
             ("condo_upper_corner", "corner_condo_12x1"),
             ("condo_upper_penthouse", "penthouse_14x1"),
-            ("shop_food_fast", "fast_food_16x1"),
-            ("shop_food_taco", "taco_counter_12x1"),
-            ("shop_food_chicken", "chicken_shack_12x1"),
-            ("shop_food_restaurant", "restaurant_16x1"),
-            ("shop_food_mexican", "mexican_restaurant_16x1"),
-            ("shop_food_fine", "fine_dining_4x1"),
-            ("shop_retail", "retail_16x1"),
-            ("shop_retail_gifts", "gag_gifts_10x1"),
-            ("shop_retail_shoes", "shoe_store_12x1"),
-            ("shop_retail_department", "department_store_16x2"),
+            ("shop_food_fast", "fast_food_8x1"),
+            ("shop_food_taco", "taco_counter_6x1"),
+            ("shop_food_chicken", "chicken_shack_6x1"),
+            ("shop_food_restaurant", "restaurant_10x1"),
+            ("shop_food_mexican", "mexican_restaurant_10x1"),
+            ("shop_food_fine", "fine_dining_8x1"),
+            ("shop_retail", "retail_8x1"),
+            ("shop_retail_gifts", "gag_gifts_6x1"),
+            ("shop_retail_shoes", "shoe_store_6x1"),
+            ("shop_retail_department", "department_store_12x2"),
             ("service_housekeeping", "housekeeping_3x1"),
             ("service_maintenance", "maintenance_3x1"),
             ("service_security", "security_post_2x1"),
