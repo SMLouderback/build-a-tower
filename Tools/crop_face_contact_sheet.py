@@ -109,6 +109,78 @@ def clear_flat_glass_panes(strip: Image.Image) -> Image.Image:
     return rgba
 
 
+FRAME = (42, 40, 38, 255)
+
+
+def paint_window_frames(strip: Image.Image, thickness: int = 2) -> Image.Image:
+    """
+    Draw charcoal frames around interior transparent holes (window panes).
+    Skips clear regions connected to the image border (outer plate).
+    """
+    rgba = strip.convert("RGBA")
+    w, h = rgba.size
+    px = rgba.load()
+    clear = [[px[x, y][3] < 20 for x in range(w)] for y in range(h)]
+
+    # Mark border-connected clear (outer chroma), BFS.
+    from collections import deque
+
+    border = [[False] * w for _ in range(h)]
+    q: deque[tuple[int, int]] = deque()
+    for x in range(w):
+        for y in (0, h - 1):
+            if clear[y][x]:
+                border[y][x] = True
+                q.append((x, y))
+    for y in range(h):
+        for x in (0, w - 1):
+            if clear[y][x] and not border[y][x]:
+                border[y][x] = True
+                q.append((x, y))
+    while q:
+        x, y = q.popleft()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            xx, yy = x + dx, y + dy
+            if 0 <= xx < w and 0 <= yy < h and clear[yy][xx] and not border[yy][xx]:
+                border[yy][xx] = True
+                q.append((xx, yy))
+
+    # Interior hole mask.
+    hole = [[clear[y][x] and not border[y][x] for x in range(w)] for y in range(h)]
+
+    # Paint frame on opaque neighbors of holes, and a 1px ring into the hole.
+    out = rgba.copy()
+    opx = out.load()
+    for y in range(h):
+        for x in range(w):
+            if not hole[y][x]:
+                continue
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                xx, yy = x + dx, y + dy
+                if not (0 <= xx < w and 0 <= yy < h):
+                    continue
+                if hole[yy][xx]:
+                    continue
+                # Neighbor is opaque wall/frame — force charcoal.
+                if not clear[yy][xx] or border[yy][xx]:
+                    opx[xx, yy] = FRAME
+            # Inset ring so thin frames survive rescale.
+            for t in range(thickness):
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    xx, yy = x + dx * (t + 1), y + dy * (t + 1)
+                    if 0 <= xx < w and 0 <= yy < h and hole[yy][xx]:
+                        # Only paint hole edge cells (has opaque/border neighbor).
+                        edge = False
+                        for ax, ay in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                            nx, ny = xx + ax, yy + ay
+                            if 0 <= nx < w and 0 <= ny < h and not hole[ny][nx]:
+                                edge = True
+                                break
+                        if edge:
+                            opx[xx, yy] = FRAME
+    return out
+
+
 def rewrite_guid_meta(template: Path, dest: Path) -> None:
     lines = []
     for line in template.read_text(encoding="utf-8").splitlines():
@@ -201,9 +273,12 @@ def main() -> None:
         strip = key_magenta_to_alpha(strip)
         if args.clear_flat_glass:
             strip = clear_flat_glass_panes(strip)
+        strip = paint_window_frames(strip, thickness=2)
         cells = parse_stem_cells(args.stem)
         if cells and not args.no_fit_canvas:
             strip = fit_to_cell_canvas(strip, cells[0], cells[1])
+        # Re-apply frames after resize so they stay ~2px at final resolution.
+        strip = paint_window_frames(strip, thickness=2)
         png_path = args.out_dir / f"{leaf}.png"
         bytes_path = args.out_dir / f"{leaf}.bytes"
         strip.save(png_path, format="PNG")

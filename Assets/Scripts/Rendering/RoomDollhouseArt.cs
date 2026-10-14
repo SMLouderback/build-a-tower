@@ -368,8 +368,9 @@ namespace BuildATower
             var h = source.height;
             FloodKeyMagentaPlate(px, w, h);
             KeyHotMagenta(px);
-            KeyResidualMagentaPanes(px);
-            ScrubNearMagentaFringe(px, w, h);
+            // Bright magenta glass only — do NOT scrub near-magenta fringe here;
+            // that erase pass was deleting thin dark window frames.
+            KeyBrightMagentaGlassOnly(px);
 
             var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
             {
@@ -386,9 +387,9 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Clears darker / half-alpha magenta left in window panes after plate keying.
+        /// Clears leftover bright pink/magenta glass without touching charcoal frames.
         /// </summary>
-        static void KeyResidualMagentaPanes(Color[] px)
+        static void KeyBrightMagentaGlassOnly(Color[] px)
         {
             for (var i = 0; i < px.Length; i++)
             {
@@ -400,10 +401,10 @@ namespace BuildATower
                     continue;
                 }
 
-                // Dark pink / purple glass residue (fails IsHotMagenta r&lt;0.5 gate).
                 Color.RGBToHSV(c, out var h, out var s, out var v);
                 var magentaHue = h < 0.05f || h > 0.78f;
-                if (magentaHue && s >= 0.35f && c.r >= c.g + 0.12f && c.b >= c.g + 0.08f)
+                // Bright, saturated panes only (v high) — skip dark frame-adjacent pinks.
+                if (magentaHue && s >= 0.45f && v >= 0.45f && c.r >= c.g + 0.18f && c.b >= c.g + 0.10f)
                     px[i] = Color.clear;
             }
         }
