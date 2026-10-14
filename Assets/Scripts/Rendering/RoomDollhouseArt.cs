@@ -368,6 +368,7 @@ namespace BuildATower
             var h = source.height;
             FloodKeyMagentaPlate(px, w, h);
             KeyHotMagenta(px);
+            KeyResidualMagentaPanes(px);
             ScrubNearMagentaFringe(px, w, h);
 
             var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
@@ -382,6 +383,29 @@ namespace BuildATower
             if (destroySource)
                 UnityEngine.Object.Destroy(source);
             return tex;
+        }
+
+        /// <summary>
+        /// Clears darker / half-alpha magenta left in window panes after plate keying.
+        /// </summary>
+        static void KeyResidualMagentaPanes(Color[] px)
+        {
+            for (var i = 0; i < px.Length; i++)
+            {
+                var c = px[i];
+                if (c.a < 0.02f) continue;
+                if (MenuIconArt.IsHotMagenta(c))
+                {
+                    px[i] = Color.clear;
+                    continue;
+                }
+
+                // Dark pink / purple glass residue (fails IsHotMagenta r&lt;0.5 gate).
+                Color.RGBToHSV(c, out var h, out var s, out var v);
+                var magentaHue = h < 0.05f || h > 0.78f;
+                if (magentaHue && s >= 0.35f && c.r >= c.g + 0.12f && c.b >= c.g + 0.08f)
+                    px[i] = Color.clear;
+            }
         }
 
         /// <summary>

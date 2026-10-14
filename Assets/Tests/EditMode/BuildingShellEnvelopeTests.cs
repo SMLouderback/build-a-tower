@@ -45,22 +45,24 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void ComputeCells_fills_gap_between_basement_rooms()
+        public void ComputeCells_fills_single_cell_crack_only()
         {
             var grid = new TowerGrid();
             Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
-            // Support B1 then place two B2 pads with a gap.
             for (var x = 0; x <= 20; x++)
                 Assert.IsTrue(grid.TryPlaceScaffold(new Vector2Int(x, -1), out _));
 
             Assert.IsTrue(grid.TryPlace(Pad(), new Vector2Int(0, -2), out _));
+            Assert.IsTrue(grid.TryPlace(Pad(), new Vector2Int(2, -2), out _));
             Assert.IsTrue(grid.TryPlace(Pad(), new Vector2Int(10, -2), out _));
 
             var shell = BuildingShellEnvelope.ComputeCells(grid.Rooms);
-            Assert.IsTrue(shell.Contains(new Vector2Int(5, -2)),
-                "Shell fills the dirt gap between rooms — visual only, not walkable.");
-            Assert.IsFalse(grid.TryGetRoomAt(new Vector2Int(5, -2), out _),
-                "Gap cell must stay empty so pathfinding cannot walk dirt.");
+            Assert.IsTrue(shell.Contains(new Vector2Int(1, -2)),
+                "Single-cell crack between adjacent pads is filled.");
+            Assert.IsFalse(shell.Contains(new Vector2Int(5, -2)),
+                "Wide empty spans are not filled (avoids grey slabs between towers).");
+            Assert.IsFalse(grid.TryGetRoomAt(new Vector2Int(1, -2), out _),
+                "Crack cell must stay empty so pathfinding cannot walk shell.");
         }
 
         static RoomTypeSO Lobby()

@@ -4,11 +4,14 @@ using UnityEngine;
 namespace BuildATower
 {
     /// <summary>
-    /// Fills the cutaway tower silhouette so dollhouse gaps and floor steps do not show sky.
-    /// Each floor uses the horizontal span of all rooms at or above that floor.
+    /// Fills narrow cracks between room cells with structure paint (cement / dirt).
+    /// Does not span large empty spans — that created flat grey “slabs” between towers.
     /// </summary>
     public static class BuildingShellEnvelope
     {
+        /// <summary>Only bridge empty runs of this many cells (1 = single-cell seams).</summary>
+        public const int MaxBridgeGap = 1;
+
         public static HashSet<Vector2Int> ComputeCells(IReadOnlyList<RoomInstance> rooms)
         {
             var occupied = new HashSet<Vector2Int>();
@@ -23,30 +26,41 @@ namespace BuildATower
 
             if (occupied.Count == 0) return new HashSet<Vector2Int>();
 
-            var yMin = int.MaxValue;
-            var yMax = int.MinValue;
+            var byFloor = new Dictionary<int, List<int>>();
             foreach (var cell in occupied)
             {
-                if (cell.y < yMin) yMin = cell.y;
-                if (cell.y > yMax) yMax = cell.y;
+                if (!byFloor.TryGetValue(cell.y, out var xs))
+                {
+                    xs = new List<int>();
+                    byFloor[cell.y] = xs;
+                }
+
+                xs.Add(cell.x);
             }
 
             var shell = new HashSet<Vector2Int>();
-            for (var y = yMin; y <= yMax; y++)
+            foreach (var (y, xs) in byFloor)
             {
-                var minX = int.MaxValue;
-                var maxX = int.MinValue;
-                foreach (var cell in occupied)
+                xs.Sort();
+                // Unique
+                var unique = new List<int>(xs.Count);
+                var last = int.MinValue;
+                foreach (var x in xs)
                 {
-                    if (cell.y < y) continue;
-                    if (cell.x < minX) minX = cell.x;
-                    if (cell.x > maxX) maxX = cell.x;
+                    if (x == last) continue;
+                    unique.Add(x);
+                    last = x;
                 }
 
-                if (minX > maxX) continue;
-
-                for (var x = minX; x <= maxX; x++)
-                    shell.Add(new Vector2Int(x, y));
+                for (var i = 0; i < unique.Count - 1; i++)
+                {
+                    var a = unique[i];
+                    var b = unique[i + 1];
+                    var gap = b - a - 1;
+                    if (gap < 1 || gap > MaxBridgeGap) continue;
+                    for (var x = a + 1; x < b; x++)
+                        shell.Add(new Vector2Int(x, y));
+                }
             }
 
             return shell;

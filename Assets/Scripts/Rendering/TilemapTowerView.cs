@@ -1046,9 +1046,12 @@ namespace BuildATower
             sr.color = tint;
             sr.transform.position = new Vector3(room.Origin.x, room.Origin.y, 0f);
             var b = sprite.bounds.size;
-            sr.transform.localScale = RoomDollhouseArt.OverlayScale(
-                new Vector2(b.x, b.y),
-                room.Size);
+            // Normalized cell canvases should already be cells×PPU → identity scale.
+            // Still OverlayScale as a safety net if a leaf missed normalize.
+            var scale = RoomDollhouseArt.OverlayScale(new Vector2(b.x, b.y), room.Size);
+            if (Mathf.Abs(scale.x - 1f) < 0.02f && Mathf.Abs(scale.y - 1f) < 0.02f)
+                scale = Vector3.one;
+            sr.transform.localScale = scale;
         }
 
         Color DollhouseTint(RoomInstance room)
