@@ -15,7 +15,7 @@ MonoBehaviour:
   id: condo_base
   displayName: One Bedroom
   category: 2
-  size: {x: 5, y: 1}
+  size: {x: 8, y: 1}
   buildCost: 116000
   placeholderColor: {r: 0.5, g: 0.76, b: 0.48, a: 1}
   incomeModel: 3
@@ -36,7 +36,7 @@ MonoBehaviour:
   luxuryBand: 1
   cleanMinutes: 0
   requiredStars: 0
-  maxOccupants: 2
+  maxOccupants: 3
   eventCapacity: 0
   buildFamily: 3
   buildSubgroup: 0

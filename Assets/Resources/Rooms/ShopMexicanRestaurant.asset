@@ -15,7 +15,7 @@ MonoBehaviour:
   id: shop_food_mexican
   displayName: Mexican Restaurant
   category: 4
-  size: {x: 6, y: 1}
+  size: {x: 10, y: 1}
   buildCost: 235000
   placeholderColor: {r: 0.82, g: 0.38, b: 0.22, a: 1}
   incomeModel: 4
@@ -33,7 +33,7 @@ MonoBehaviour:
   isStairs: 0
   isElevatorShaft: 0
   requiredStars: 2
-  maxOccupants: 6
+  maxOccupants: 8
   streetVisitWeight: 1
   buildFamily: 4
   buildSubgroup: 1

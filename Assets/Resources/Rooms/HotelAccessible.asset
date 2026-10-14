@@ -15,7 +15,7 @@ MonoBehaviour:
   id: hotel_accessible
   displayName: Accessible Hotel
   category: 3
-  size: {x: 4, y: 1}
+  size: {x: 3, y: 1}
   buildCost: 32000
   placeholderColor: {r: 0.7, g: 0.52, b: 0.88, a: 1}
   incomeModel: 2

@@ -15,7 +15,7 @@ MonoBehaviour:
   id: office_base
   displayName: Small Office
   category: 1
-  size: {x: 5, y: 1}
+  size: {x: 6, y: 1}
   buildCost: 40500
   placeholderColor: {r: 0.40, g: 0.60, b: 0.88, a: 1}
   incomeModel: 1
@@ -36,7 +36,7 @@ MonoBehaviour:
   luxuryBand: 1
   cleanMinutes: 0
   requiredStars: 0
-  maxOccupants: 2
+  maxOccupants: 3
   eventCapacity: 0
   buildFamily: 1
   buildSubgroup: 0

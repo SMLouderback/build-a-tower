@@ -15,7 +15,7 @@ MonoBehaviour:
   id: service_conference
   displayName: Conference Room
   category: 7
-  size: {x: 5, y: 1}
+  size: {x: 8, y: 1}
   buildCost: 130000
   placeholderColor: {r: 0.4, g: 0.5, b: 0.55, a: 1}
   incomeModel: 0

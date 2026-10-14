@@ -15,7 +15,7 @@ MonoBehaviour:
   id: shop_retail_department
   displayName: Department Store
   category: 4
-  size: {x: 8, y: 2}
+  size: {x: 12, y: 2}
   buildCost: 385000
   placeholderColor: {r: 0.45, g: 0.52, b: 0.62, a: 1}
   incomeModel: 4
@@ -33,7 +33,7 @@ MonoBehaviour:
   isStairs: 0
   isElevatorShaft: 0
   requiredStars: 3
-  maxOccupants: 12
+  maxOccupants: 16
   streetVisitWeight: 1
   buildFamily: 4
   buildSubgroup: 2

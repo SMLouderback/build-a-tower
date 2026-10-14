@@ -15,7 +15,7 @@ MonoBehaviour:
   id: office_upper_corner
   displayName: Corner Suite
   category: 1
-  size: {x: 6, y: 1}
+  size: {x: 12, y: 1}
   buildCost: 203000
   placeholderColor: {r: 0.14, g: 0.34, b: 0.66, a: 1}
   incomeModel: 1
@@ -36,7 +36,7 @@ MonoBehaviour:
   luxuryBand: 3
   cleanMinutes: 0
   requiredStars: 3
-  maxOccupants: 8
+  maxOccupants: 10
   eventCapacity: 0
   buildFamily: 1
   buildSubgroup: 0

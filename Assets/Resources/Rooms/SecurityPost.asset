@@ -15,7 +15,7 @@ MonoBehaviour:
   id: service_security
   displayName: Security Post
   category: 7
-  size: {x: 3, y: 1}
+  size: {x: 2, y: 1}
   buildCost: 51000
   placeholderColor: {r: 0.25, g: 0.3, b: 0.45, a: 1}
   incomeModel: 0

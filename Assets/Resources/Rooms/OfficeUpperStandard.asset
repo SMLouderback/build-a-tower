@@ -15,7 +15,7 @@ MonoBehaviour:
   id: office_upper_standard
   displayName: Upper Office
   category: 1
-  size: {x: 6, y: 1}
+  size: {x: 10, y: 1}
   buildCost: 160000
   placeholderColor: {r: 0.18, g: 0.40, b: 0.72, a: 1}
   incomeModel: 1
@@ -36,7 +36,7 @@ MonoBehaviour:
   luxuryBand: 3
   cleanMinutes: 0
   requiredStars: 3
-  maxOccupants: 6
+  maxOccupants: 8
   eventCapacity: 0
   buildFamily: 1
   buildSubgroup: 0

@@ -15,7 +15,7 @@ MonoBehaviour:
   id: hotel_junior_suite
   displayName: Junior Suite
   category: 3
-  size: {x: 6, y: 1}
+  size: {x: 5, y: 1}
   buildCost: 87000
   placeholderColor: {r: 0.54, g: 0.3, b: 0.74, a: 1}
   incomeModel: 2

@@ -15,7 +15,7 @@ MonoBehaviour:
   id: condo_mid_family
   displayName: Family Condo
   category: 2
-  size: {x: 6, y: 1}
+  size: {x: 12, y: 1}
   buildCost: 232000
   placeholderColor: {r: 0.28, g: 0.58, b: 0.36, a: 1}
   incomeModel: 3
@@ -36,7 +36,7 @@ MonoBehaviour:
   luxuryBand: 2
   cleanMinutes: 0
   requiredStars: 2
-  maxOccupants: 4
+  maxOccupants: 5
   eventCapacity: 0
   buildFamily: 3
   buildSubgroup: 0

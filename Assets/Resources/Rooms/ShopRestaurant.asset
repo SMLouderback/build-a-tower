@@ -15,7 +15,7 @@ MonoBehaviour:
   id: shop_food_restaurant
   displayName: Restaurant
   category: 4
-  size: {x: 7, y: 1}
+  size: {x: 10, y: 1}
   buildCost: 218000
   placeholderColor: {r: 0.8509804, g: 0.34901962, b: 0.2, a: 1}
   incomeModel: 4
@@ -33,7 +33,7 @@ MonoBehaviour:
   isStairs: 0
   isElevatorShaft: 0
   requiredStars: 0
-  maxOccupants: 6
+  maxOccupants: 8
   streetVisitWeight: 1
   buildFamily: 4
   buildSubgroup: 1

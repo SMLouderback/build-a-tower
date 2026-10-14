@@ -15,7 +15,7 @@ MonoBehaviour:
   id: office_mid_clinic
   displayName: Professional Suite
   category: 1
-  size: {x: 6, y: 1}
+  size: {x: 9, y: 1}
   buildCost: 109000
   placeholderColor: {r: 0.26, g: 0.50, b: 0.80, a: 1}
   incomeModel: 1

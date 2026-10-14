@@ -15,7 +15,7 @@ MonoBehaviour:
   id: shop_food_fine
   displayName: Fine Dining
   category: 4
-  size: {x: 5, y: 1}
+  size: {x: 8, y: 1}
   buildCost: 290000
   placeholderColor: {r: 0.72, g: 0.22, b: 0.28, a: 1}
   incomeModel: 4
@@ -33,7 +33,7 @@ MonoBehaviour:
   isStairs: 0
   isElevatorShaft: 0
   requiredStars: 3
-  maxOccupants: 8
+  maxOccupants: 10
   streetVisitWeight: 1
   buildFamily: 4
   buildSubgroup: 1

@@ -15,7 +15,7 @@ MonoBehaviour:
   id: service_event_hall
   displayName: Event Hall
   category: 7
-  size: {x: 9, y: 2}
+  size: {x: 12, y: 2}
   buildCost: 218000
   placeholderColor: {r: 0.55, g: 0.32, b: 0.38, a: 1}
   incomeModel: 0

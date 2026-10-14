@@ -15,7 +15,7 @@ MonoBehaviour:
   id: office_upper_floor
   displayName: Corporate Floor
   category: 1
-  size: {x: 8, y: 1}
+  size: {x: 14, y: 1}
   buildCost: 290000
   placeholderColor: {r: 0.10, g: 0.28, b: 0.58, a: 1}
   incomeModel: 1
@@ -36,7 +36,7 @@ MonoBehaviour:
   luxuryBand: 3
   cleanMinutes: 0
   requiredStars: 3
-  maxOccupants: 12
+  maxOccupants: 14
   eventCapacity: 0
   buildFamily: 1
   buildSubgroup: 0

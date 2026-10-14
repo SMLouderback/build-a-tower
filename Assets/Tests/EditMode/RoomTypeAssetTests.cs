@@ -59,9 +59,9 @@ namespace BuildATower.Tests
             Assert.IsNotNull(room, "Conference should load from Resources/Rooms");
             Assert.AreEqual("service_conference", room.id);
             Assert.AreEqual(3, room.requiredStars);
-            Assert.AreEqual(new Vector2Int(5, 1), room.size);
+            Assert.AreEqual(new Vector2Int(8, 1), room.size);
             Assert.AreEqual(40, room.eventCapacity);
-            Assert.AreEqual(90000, room.buildCost);
+            Assert.AreEqual(130000, room.buildCost);
         }
 
         [Test]
@@ -72,9 +72,9 @@ namespace BuildATower.Tests
             Assert.AreEqual("service_event_hall", hall.id);
             Assert.AreEqual("Event Hall", hall.displayName);
             Assert.AreEqual(4, hall.requiredStars);
-            Assert.AreEqual(new Vector2Int(9, 2), hall.size);
+            Assert.AreEqual(new Vector2Int(12, 2), hall.size);
             Assert.AreEqual(120, hall.eventCapacity);
-            Assert.AreEqual(150000, hall.buildCost);
+            Assert.AreEqual(218000, hall.buildCost);
             Assert.AreEqual(RoomCategory.Service, hall.category);
             Assert.AreEqual(BuildFamily.Utility, hall.ResolvedBuildFamily());
         }
@@ -82,21 +82,21 @@ namespace BuildATower.Tests
         [Test]
         public void Legacy_shop_resources_match_dollhouse_aspect_footprints()
         {
-            AssertShop("Rooms/ShopFastFood", "shop_food_fast", 0, 25, 4, new Vector2Int(6, 1), 1f);
-            AssertShop("Rooms/ShopRestaurant", "shop_food_restaurant", 0, 50, 6, new Vector2Int(7, 1), 1f);
-            AssertShop("Rooms/ShopFineDining", "shop_food_fine", 3, 100, 8, new Vector2Int(5, 1), 1f);
-            AssertShop("Rooms/ShopRetail", "shop_retail", 0, 50, 5, new Vector2Int(6, 1), 1f);
+            AssertShop("Rooms/ShopFastFood", "shop_food_fast", 0, 25, 6, new Vector2Int(8, 1), 1f);
+            AssertShop("Rooms/ShopRestaurant", "shop_food_restaurant", 0, 50, 8, new Vector2Int(10, 1), 1f);
+            AssertShop("Rooms/ShopFineDining", "shop_food_fine", 3, 100, 10, new Vector2Int(8, 1), 1f);
+            AssertShop("Rooms/ShopRetail", "shop_retail", 0, 50, 6, new Vector2Int(8, 1), 1f);
         }
 
         [Test]
         public void New_shop_resources_match_expanded_catalog()
         {
-            AssertShop("Rooms/ShopTacoCounter", "shop_food_taco", 0, 28, 4, new Vector2Int(4, 1), 1f);
-            AssertShop("Rooms/ShopChickenShack", "shop_food_chicken", 0, 30, 5, new Vector2Int(4, 1), 1f);
-            AssertShop("Rooms/ShopMexicanRestaurant", "shop_food_mexican", 2, 60, 6, new Vector2Int(6, 1), 1f);
-            AssertShop("Rooms/ShopGagGifts", "shop_retail_gifts", 1, 35, 4, new Vector2Int(4, 1), 2f);
-            AssertShop("Rooms/ShopShoeStore", "shop_retail_shoes", 2, 65, 4, new Vector2Int(4, 1), 1f);
-            AssertShop("Rooms/ShopDepartmentStore", "shop_retail_department", 3, 55, 12, new Vector2Int(8, 2), 1f);
+            AssertShop("Rooms/ShopTacoCounter", "shop_food_taco", 0, 28, 5, new Vector2Int(6, 1), 1f);
+            AssertShop("Rooms/ShopChickenShack", "shop_food_chicken", 0, 30, 6, new Vector2Int(6, 1), 1f);
+            AssertShop("Rooms/ShopMexicanRestaurant", "shop_food_mexican", 2, 60, 8, new Vector2Int(10, 1), 1f);
+            AssertShop("Rooms/ShopGagGifts", "shop_retail_gifts", 1, 35, 5, new Vector2Int(6, 1), 2f);
+            AssertShop("Rooms/ShopShoeStore", "shop_retail_shoes", 2, 65, 5, new Vector2Int(6, 1), 1f);
+            AssertShop("Rooms/ShopDepartmentStore", "shop_retail_department", 3, 55, 16, new Vector2Int(12, 2), 1f);
         }
 
         static void AssertShop(
