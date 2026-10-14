@@ -83,6 +83,32 @@ def key_magenta_to_alpha(strip: Image.Image) -> Image.Image:
     return rgba
 
 
+def clear_flat_glass_panes(strip: Image.Image) -> Image.Image:
+    """Clear opaque grey/white window fills the generator painted instead of magenta."""
+    rgba = strip.convert("RGBA")
+    pixels = rgba.load()
+    w, h = rgba.size
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = pixels[x, y]
+            if a < 8:
+                continue
+            mx = max(r, g, b)
+            mn = min(r, g, b)
+            if mx < 140:
+                continue
+            # Low-chroma bright/mid-grey “glass” (not warm plaster, not wood).
+            if (mx - mn) > 28:
+                continue
+            if r > g + 18 and r > b + 12:
+                continue  # warm wall
+            # Prefer upper 70% of strip (window band); keep floor lights.
+            if y > int(h * 0.78):
+                continue
+            pixels[x, y] = (r, g, b, 0)
+    return rgba
+
+
 def rewrite_guid_meta(template: Path, dest: Path) -> None:
     lines = []
     for line in template.read_text(encoding="utf-8").splitlines():
@@ -113,6 +139,11 @@ def main() -> None:
         type=int,
         default=0,
         help="If >0, ignore magenta gutters and split height into N equal bands",
+    )
+    ap.add_argument(
+        "--clear-flat-glass",
+        action="store_true",
+        help="Also clear opaque grey/white window fills to alpha",
     )
     args = ap.parse_args()
 
@@ -148,6 +179,8 @@ def main() -> None:
         strip = im.crop((0, y0, im.width, y1))
         strip = crop_opaque_bounds(strip)
         strip = key_magenta_to_alpha(strip)
+        if args.clear_flat_glass:
+            strip = clear_flat_glass_panes(strip)
         png_path = args.out_dir / f"{leaf}.png"
         bytes_path = args.out_dir / f"{leaf}.bytes"
         strip.save(png_path, format="PNG")

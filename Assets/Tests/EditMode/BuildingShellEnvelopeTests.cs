@@ -27,6 +27,24 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void ShouldSkipShellCell_skips_dollhouse_mapped_rooms_for_sky_windows()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            var office = ScriptableObject.CreateInstance<RoomTypeSO>();
+            office.id = "office_micro";
+            office.category = RoomCategory.Office;
+            office.size = new Vector2Int(3, 1);
+            office.allowAboveGround = true;
+            Assert.IsTrue(RoomDollhouseArt.IsMapped(office));
+            Assert.IsTrue(grid.TryPlace(office, new Vector2Int(0, 1), out _));
+
+            Assert.IsTrue(BuildingShellEnvelope.ShouldSkipShellCell(new Vector2Int(1, 1), grid));
+            // Gap cell with no room still receives shell (silhouette fill).
+            Assert.IsFalse(BuildingShellEnvelope.ShouldSkipShellCell(new Vector2Int(10, 1), grid));
+        }
+
+        [Test]
         public void ComputeCells_fills_gap_between_basement_rooms()
         {
             var grid = new TowerGrid();

@@ -599,8 +599,9 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Paints grey/dirt structure filler behind dollhouse rooms so sky does not leak
-        /// through frame gaps, floor seams, or stepped floor profiles.
+        /// Paints grey/dirt structure filler in the tower silhouette gaps (empty cells).
+        /// Dollhouse-mapped room cells are skipped so transparent window panes show
+        /// sky/parallax; floors/ceilings in the art must stay opaque.
         /// Must not erase lobby/scaffolding/transit tiles that live on the structure map —
         /// otherwise scaffolding becomes invisible while still walkable (agents in "dirt").
         /// </summary>

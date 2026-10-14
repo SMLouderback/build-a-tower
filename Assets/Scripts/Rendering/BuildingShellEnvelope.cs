@@ -57,7 +57,11 @@ namespace BuildATower
             if (grid == null || !grid.TryGetRoomAt(cell, out var room) || room?.Type == null)
                 return false;
 
-            return OwnsStructurePaint(room.Type);
+            // Structure-owned rooms keep their own tiles; dollhouse rooms skip shell
+            // so authored transparent window panes show sky/parallax instead of grey fill.
+            if (OwnsStructurePaint(room.Type))
+                return true;
+            return RoomDollhouseArt.IsMapped(room.Type);
         }
 
         /// <summary>
