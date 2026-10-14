@@ -31,6 +31,7 @@ namespace BuildATower
         readonly Dictionary<int, SpriteRenderer> _stairsOverlays = new();
         readonly Dictionary<int, SpriteRenderer> _rampOverlays = new();
         readonly Dictionary<int, SpriteRenderer> _dollhouseOverlays = new();
+        readonly Dictionary<int, SpriteRenderer> _dollhouseInfraOverlays = new();
         readonly Dictionary<int, SpriteRenderer> _condemnedOverlays = new();
         readonly List<Vector3Int> _ghostCells = new();
         readonly List<Vector3Int> _selectionCells = new();
@@ -980,6 +981,7 @@ namespace BuildATower
             }
 
             SetDollhouseOverlay(room, sprite, DollhouseTint(room));
+            SetDollhouseInfrastructureOverlay(room, leftExterior, rightExterior);
             return true;
         }
 
@@ -1067,8 +1069,49 @@ namespace BuildATower
                 IsSubterranean(room));
         }
 
+        void SetDollhouseInfrastructureOverlay(
+            RoomInstance room,
+            bool leftExterior,
+            bool rightExterior)
+        {
+            var infra = DollhouseInfrastructureArt.GetSprite(room.Size, leftExterior, rightExterior);
+            if (infra == null)
+            {
+                ClearDollhouseInfrastructureOverlay(room.InstanceId);
+                return;
+            }
+
+            var root = DollhouseOverlayRoot();
+            if (!_dollhouseInfraOverlays.TryGetValue(room.InstanceId, out var sr) || sr == null)
+            {
+                var go = new GameObject($"DollhouseInfra_{room.InstanceId}");
+                go.transform.SetParent(root, false);
+                sr = go.AddComponent<SpriteRenderer>();
+                sr.sortingOrder = DollhouseInfrastructureArt.SortingOrder;
+                _dollhouseInfraOverlays[room.InstanceId] = sr;
+            }
+
+            sr.enabled = true;
+            sr.sprite = infra;
+            sr.color = Color.white;
+            sr.transform.position = new Vector3(room.Origin.x, room.Origin.y, 0f);
+            var b = infra.bounds.size;
+            sr.transform.localScale = RoomDollhouseArt.OverlayScale(
+                new Vector2(b.x, b.y),
+                room.Size);
+        }
+
+        void ClearDollhouseInfrastructureOverlay(int instanceId)
+        {
+            if (!_dollhouseInfraOverlays.TryGetValue(instanceId, out var sr)) return;
+            if (sr != null)
+                Destroy(sr.gameObject);
+            _dollhouseInfraOverlays.Remove(instanceId);
+        }
+
         void ClearDollhouseOverlay(int instanceId)
         {
+            ClearDollhouseInfrastructureOverlay(instanceId);
             if (!_dollhouseOverlays.TryGetValue(instanceId, out var sr)) return;
             if (sr != null)
                 Destroy(sr.gameObject);
