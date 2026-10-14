@@ -12,6 +12,7 @@ namespace BuildATower
     {
         public const string ResourceRoot = "Art/Dollhouse/";
         public const float PixelsPerUnit = 128f;
+        const string AtriumMidLeaf = "atrium_8x3_mid";
         /// <summary>Below rooms tilemap transit (15) and stairs overlay (20).</summary>
         public const int SortingOrder = 5;
 
@@ -89,10 +90,53 @@ namespace BuildATower
             return LeafByTypeId.TryGetValue(typeId, out var leaf) ? leaf : null;
         }
 
+        public static string ResourceLeafForContext(string typeId, AtriumStackRole atriumRole)
+        {
+            if (typeId == "leisure_atrium" && atriumRole == AtriumStackRole.Mid)
+                return AtriumMidLeaf;
+            return ResourceLeaf(typeId);
+        }
+
         public static string ResourcePath(string typeId)
         {
             var leaf = ResourceLeaf(typeId);
             return leaf == null ? null : ResourceRoot + leaf;
+        }
+
+        public static string ResourcePathForContext(string typeId, AtriumStackRole atriumRole)
+        {
+            var leaf = ResourceLeafForContext(typeId, atriumRole);
+            return leaf == null ? null : ResourceRoot + leaf;
+        }
+
+        public static string FaceSuffix(bool leftExterior, bool rightExterior)
+        {
+            if (leftExterior && rightExterior) return "_ext";
+            if (leftExterior) return "_L";
+            if (rightExterior) return "_R";
+            return "_int";
+        }
+
+        public static string ResourcePathForFaces(string typeId, bool leftExterior, bool rightExterior)
+        {
+            var stem = ResourceLeaf(typeId);
+            return stem == null ? null : ResourceRoot + stem + FaceSuffix(leftExterior, rightExterior);
+        }
+
+        public static string ResourcePathForFaces(
+            string typeId,
+            bool leftExterior,
+            bool rightExterior,
+            AtriumStackRole atriumRole)
+        {
+            var stem = ResourceLeafForContext(typeId, atriumRole);
+            return stem == null ? null : ResourceRoot + stem + FaceSuffix(leftExterior, rightExterior);
+        }
+
+        public static Sprite LoadSpriteAtResourcePath(string resourcePath)
+        {
+            if (string.IsNullOrEmpty(resourcePath)) return null;
+            return GetOrLoadSprite(resourcePath);
         }
 
         public static bool IsMapped(RoomTypeSO type)

@@ -28,6 +28,47 @@ namespace BuildATower.Tests
             }
         }
 
+        [TestCase(true, true, "_ext")]
+        [TestCase(true, false, "_L")]
+        [TestCase(false, true, "_R")]
+        [TestCase(false, false, "_int")]
+        public void FaceSuffix_maps_exterior_pairs(bool leftExterior, bool rightExterior, string suffix)
+        {
+            Assert.AreEqual(suffix, RoomDollhouseArt.FaceSuffix(leftExterior, rightExterior));
+        }
+
+        [Test]
+        public void ResourcePathForFaces_appends_suffix_to_mapped_stem()
+        {
+            const string stem = "micro_office_3x1";
+            Assert.AreEqual(
+                RoomDollhouseArt.ResourceRoot + stem + "_ext",
+                RoomDollhouseArt.ResourcePathForFaces("office_micro", true, true));
+            Assert.AreEqual(
+                RoomDollhouseArt.ResourceRoot + stem + "_L",
+                RoomDollhouseArt.ResourcePathForFaces("office_micro", true, false));
+            Assert.AreEqual(
+                RoomDollhouseArt.ResourceRoot + stem + "_R",
+                RoomDollhouseArt.ResourcePathForFaces("office_micro", false, true));
+            Assert.AreEqual(
+                RoomDollhouseArt.ResourceRoot + stem + "_int",
+                RoomDollhouseArt.ResourcePathForFaces("office_micro", false, false));
+            Assert.IsNull(RoomDollhouseArt.ResourcePathForFaces("office_premium", true, true));
+        }
+
+        [Test]
+        public void Atrium_mid_context_resolves_to_open_well_leaf_not_roof_leaf()
+        {
+            Assert.AreEqual("atrium_8x3", RoomDollhouseArt.ResourceLeaf("leisure_atrium"));
+            Assert.AreEqual("atrium_8x3", RoomDollhouseArt.ResourceLeafForContext("leisure_atrium", AtriumStackRole.Roof));
+            Assert.AreEqual("atrium_8x3", RoomDollhouseArt.ResourceLeafForContext("leisure_atrium", AtriumStackRole.Solo));
+
+            var midLeaf = RoomDollhouseArt.ResourceLeafForContext("leisure_atrium", AtriumStackRole.Mid);
+            Assert.AreEqual("atrium_8x3_mid", midLeaf);
+            Assert.AreNotEqual(RoomDollhouseArt.ResourceLeaf("leisure_atrium"), midLeaf);
+            Assert.AreEqual("Art/Dollhouse/atrium_8x3_mid", RoomDollhouseArt.ResourcePathForContext("leisure_atrium", AtriumStackRole.Mid));
+        }
+
         [Test]
         public void Does_not_map_elevator_stairs_lobby_parking_ramp_or_legacy_premium()
         {
@@ -128,6 +169,20 @@ namespace BuildATower.Tests
                 Assert.IsTrue(System.IO.File.Exists(png), "Missing committed PNG " + png);
                 Assert.Greater(new System.IO.FileInfo(png).Length, 1024, png + " is too small");
             }
+        }
+
+        [Test]
+        public void Committed_png_bytes_exist_for_atrium_mid_context_leaf()
+        {
+            var dir = System.IO.Path.Combine(Application.dataPath, "Resources/Art/Dollhouse");
+            var leaf = RoomDollhouseArt.ResourceLeafForContext("leisure_atrium", AtriumStackRole.Mid);
+            var png = System.IO.Path.Combine(dir, leaf + ".png");
+            var bytes = System.IO.Path.Combine(dir, leaf + ".bytes");
+
+            Assert.IsTrue(System.IO.File.Exists(png), "Missing committed PNG " + png);
+            Assert.IsTrue(System.IO.File.Exists(bytes), "Missing committed bytes " + bytes);
+            Assert.Greater(new System.IO.FileInfo(png).Length, 1024, png + " is too small");
+            Assert.Greater(new System.IO.FileInfo(bytes).Length, 1024, bytes + " is too small");
         }
 
         static readonly (string id, string leaf)[] Catalog =

@@ -4,7 +4,7 @@ using UnityEngine;
 namespace BuildATower
 {
     /// <summary>
-    /// Caches per-room dollhouse context sprites (atrium leaf selection; face plates in later phases).
+    /// Caches per-room dollhouse context sprites (atrium leaf + exterior face plate selection).
     /// </summary>
     public static class DollhouseContextArt
     {
@@ -24,7 +24,7 @@ namespace BuildATower
             if (Cache.TryGetValue(key, out var cached) && cached != null)
                 return cached;
 
-            var source = ResolveSourceSprite(type, atriumRole, baseSprite);
+            var source = ResolveSourceSprite(type, leftExterior, rightExterior, atriumRole, baseSprite);
             if (source == null)
                 return null;
 
@@ -35,39 +35,43 @@ namespace BuildATower
 
         public static void ResetForTests() => Cache.Clear();
 
-        static Sprite ResolveSourceSprite(RoomTypeSO type, AtriumStackRole atriumRole, Sprite baseSprite)
+        static Sprite ResolveSourceSprite(
+            RoomTypeSO type,
+            bool leftExterior,
+            bool rightExterior,
+            AtriumStackRole atriumRole,
+            Sprite baseSprite)
         {
+            if (type == null)
+                return baseSprite;
+
             if (IsAtrium(type) && atriumRole == AtriumStackRole.Mid)
             {
-                var mid = LoadSprite(RoomDollhouseArt.ResourcePathForContext(type.id, atriumRole));
+                var faceMidPath = RoomDollhouseArt.ResourcePathForFaces(
+                    type.id, leftExterior, rightExterior, atriumRole);
+                var faceMid = RoomDollhouseArt.LoadSpriteAtResourcePath(faceMidPath);
+                if (faceMid != null)
+                    return faceMid;
+
+                var midPath = RoomDollhouseArt.ResourcePathForContext(type.id, atriumRole);
+                var mid = RoomDollhouseArt.LoadSpriteAtResourcePath(midPath);
                 if (mid != null)
                     return mid;
+
+                return baseSprite;
             }
+
+            var facePath = RoomDollhouseArt.ResourcePathForFaces(
+                type.id, leftExterior, rightExterior, atriumRole);
+            var faceSprite = RoomDollhouseArt.LoadSpriteAtResourcePath(facePath);
+            if (faceSprite != null)
+                return faceSprite;
 
             if (baseSprite != null)
                 return baseSprite;
 
-            if (type == null)
-                return null;
-
-            var room = new RoomInstance(0, type, Vector2Int.zero, type.size);
-            return RoomDollhouseArt.TrySprite(room, out var sprite) ? sprite : null;
-        }
-
-        static Sprite LoadSprite(string resourcePath)
-        {
-            if (RoomDollhouseArt.LoadSpriteForTests != null)
-                return RoomDollhouseArt.LoadSpriteForTests(resourcePath);
-
-            var tex = Resources.Load<Texture2D>(resourcePath);
-            if (tex == null)
-                return null;
-
-            return Sprite.Create(
-                tex,
-                new Rect(0f, 0f, tex.width, tex.height),
-                Vector2.zero,
-                RoomDollhouseArt.PixelsPerUnit);
+            var legacyPath = RoomDollhouseArt.ResourcePathForContext(type.id, atriumRole);
+            return RoomDollhouseArt.LoadSpriteAtResourcePath(legacyPath);
         }
 
         static Sprite Bake(Sprite source)

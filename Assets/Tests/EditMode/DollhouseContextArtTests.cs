@@ -170,6 +170,53 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void ResolveSourceSprite_loads_face_leaf_when_present()
+        {
+            var type = Type("office_micro", BuildFamily.Office);
+            var faceSprite = SolidSprite(new Color(0.92f, 0.11f, 0.08f, 1f));
+            var legacySprite = SolidSprite(new Color(0.12f, 0.34f, 0.56f, 1f));
+            RoomDollhouseArt.LoadSpriteForTests = path =>
+            {
+                if (path == "Art/Dollhouse/micro_office_3x1_int")
+                    return faceSprite;
+                if (path == "Art/Dollhouse/micro_office_3x1")
+                    return legacySprite;
+                return null;
+            };
+
+            var baked = DollhouseContextArt.GetSprite(
+                type,
+                leftExterior: false,
+                rightExterior: false,
+                AtriumStackRole.Solo,
+                BuildFamily.Office,
+                legacySprite);
+
+            Assert.Less(
+                ColorDistance(Pixel(baked, 4, 4), Pixel(faceSprite, 4, 4)),
+                ColorDistance(Pixel(baked, 4, 4), Pixel(legacySprite, 4, 4)));
+        }
+
+        [Test]
+        public void ResolveSourceSprite_falls_back_to_legacy_plate_when_face_leaf_missing()
+        {
+            var type = Type("office_micro", BuildFamily.Office);
+            var legacySprite = SolidSprite(new Color(0.12f, 0.34f, 0.56f, 1f));
+            RoomDollhouseArt.LoadSpriteForTests = path =>
+                path == "Art/Dollhouse/micro_office_3x1" ? legacySprite : null;
+
+            var baked = DollhouseContextArt.GetSprite(
+                type,
+                leftExterior: false,
+                rightExterior: false,
+                AtriumStackRole.Solo,
+                BuildFamily.Office,
+                legacySprite);
+
+            Assert.Less(ColorDistance(Pixel(baked, 4, 4), Pixel(legacySprite, 4, 4)), 0.001f);
+        }
+
+        [Test]
         public void Atrium_mid_uses_mid_leaf_when_available()
         {
             var type = Type("leisure_atrium", BuildFamily.Leisure, isAtrium: true);
