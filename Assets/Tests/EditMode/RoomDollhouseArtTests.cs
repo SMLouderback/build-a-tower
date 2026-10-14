@@ -172,6 +172,22 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Committed_png_bytes_exist_for_office_micro_face_variants()
+        {
+            var dir = System.IO.Path.Combine(Application.dataPath, "Resources/Art/Dollhouse");
+            var stem = RoomDollhouseArt.ResourceLeaf("office_micro");
+            Assert.AreEqual("micro_office_3x1", stem);
+            foreach (var suffix in new[] { "_ext", "_L", "_R", "_int" })
+            {
+                var png = System.IO.Path.Combine(dir, stem + suffix + ".png");
+                var bytes = System.IO.Path.Combine(dir, stem + suffix + ".bytes");
+                Assert.IsTrue(System.IO.File.Exists(png), "Missing face PNG " + png);
+                Assert.IsTrue(System.IO.File.Exists(bytes), "Missing face bytes " + bytes);
+                Assert.Greater(new System.IO.FileInfo(png).Length, 1024, png + " is too small");
+            }
+        }
+
+        [Test]
         public void Committed_png_bytes_exist_for_atrium_mid_context_leaf()
         {
             var dir = System.IO.Path.Combine(Application.dataPath, "Resources/Art/Dollhouse");
