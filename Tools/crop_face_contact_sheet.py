@@ -9,8 +9,8 @@ from PIL import Image
 
 
 def is_magenta_rgb(r: int, g: int, b: int) -> bool:
-    # Hot #FF00FF and generator pinks like #F507B6.
-    return r >= 200 and g <= 90 and b >= 150 and r >= g + 80
+    # Hot #FF00FF and generator pinks like #F507B6 / #EE0791.
+    return r >= 200 and g <= 90 and b >= 130 and r >= g + 80
 
 
 def find_content_bands(im: Image.Image, mag_frac_thresh: float = 0.72) -> list[tuple[int, int]]:
@@ -108,20 +108,34 @@ def main() -> None:
         default="ext,L,R,int",
         help="Comma list top-to-bottom strip suffixes",
     )
+    ap.add_argument(
+        "--equal-split",
+        type=int,
+        default=0,
+        help="If >0, ignore magenta gutters and split height into N equal bands",
+    )
     args = ap.parse_args()
 
     im = Image.open(args.sheet).convert("RGBA")
-    bands = find_content_bands(im)
+    suffixes = [s.strip() for s in args.suffixes.split(",") if s.strip()]
+    if args.equal_split > 0:
+        n = args.equal_split
+        band_h = im.height // n
+        bands = [(i * band_h, (i + 1) * band_h if i < n - 1 else im.height) for i in range(n)]
+    else:
+        bands = find_content_bands(im)
     print(f"sheet={args.sheet} size={im.size} bands={len(bands)}")
     for i, (y0, y1) in enumerate(bands):
         print(f"  [{i}] y={y0}:{y1} h={y1 - y0}")
 
-    suffixes = [s.strip() for s in args.suffixes.split(",") if s.strip()]
     if args.list_only:
         return
 
     if len(bands) < len(suffixes):
-        raise SystemExit(f"Need {len(suffixes)} bands, found {len(bands)}")
+        raise SystemExit(
+            f"Need {len(suffixes)} bands, found {len(bands)}. "
+            f"Try --equal-split {len(suffixes)}"
+        )
 
     png_meta_t = args.out_dir / f"{args.stem}.png.meta"
     bytes_meta_t = args.out_dir / f"{args.stem}.bytes.meta"
