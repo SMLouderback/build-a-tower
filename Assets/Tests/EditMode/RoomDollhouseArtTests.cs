@@ -118,6 +118,16 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void IsDollhouseChromaKey_keeps_mauve_walls_clears_hot_magenta()
+        {
+            Assert.IsTrue(RoomDollhouseArt.IsDollhouseChromaKey(new Color(1f, 0f, 1f, 1f)));
+            Assert.IsTrue(RoomDollhouseArt.IsDollhouseChromaKey(new Color(0.93f, 0.04f, 0.72f, 1f)));
+            // Mauve hotel plaster — must stay opaque.
+            Assert.IsFalse(RoomDollhouseArt.IsDollhouseChromaKey(new Color(0.62f, 0.42f, 0.55f, 1f)));
+            Assert.IsFalse(RoomDollhouseArt.IsDollhouseChromaKey(new Color(0.72f, 0.55f, 0.28f, 1f)));
+        }
+
+        [Test]
         public void KeyMagentaKeepCanvas_preserves_dimensions()
         {
             const int w = 64;

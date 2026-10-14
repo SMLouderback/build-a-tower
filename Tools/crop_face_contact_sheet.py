@@ -8,10 +8,33 @@ from pathlib import Path
 from PIL import Image
 
 
-def is_magenta_rgb(r: int, g: int, b: int) -> bool:
-    # Hot #FF00FF plus generator pinks (#FF007C / #DB017C / #F507B6).
-    # JPG often lands b just under 130 on key plates.
+def is_magenta_gutter(r: int, g: int, b: int) -> bool:
+    """Loose detector for contact-sheet gutters / plate (JPG-safe)."""
     return r >= 180 and g <= 100 and b >= 95 and r >= g + 70
+
+
+def is_magenta_key(r: int, g: int, b: int) -> bool:
+    """
+    Strict key for glass/plate alpha — must NOT match mauve hotel plaster
+    (higher green, lower saturation) or warm lamp spill.
+    Covers #FF00FF and generator hot-pink panes like (237,0,108).
+    """
+    if g > 40:
+        return False
+    if r < 200:
+        return False
+    # Classic magenta glass
+    if b >= 160 and r >= g + 120 and b >= g + 100:
+        return True
+    # Hot pink panes (common AI plate)
+    if b >= 90 and r >= g + 140 and b >= g + 70:
+        return True
+    return False
+
+
+def is_magenta_rgb(r: int, g: int, b: int) -> bool:
+    # Default used for gutter band finding + opaque-bound crop.
+    return is_magenta_gutter(r, g, b)
 
 
 def find_content_bands(im: Image.Image, mag_frac_thresh: float = 0.72) -> list[tuple[int, int]]:
@@ -79,13 +102,14 @@ def key_magenta_to_alpha(strip: Image.Image) -> Image.Image:
     for y in range(h):
         for x in range(w):
             r, g, b, a = pixels[x, y]
-            if is_magenta_rgb(r, g, b):
+            # Strict key only — loose gutter pinks on mauve walls stay opaque.
+            if is_magenta_key(r, g, b):
                 pixels[x, y] = (r, g, b, 0)
     return rgba
 
 
-def clear_flat_glass_panes(strip: Image.Image) -> Image.Image:
-    """Clear opaque grey/white window fills the generator painted instead of magenta."""
+def clear_sky_glass_panes(strip: Image.Image) -> Image.Image:
+    """Clear generator-painted blue/cyan sky that should have been magenta key."""
     rgba = strip.convert("RGBA")
     pixels = rgba.load()
     w, h = rgba.size
@@ -94,17 +118,60 @@ def clear_flat_glass_panes(strip: Image.Image) -> Image.Image:
             r, g, b, a = pixels[x, y]
             if a < 8:
                 continue
+            if y < int(h * 0.05) or y > int(h * 0.78):
+                continue
+            # Sky blues / cyans (not warm plaster, not wood, not charcoal frames).
+            if b < 140:
+                continue
+            if b <= r + 15 and b <= g + 10:
+                continue
+            if max(r, g, b) - min(r, g, b) < 25:
+                continue
+            # Avoid clearing blue-grey office walls: require fairly bright + blue-dominant.
+            if b < 170 or b < g + 20:
+                continue
+            pixels[x, y] = (r, g, b, 0)
+    return rgba
+
+
+def clear_flat_glass_panes(strip: Image.Image) -> Image.Image:
+    """
+    Clear only bright near-neutral fills that sit *inside* already-transparent
+    window holes' opaque neighbors — never mass-erase cool grey / blue walls.
+    Heuristic: pixel must be very low-chroma AND surrounded mostly by clear or
+    charcoal frame, in the upper window band.
+    """
+    rgba = strip.convert("RGBA")
+    pixels = rgba.load()
+    w, h = rgba.size
+    # First pass: mark current clear.
+    clear = [[pixels[x, y][3] < 20 for x in range(w)] for y in range(h)]
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = pixels[x, y]
+            if a < 8:
+                continue
+            # Window band only (not floor furniture).
+            if y < int(h * 0.08) or y > int(h * 0.72):
+                continue
             mx = max(r, g, b)
             mn = min(r, g, b)
-            if mx < 140:
+            if mx < 160 or (mx - mn) > 18:
                 continue
-            # Low-chroma bright/mid-grey “glass” (not warm plaster, not wood).
-            if (mx - mn) > 28:
-                continue
-            if r > g + 18 and r > b + 12:
-                continue  # warm wall
-            # Prefer upper 70% of strip (window band); keep floor lights.
-            if y > int(h * 0.78):
+            # Must touch clear (pane) or near-black frame — skip solid wall fields.
+            touch = False
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (2, 0), (-2, 0), (0, 2), (0, -2)):
+                xx, yy = x + dx, y + dy
+                if not (0 <= xx < w and 0 <= yy < h):
+                    continue
+                if clear[yy][xx]:
+                    touch = True
+                    break
+                rr, gg, bb, aa = pixels[xx, yy]
+                if aa > 8 and max(rr, gg, bb) < 55:
+                    touch = True
+                    break
+            if not touch:
                 continue
             pixels[x, y] = (r, g, b, 0)
     return rgba
@@ -237,6 +304,11 @@ def main() -> None:
         help="Also clear opaque grey/white window fills to alpha",
     )
     ap.add_argument(
+        "--clear-sky-glass",
+        action="store_true",
+        help="Clear painted blue/cyan sky fills inside window band to alpha",
+    )
+    ap.add_argument(
         "--no-fit-canvas",
         action="store_true",
         help="Skip stretch-to-cells×128 canvas (default fits)",
@@ -277,6 +349,8 @@ def main() -> None:
         strip = key_magenta_to_alpha(strip)
         if args.clear_flat_glass:
             strip = clear_flat_glass_panes(strip)
+        if args.clear_sky_glass:
+            strip = clear_sky_glass_panes(strip)
         strip = paint_window_frames(strip, thickness=2)
         cells = parse_stem_cells(args.stem)
         if cells and not args.no_fit_canvas:

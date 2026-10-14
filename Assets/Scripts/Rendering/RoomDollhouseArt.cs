@@ -388,7 +388,8 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Clears leftover bright pink/magenta glass without touching charcoal frames.
+        /// Clears leftover bright pink/magenta glass without touching charcoal frames
+        /// or mauve/purple hotel walls (those share a magenta-ish hue but have higher G).
         /// </summary>
         static void KeyBrightMagentaGlassOnly(Color[] px)
         {
@@ -396,18 +397,30 @@ namespace BuildATower
             {
                 var c = px[i];
                 if (c.a < 0.02f) continue;
-                if (MenuIconArt.IsHotMagenta(c))
-                {
-                    px[i] = Color.clear;
-                    continue;
-                }
-
-                Color.RGBToHSV(c, out var h, out var s, out var v);
-                var magentaHue = h < 0.05f || h > 0.78f;
-                // Bright, saturated panes only (v high) — skip dark frame-adjacent pinks.
-                if (magentaHue && s >= 0.45f && v >= 0.45f && c.r >= c.g + 0.18f && c.b >= c.g + 0.10f)
+                if (IsDollhouseChromaKey(c))
                     px[i] = Color.clear;
             }
+        }
+
+        /// <summary>
+        /// Strict chroma key for dollhouse plates: hot #FF00FF / generator pinks only.
+        /// Broader <see cref="MenuIconArt.IsHotMagenta"/> also matches mauve hotel walls.
+        /// </summary>
+        public static bool IsDollhouseChromaKey(Color c)
+        {
+            if (c.a < 0.08f) return true;
+            // Charcoal frames / mauve plaster / lamp spill have more green.
+            if (c.g > 0.16f) return false;
+            if (c.r < 0.70f) return false;
+            Color.RGBToHSV(c, out var h, out var s, out var v);
+            var magentaHue = h < 0.10f || h > 0.72f;
+            // Hot pink panes (~R237 G0 B108) and #FF00FF — high sat, low G.
+            if (magentaHue && s >= 0.55f && v >= 0.70f
+                && c.r >= c.g + 0.45f && c.b >= c.g + 0.25f)
+                return true;
+            if (c.r >= 0.85f && c.g <= 0.10f && c.b >= 0.85f)
+                return true;
+            return false;
         }
 
         /// <summary>
@@ -476,7 +489,7 @@ namespace BuildATower
             {
                 if ((uint)x >= w || (uint)y >= h) return;
                 var i = y * w + x;
-                if (visit[i] || !MenuIconArt.IsHotMagenta(px[i])) return;
+                if (visit[i] || !IsDollhouseChromaKey(px[i])) return;
                 visit[i] = true;
                 q.Enqueue(i);
             }
@@ -509,7 +522,7 @@ namespace BuildATower
         {
             for (var i = 0; i < px.Length; i++)
             {
-                if (MenuIconArt.IsHotMagenta(px[i]))
+                if (IsDollhouseChromaKey(px[i]))
                     px[i] = Color.clear;
             }
         }
@@ -537,9 +550,12 @@ namespace BuildATower
         static bool IsNearMagentaFringe(Color c)
         {
             if (c.a < 0.08f) return true;
-            if (c.g > 0.40f) return false;
-            if (c.r < 0.45f) return false;
-            return (c.r - c.g) > 0.18f && c.b > 0.22f && (c.b - c.g) > 0.08f;
+            // Keep mauve hotel plaster / cool grey office walls out of fringe scrub.
+            if (c.g > 0.28f) return false;
+            if (c.r < 0.55f) return false;
+            Color.RGBToHSV(c, out _, out var s, out var v);
+            if (s < 0.45f || v < 0.45f) return false;
+            return (c.r - c.g) > 0.28f && c.b > 0.30f && (c.b - c.g) > 0.15f;
         }
 
         static void FindOpaqueBounds(
