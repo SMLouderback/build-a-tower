@@ -1077,7 +1077,8 @@ namespace BuildATower
             bool leftExterior,
             bool rightExterior)
         {
-            var infra = DollhouseInfrastructureArt.GetSprite(room.Size, leftExterior, rightExterior);
+            // Single-plate dollhouse: no adjacency party-wall underlay (always open sides).
+            var infra = DollhouseInfrastructureArt.GetSprite(room.Size, leftExterior: true, rightExterior: true);
             if (infra == null)
             {
                 ClearDollhouseInfrastructureOverlay(room.InstanceId);

@@ -14,73 +14,52 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void Face_leaf_present_skips_seal()
+        public void Single_plate_keeps_side_glass_regardless_of_neighbors()
         {
             var type = Type("office_micro", BuildFamily.Office);
-            var faceSprite = SpriteWithLeftWindowBand();
-            var window = Pixel(faceSprite, 0, 4);
-            RoomDollhouseArt.LoadSpriteForTests = path =>
-                path == "Art/Dollhouse/micro_office_3x1_L" ? faceSprite : null;
+            var baseSprite = SpriteWithLeftWindowBand();
+            var window = Pixel(baseSprite, 0, 4);
 
             var baked = DollhouseContextArt.GetSprite(
                 type,
                 leftExterior: false,
-                rightExterior: true,
+                rightExterior: false,
                 AtriumStackRole.Solo,
                 BuildFamily.Office,
-                faceSprite);
+                baseSprite);
 
             Assert.Less(ColorDistance(Pixel(baked, 0, 4), window), 0.001f);
         }
 
         [Test]
-        public void Interior_left_seals_left_band_glass_to_wall()
+        public void Exterior_flags_do_not_change_baked_pixels()
         {
-            StubMissingFaceLeaves();
             var type = Type("office_micro", BuildFamily.Office);
             var baseSprite = SpriteWithLeftWindowBand();
-            var window = Pixel(baseSprite, 0, 4);
-            var wall = Pixel(baseSprite, 10, 4);
 
-            var interiorLeft = DollhouseContextArt.GetSprite(
+            var open = DollhouseContextArt.GetSprite(
                 type,
-                leftExterior: false,
+                leftExterior: true,
                 rightExterior: true,
                 AtriumStackRole.Solo,
                 BuildFamily.Office,
                 baseSprite);
-
-            var sealedPx = Pixel(interiorLeft, 0, 4);
-            Assert.Greater(ColorDistance(sealedPx, window), 0.15f);
-            Assert.Less(ColorDistance(sealedPx, wall), 0.12f);
-        }
-
-        [Test]
-        public void Interior_left_seals_dark_mirror_panes()
-        {
-            StubMissingFaceLeaves();
-            var type = Type("office_micro", BuildFamily.Office);
-            var baseSprite = SpriteWithLeftDarkMirrorBand();
-            var sourcePane = Pixel(baseSprite, 0, 4);
-            var wall = Pixel(baseSprite, 10, 4);
-
-            var interiorLeft = DollhouseContextArt.GetSprite(
+            DollhouseContextArt.ResetForTests();
+            var closed = DollhouseContextArt.GetSprite(
                 type,
                 leftExterior: false,
-                rightExterior: true,
+                rightExterior: false,
                 AtriumStackRole.Solo,
                 BuildFamily.Office,
                 baseSprite);
 
-            var sealedPx = Pixel(interiorLeft, 0, 4);
-            Assert.Greater(ColorDistance(sealedPx, sourcePane), 0.10f);
-            Assert.Less(ColorDistance(sealedPx, wall), 0.12f);
+            Assert.Less(ColorDistance(Pixel(open, 0, 4), Pixel(closed, 0, 4)), 0.001f);
+            Assert.Less(ColorDistance(Pixel(open, 10, 4), Pixel(closed, 10, 4)), 0.001f);
         }
 
         [Test]
-        public void Interior_left_preserves_furniture_in_band()
+        public void Bake_preserves_furniture_pixels()
         {
-            StubMissingFaceLeaves();
             var type = Type("office_micro", BuildFamily.Office);
             var baseSprite = SpriteWithLeftFurnitureInBand();
             var before = Pixel(baseSprite, 1, 4);
@@ -199,35 +178,27 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void ResolveSourceSprite_loads_face_leaf_when_present()
+        public void ResolveSourceSprite_uses_base_sprite_when_provided()
         {
             var type = Type("office_micro", BuildFamily.Office);
-            var faceSprite = SolidSprite(new Color(0.92f, 0.11f, 0.08f, 1f));
-            var legacySprite = SolidSprite(new Color(0.12f, 0.34f, 0.56f, 1f));
+            var baseSprite = SolidSprite(new Color(0.12f, 0.34f, 0.56f, 1f));
+            var other = SolidSprite(new Color(0.92f, 0.11f, 0.08f, 1f));
             RoomDollhouseArt.LoadSpriteForTests = path =>
-            {
-                if (path == "Art/Dollhouse/micro_office_3x1_int")
-                    return faceSprite;
-                if (path == "Art/Dollhouse/micro_office_3x1")
-                    return legacySprite;
-                return null;
-            };
+                path == "Art/Dollhouse/micro_office_3x1" ? other : null;
 
             var baked = DollhouseContextArt.GetSprite(
                 type,
-                leftExterior: false,
-                rightExterior: false,
+                leftExterior: true,
+                rightExterior: true,
                 AtriumStackRole.Solo,
                 BuildFamily.Office,
-                legacySprite);
+                baseSprite);
 
-            Assert.Less(
-                ColorDistance(Pixel(baked, 4, 4), Pixel(faceSprite, 4, 4)),
-                ColorDistance(Pixel(baked, 4, 4), Pixel(legacySprite, 4, 4)));
+            Assert.Less(ColorDistance(Pixel(baked, 4, 4), Pixel(baseSprite, 4, 4)), 0.001f);
         }
 
         [Test]
-        public void ResolveSourceSprite_falls_back_to_legacy_plate_when_face_leaf_missing()
+        public void ResolveSourceSprite_loads_legacy_plate_when_base_sprite_null()
         {
             var type = Type("office_micro", BuildFamily.Office);
             var legacySprite = SolidSprite(new Color(0.12f, 0.34f, 0.56f, 1f));
@@ -236,11 +207,11 @@ namespace BuildATower.Tests
 
             var baked = DollhouseContextArt.GetSprite(
                 type,
-                leftExterior: false,
-                rightExterior: false,
+                leftExterior: true,
+                rightExterior: true,
                 AtriumStackRole.Solo,
                 BuildFamily.Office,
-                legacySprite);
+                baseSprite: null);
 
             Assert.Less(ColorDistance(Pixel(baked, 4, 4), Pixel(legacySprite, 4, 4)), 0.001f);
         }
@@ -285,8 +256,6 @@ namespace BuildATower.Tests
             Assert.Less(ColorDistance(Pixel(baked, 4, 4), Pixel(baseSprite, 4, 4)), 0.001f);
         }
 
-        static void StubMissingFaceLeaves() => RoomDollhouseArt.LoadSpriteForTests = _ => null;
-
         static Sprite SpriteWithLeftWindowBand()
         {
             var tex = Texture(20, 10, new Color(0.52f, 0.43f, 0.34f, 1f));
@@ -296,21 +265,6 @@ namespace BuildATower.Tests
                 tex.SetPixel(0, y, window);
                 tex.SetPixel(1, y, window);
                 tex.SetPixel(2, y, new Color(0.48f, 0.39f, 0.31f, 1f));
-            }
-
-            tex.Apply();
-            return CreateSprite(tex);
-        }
-
-        static Sprite SpriteWithLeftDarkMirrorBand()
-        {
-            var wall = new Color(0.72f, 0.68f, 0.62f, 1f);
-            var tex = Texture(20, 10, wall);
-            var darkMirror = new Color(0.22f, 0.24f, 0.28f, 1f);
-            for (var y = 0; y < tex.height; y++)
-            {
-                tex.SetPixel(0, y, darkMirror);
-                tex.SetPixel(1, y, darkMirror);
             }
 
             tex.Apply();
