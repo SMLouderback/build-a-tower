@@ -24,18 +24,35 @@ namespace BuildATower
             if (Cache.TryGetValue(key, out var cached) && cached != null)
                 return cached;
 
-            var source = ResolveSourceSprite(type, leftExterior, rightExterior, atriumRole, baseSprite);
-            if (source == null)
+            var resolved = ResolveSourceSprite(type, leftExterior, rightExterior, atriumRole, baseSprite);
+            if (resolved.Sprite == null)
                 return null;
 
-            var baked = Bake(source);
+            var baked = Bake(resolved.Sprite, leftExterior, rightExterior, resolved.SealMissingFace);
             Cache[key] = baked;
             return baked;
         }
 
         public static void ResetForTests() => Cache.Clear();
 
-        static Sprite ResolveSourceSprite(
+        /// <summary>
+        /// Side band fraction sealed when that face is interior (shared with a neighbor).
+        /// </summary>
+        public const float InteriorSealFrac = 0.30f;
+
+        readonly struct ResolvedSource
+        {
+            public readonly Sprite Sprite;
+            public readonly bool SealMissingFace;
+
+            public ResolvedSource(Sprite sprite, bool sealMissingFace)
+            {
+                Sprite = sprite;
+                SealMissingFace = sealMissingFace;
+            }
+        }
+
+        static ResolvedSource ResolveSourceSprite(
             RoomTypeSO type,
             bool leftExterior,
             bool rightExterior,
@@ -43,7 +60,7 @@ namespace BuildATower
             Sprite baseSprite)
         {
             if (type == null)
-                return baseSprite;
+                return new ResolvedSource(baseSprite, sealMissingFace: true);
 
             var cells = type.size.x > 0 && type.size.y > 0 ? type.size : new Vector2Int(1, 1);
 
@@ -53,30 +70,32 @@ namespace BuildATower
                     type.id, leftExterior, rightExterior, atriumRole);
                 var faceMid = RoomDollhouseArt.LoadSpriteAtResourcePath(faceMidPath, cells);
                 if (faceMid != null)
-                    return faceMid;
+                    return new ResolvedSource(faceMid, sealMissingFace: false);
 
                 var midPath = RoomDollhouseArt.ResourcePathForContext(type.id, atriumRole);
                 var mid = RoomDollhouseArt.LoadSpriteAtResourcePath(midPath, cells);
                 if (mid != null)
-                    return mid;
+                    return new ResolvedSource(mid, sealMissingFace: true);
 
-                return baseSprite;
+                return new ResolvedSource(baseSprite, sealMissingFace: true);
             }
 
             var facePath = RoomDollhouseArt.ResourcePathForFaces(
                 type.id, leftExterior, rightExterior, atriumRole);
             var faceSprite = RoomDollhouseArt.LoadSpriteAtResourcePath(facePath, cells);
             if (faceSprite != null)
-                return faceSprite;
+                return new ResolvedSource(faceSprite, sealMissingFace: false);
 
             if (baseSprite != null)
-                return baseSprite;
+                return new ResolvedSource(baseSprite, sealMissingFace: true);
 
             var legacyPath = RoomDollhouseArt.ResourcePathForContext(type.id, atriumRole);
-            return RoomDollhouseArt.LoadSpriteAtResourcePath(legacyPath, cells);
+            return new ResolvedSource(
+                RoomDollhouseArt.LoadSpriteAtResourcePath(legacyPath, cells),
+                sealMissingFace: true);
         }
 
-        static Sprite Bake(Sprite source)
+        static Sprite Bake(Sprite source, bool leftExterior, bool rightExterior, bool sealMissingFace)
         {
             var sourceTex = source.texture;
             var pixels = ReadPixels(sourceTex);
@@ -85,6 +104,8 @@ namespace BuildATower
 
             var w = sourceTex.width;
             var h = sourceTex.height;
+            if (sealMissingFace && (!leftExterior || !rightExterior))
+                SealInteriorSides(pixels, w, h, leftExterior, rightExterior);
 
             var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
             {
@@ -100,6 +121,118 @@ namespace BuildATower
                 new Rect(0f, 0f, w, h),
                 source.pivot / source.rect.size,
                 RoomDollhouseArt.PixelsPerUnit);
+        }
+
+        /// <summary>
+        /// Replace side-window glass / clear / chroma on interior faces with sampled wall paint
+        /// so adjacent rooms do not keep an exterior window into the neighbor.
+        /// </summary>
+        public static void SealInteriorSides(
+            Color[] px,
+            int w,
+            int h,
+            bool leftExterior,
+            bool rightExterior)
+        {
+            if (px == null || w < 4 || h < 4)
+                return;
+
+            var wall = SampleWallColor(px, w, h);
+            var y0 = Mathf.Max(0, Mathf.RoundToInt(h * 0.10f));
+            var y1 = Mathf.Min(h, Mathf.RoundToInt(h * 0.85f));
+            var band = Mathf.Max(2, Mathf.RoundToInt(w * InteriorSealFrac));
+
+            if (!leftExterior)
+                SealBand(px, w, h, 0, band, y0, y1, wall);
+            if (!rightExterior)
+                SealBand(px, w, h, w - band, w, y0, y1, wall);
+        }
+
+        static void SealBand(
+            Color[] px,
+            int w,
+            int h,
+            int x0,
+            int x1,
+            int y0,
+            int y1,
+            Color wall)
+        {
+            x0 = Mathf.Clamp(x0, 0, w);
+            x1 = Mathf.Clamp(x1, 0, w);
+            for (var y = y0; y < y1; y++)
+            for (var x = x0; x < x1; x++)
+            {
+                var i = y * w + x;
+                var c = px[i];
+                if (IsFurnitureLike(c))
+                    continue;
+                if (IsSealableGlass(c))
+                    px[i] = wall;
+            }
+        }
+
+        static Color SampleWallColor(Color[] px, int w, int h)
+        {
+            var x0 = w / 3;
+            var x1 = (2 * w) / 3;
+            var y0 = h / 4;
+            var y1 = (2 * h) / 3;
+            var r = 0f;
+            var g = 0f;
+            var b = 0f;
+            var n = 0;
+            for (var y = y0; y < y1; y++)
+            for (var x = x0; x < x1; x++)
+            {
+                var c = px[y * w + x];
+                if (c.a < 0.85f)
+                    continue;
+                if (RoomDollhouseArt.IsDollhouseChromaKey(c))
+                    continue;
+                if (IsFurnitureLike(c))
+                    continue;
+                Color.RGBToHSV(c, out _, out var s, out var v);
+                if (s > 0.45f || v < 0.25f || v > 0.92f)
+                    continue;
+                r += c.r;
+                g += c.g;
+                b += c.b;
+                n++;
+            }
+
+            if (n == 0)
+                return new Color(0.49f, 0.54f, 0.60f, 1f);
+            return new Color(r / n, g / n, b / n, 1f);
+        }
+
+        static bool IsSealableGlass(Color c)
+        {
+            if (c.a < 0.15f)
+                return true;
+            if (RoomDollhouseArt.IsDollhouseChromaKey(c))
+                return true;
+            // Sky / glass cyan already filled opaque blue.
+            if (c.b > 0.55f && c.b > c.r + 0.08f && c.b >= c.g - 0.02f && c.g > 0.30f)
+                return true;
+            // Dark mirror panes.
+            Color.RGBToHSV(c, out _, out var s, out var v);
+            if (v <= 0.36f && s <= 0.28f && c.b >= c.r - 0.06f)
+                return true;
+            return false;
+        }
+
+        static bool IsFurnitureLike(Color c)
+        {
+            if (c.a < 0.15f)
+                return false;
+            // Plants.
+            if (c.g > c.r + 0.08f && c.g > c.b + 0.08f && c.g > 0.22f)
+                return true;
+            // Wood / warm furniture.
+            if (c.r > c.g + 0.08f && c.r > c.b + 0.08f && c.r > 0.22f && c.g > 0.10f)
+                return true;
+            return false;
         }
 
         static Color[] ReadPixels(Texture2D tex)

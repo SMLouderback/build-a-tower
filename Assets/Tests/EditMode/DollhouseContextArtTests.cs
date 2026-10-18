@@ -14,11 +14,33 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void Interior_left_preserves_left_band_glass_pixels()
+        public void Face_leaf_present_skips_seal()
         {
+            var type = Type("office_micro", BuildFamily.Office);
+            var faceSprite = SpriteWithLeftWindowBand();
+            var window = Pixel(faceSprite, 0, 4);
+            RoomDollhouseArt.LoadSpriteForTests = path =>
+                path == "Art/Dollhouse/micro_office_3x1_L" ? faceSprite : null;
+
+            var baked = DollhouseContextArt.GetSprite(
+                type,
+                leftExterior: false,
+                rightExterior: true,
+                AtriumStackRole.Solo,
+                BuildFamily.Office,
+                faceSprite);
+
+            Assert.Less(ColorDistance(Pixel(baked, 0, 4), window), 0.001f);
+        }
+
+        [Test]
+        public void Interior_left_seals_left_band_glass_to_wall()
+        {
+            StubMissingFaceLeaves();
             var type = Type("office_micro", BuildFamily.Office);
             var baseSprite = SpriteWithLeftWindowBand();
             var window = Pixel(baseSprite, 0, 4);
+            var wall = Pixel(baseSprite, 10, 4);
 
             var interiorLeft = DollhouseContextArt.GetSprite(
                 type,
@@ -28,15 +50,19 @@ namespace BuildATower.Tests
                 BuildFamily.Office,
                 baseSprite);
 
-            Assert.Less(ColorDistance(Pixel(interiorLeft, 0, 4), window), 0.001f);
+            var sealedPx = Pixel(interiorLeft, 0, 4);
+            Assert.Greater(ColorDistance(sealedPx, window), 0.15f);
+            Assert.Less(ColorDistance(sealedPx, wall), 0.12f);
         }
 
         [Test]
-        public void Interior_left_preserves_dark_mirror_panes()
+        public void Interior_left_seals_dark_mirror_panes()
         {
+            StubMissingFaceLeaves();
             var type = Type("office_micro", BuildFamily.Office);
             var baseSprite = SpriteWithLeftDarkMirrorBand();
             var sourcePane = Pixel(baseSprite, 0, 4);
+            var wall = Pixel(baseSprite, 10, 4);
 
             var interiorLeft = DollhouseContextArt.GetSprite(
                 type,
@@ -46,12 +72,15 @@ namespace BuildATower.Tests
                 BuildFamily.Office,
                 baseSprite);
 
-            Assert.Less(ColorDistance(Pixel(interiorLeft, 0, 4), sourcePane), 0.002f);
+            var sealedPx = Pixel(interiorLeft, 0, 4);
+            Assert.Greater(ColorDistance(sealedPx, sourcePane), 0.10f);
+            Assert.Less(ColorDistance(sealedPx, wall), 0.12f);
         }
 
         [Test]
-        public void Interior_left_does_not_rewrite_band_pixels()
+        public void Interior_left_preserves_furniture_in_band()
         {
+            StubMissingFaceLeaves();
             var type = Type("office_micro", BuildFamily.Office);
             var baseSprite = SpriteWithLeftFurnitureInBand();
             var before = Pixel(baseSprite, 1, 4);
@@ -255,6 +284,8 @@ namespace BuildATower.Tests
 
             Assert.Less(ColorDistance(Pixel(baked, 4, 4), Pixel(baseSprite, 4, 4)), 0.001f);
         }
+
+        static void StubMissingFaceLeaves() => RoomDollhouseArt.LoadSpriteForTests = _ => null;
 
         static Sprite SpriteWithLeftWindowBand()
         {
