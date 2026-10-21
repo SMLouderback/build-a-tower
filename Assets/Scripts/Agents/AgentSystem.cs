@@ -95,6 +95,7 @@ namespace BuildATower
         CrimeSystem _crime;
         ResearchSystem _research;
         HealthSystem _health;
+        double? _nextCleanRoll;
         int _nextId = 1;
         int _lastTotalMinutes = int.MinValue;
         float _nowTotalMinutes;
@@ -161,6 +162,18 @@ namespace BuildATower
         public void SetMetro(MetroSystem metro) => _metro = metro;
 
         public void SetHealth(HealthSystem health) => _health = health;
+
+        /// <summary>Test hook: next maid clean illness roll; consumed once, then <see cref="_rng"/> again.</summary>
+        public void SetNextCleanRoll(double roll) => _nextCleanRoll = roll;
+
+        float ConsumeCleanRoll()
+        {
+            if (!_nextCleanRoll.HasValue)
+                return (float)_rng.NextDouble();
+            var roll = (float)_nextCleanRoll.Value;
+            _nextCleanRoll = null;
+            return roll;
+        }
 
         bool Quarantined => _health != null && _health.Quarantined;
 
@@ -896,6 +909,8 @@ namespace BuildATower
                     _ => AgentRole.Security
                 };
                 var want = room.StaffedWorkers;
+                if (room.Type.id == ClinicId && room.IsBroken)
+                    want = 0;
                 var existing = 0;
                 for (var i = 0; i < _agents.Count; i++)
                 {
@@ -1460,20 +1475,26 @@ namespace BuildATower
         /// </summary>
         bool TryAssignDoctorJob(Agent agent, TowerGrid grid)
         {
-            RoomInstance best = null;
+            var candidates = new List<RoomInstance>();
             foreach (var room in grid.Rooms)
             {
                 if (!HealthSystem.IsTenantRoom(room) || !room.Sick) continue;
                 if (CountServiceClaims(room, AgentRole.Doctor) > 0) continue;
-                if (best == null || room.InstanceId < best.InstanceId)
-                    best = room;
+                candidates.Add(room);
             }
 
-            if (best == null) return false;
+            if (candidates.Count == 0) return false;
 
+            candidates.Sort((a, b) => a.InstanceId.CompareTo(b.InstanceId));
             agent.ServiceCleanProgress = 0f;
-            agent.TreatmentMinutesRemaining = 0f;
-            return TryBeginServiceTrip(agent, grid, best, 0.1f);
+            foreach (var target in candidates)
+            {
+                agent.TreatmentMinutesRemaining = 0f;
+                if (TryBeginServiceTrip(agent, grid, target, 0.1f))
+                    return true;
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -1668,8 +1689,8 @@ namespace BuildATower
                 if (target != null)
                 {
                     target.ApplyCleanWork(agent.ServiceCleanProgress);
-                    if (_health != null)
-                        CleanModeRules.ApplyCleanResult(target, _health.CleanMode, (float)_rng.NextDouble());
+                    if (_health != null && target.CleanWorkRemaining <= 0.001f)
+                        CleanModeRules.ApplyCleanResult(target, _health.CleanMode, ConsumeCleanRoll());
                 }
             }
             else if (agent.Role == AgentRole.Doctor)

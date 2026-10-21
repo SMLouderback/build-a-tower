@@ -220,6 +220,94 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Partial_maid_finish_leaves_hotel_dirty_not_sick_even_with_forced_roll()
+        {
+            var grid = ServiceTowerWithHousekeeping(out var hk, out var hotel);
+            hk.SetStaffedWorkers(1);
+            hotel.QueueCleanWork(60f);
+            var health = new HealthSystem { CleanMode = CleanMode.Quick };
+            var agents = CreateAgents(grid);
+            agents.SetHealth(health);
+            agents.SetNextCleanRoll(0);
+            agents.SyncHomes(grid);
+            var maid = agents.Agents.Single(a => a.Role == AgentRole.Maid);
+
+            Assert.IsTrue(agents.TryAssignServiceJobs(grid));
+            PlaceAtRoom(maid, hotel);
+            maid.Phase = AgentPhase.Working;
+            Assert.IsTrue(agents.ForceCompleteServiceWork(maid));
+
+            Assert.IsTrue(hotel.Dirty);
+            Assert.Greater(hotel.CleanWorkRemaining, 0f);
+            Assert.IsFalse(hotel.Sick);
+        }
+
+        [Test]
+        public void Finished_maid_clean_Quick_roll_0_sets_hotel_sick()
+        {
+            var grid = ServiceTowerWithHousekeeping(out var hk, out var hotel);
+            hk.SetStaffedWorkers(1);
+            hotel.QueueCleanWork(10f);
+            var health = new HealthSystem { CleanMode = CleanMode.Quick };
+            var agents = CreateAgents(grid);
+            agents.SetHealth(health);
+            agents.SetNextCleanRoll(0);
+            agents.SyncHomes(grid);
+            var maid = agents.Agents.Single(a => a.Role == AgentRole.Maid);
+
+            Assert.IsTrue(agents.TryAssignServiceJobs(grid));
+            PlaceAtRoom(maid, hotel);
+            maid.Phase = AgentPhase.Working;
+            Assert.IsTrue(agents.ForceCompleteServiceWork(maid));
+
+            Assert.IsFalse(hotel.Dirty);
+            Assert.IsTrue(hotel.Sick);
+        }
+
+        [Test]
+        public void Broken_clinic_with_staff_spawns_no_doctors_after_SyncHomes()
+        {
+            var grid = Tower(out _, out _, out var clinic);
+            clinic.SetStaffedWorkers(2);
+            clinic.Condition = 0;
+            var agents = CreateAgents(grid);
+            agents.SetHealth(new HealthSystem());
+            agents.SyncHomes(grid);
+
+            Assert.IsTrue(clinic.IsBroken);
+            Assert.AreEqual(0, agents.Agents.Count(a => a.Role == AgentRole.Doctor));
+        }
+
+        [Test]
+        public void Doctor_claims_next_sick_room_when_lowest_id_is_unreachable()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(LobbyType(), 0, 24, 0, out _));
+            Assert.IsTrue(grid.TryPlace(StairsType(), new Vector2Int(12, 0), out _));
+            Assert.IsTrue(grid.TryPlace(ClinicType(), new Vector2Int(0, 1), out var clinic));
+            Assert.IsTrue(grid.TryPlace(MaintenanceType(), new Vector2Int(3, 1), out _));
+            Assert.IsTrue(grid.TryPlace(WideSupportHotelType(), new Vector2Int(6, 1), out _));
+            for (var x = 6; x < 15; x++)
+                Assert.IsTrue(grid.TryPlaceScaffold(new Vector2Int(x, 2), out _));
+            Assert.IsTrue(grid.TryPlace(HotelType(), new Vector2Int(6, 3), out var unreachable));
+            Assert.IsTrue(grid.TryPlace(OfficeType(), new Vector2Int(15, 1), out var reachable));
+            unreachable.SetSick(true);
+            reachable.SetSick(true);
+            Assert.Less(unreachable.InstanceId, reachable.InstanceId);
+            clinic.SetStaffedWorkers(1);
+
+            var agents = CreateAgents(grid);
+            agents.SetHealth(new HealthSystem());
+            agents.SyncHomes(grid);
+            var doctor = agents.Agents.Single(a => a.Role == AgentRole.Doctor);
+            PlaceAtRoom(doctor, clinic);
+            doctor.Phase = AgentPhase.AtHome;
+
+            Assert.IsTrue(agents.TryAssignServiceJobs(grid));
+            Assert.AreSame(reachable, doctor.ServiceTarget);
+        }
+
+        [Test]
         public void Maids_clean_restrooms_after_hotels_and_before_conference()
         {
             var grid = Tower(out var hotel, out _, out _);
@@ -243,6 +331,50 @@ namespace BuildATower.Tests
             Assert.IsTrue(grid.TryPlace(OfficeType(), new Vector2Int(10, 1), out office));
             Assert.IsTrue(grid.TryPlace(ClinicType(), new Vector2Int(14, 1), out clinic));
             return grid;
+        }
+
+        static TowerGrid ServiceTowerWithHousekeeping(out RoomInstance hk, out RoomInstance hotel)
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(LobbyType(), 0, 40, 0, out _));
+            Assert.IsTrue(grid.TryPlace(StairsType(), new Vector2Int(20, 0), out _));
+            Assert.IsTrue(grid.TryPlace(HousekeepingType(), new Vector2Int(0, 1), out hk));
+            Assert.IsTrue(grid.TryPlace(MaintenanceType(), new Vector2Int(3, 1), out _));
+            Assert.IsTrue(grid.TryPlace(HotelType(), new Vector2Int(6, 1), out hotel));
+            return grid;
+        }
+
+        static void PlaceAtRoom(Agent agent, RoomInstance room)
+        {
+            var cell = room.Origin;
+            agent.Cell = cell;
+            agent.WorldPosition = new Vector2(cell.x + 0.5f, cell.y + 0.5f);
+            agent.Visible = true;
+            agent.Path?.Clear();
+            agent.TripLegs?.Clear();
+            agent.GoalCell = null;
+        }
+
+        static RoomTypeSO HousekeepingType()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = AgentSystem.HousekeepingId;
+            so.category = RoomCategory.Service;
+            so.size = new Vector2Int(3, 1);
+            so.maxOccupants = 0;
+            so.allowAboveGround = true;
+            return so;
+        }
+
+        static RoomTypeSO MaintenanceType()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = AgentSystem.MaintenanceId;
+            so.category = RoomCategory.Service;
+            so.size = new Vector2Int(3, 1);
+            so.maxOccupants = 0;
+            so.allowAboveGround = true;
+            return so;
         }
 
         static AgentSystem CreateAgents(TowerGrid grid)
@@ -285,6 +417,15 @@ namespace BuildATower.Tests
             so.size = new Vector2Int(3, 1);
             so.maxOccupants = 2;
             so.allowAboveGround = true;
+            return so;
+        }
+
+        static RoomTypeSO WideSupportHotelType()
+        {
+            var so = HotelType();
+            so.id = "hotel_support_pad";
+            so.size = new Vector2Int(9, 1);
+            so.maxOccupants = 0;
             return so;
         }
 
