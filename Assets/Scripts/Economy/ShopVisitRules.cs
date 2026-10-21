@@ -133,6 +133,7 @@ namespace BuildATower
             bool quarantined = false)
         {
             if (shops == null || shops.Count == 0) return null;
+            if (streetOrigin && quarantined) return null;
             if (shops.Count == 1) return shops[0];
 
             var total = 0f;

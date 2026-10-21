@@ -139,6 +139,41 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void PickDemandWeightedShop_street_origin_quarantined_returns_null()
+        {
+            var shop = ShopRoom(1, 1f);
+            Assert.IsNull(ShopVisitRules.PickDemandWeightedShop(
+                new List<RoomInstance> { shop },
+                new System.Random(1),
+                streetOrigin: true,
+                grid: null,
+                quarantined: true));
+
+            var shopA = ShopRoom(1, 1f);
+            var shopB = ShopRoom(2, 1f);
+            Assert.IsNull(ShopVisitRules.PickDemandWeightedShop(
+                new List<RoomInstance> { shopA, shopB },
+                new System.Random(1),
+                streetOrigin: true,
+                grid: null,
+                quarantined: true));
+        }
+
+        [Test]
+        public void PickDemandWeightedShop_single_shop_street_not_quarantined_returns_shop()
+        {
+            var shop = ShopRoom(1, 1f);
+            Assert.AreSame(
+                shop,
+                ShopVisitRules.PickDemandWeightedShop(
+                    new List<RoomInstance> { shop },
+                    new System.Random(1),
+                    streetOrigin: true,
+                    grid: null,
+                    quarantined: false));
+        }
+
+        [Test]
         public void Quarantine_blocks_new_hotel_office_and_condo_tenancy_and_street_spawn()
         {
             var grid = Tower(out _, out var office, out _);
@@ -308,6 +343,20 @@ namespace BuildATower.Tests
             so.maxOccupants = 0;
             so.allowAboveGround = true;
             return so;
+        }
+
+        static RoomInstance ShopRoom(int id, float streetWeight)
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "shop_food_fast";
+            so.category = RoomCategory.Commercial;
+            so.buildFamily = BuildFamily.Shops;
+            so.incomeModel = IncomeModel.TrafficVariable;
+            so.streetVisitWeight = streetWeight;
+            so.size = Vector2Int.one;
+            so.allowAboveGround = true;
+            so.maxOccupants = 4;
+            return new RoomInstance(id, so, Vector2Int.zero, so.size);
         }
     }
 }
