@@ -19,7 +19,16 @@ namespace BuildATower
         public const float OfficeFillThreshold = 0.15f;
         public const float CondoFillThreshold = 0.20f;
 
+        public const float IllnessMarkThreshold = 40f;
+        public const float IllnessMarkMinutes = 360f;
+        public const float DoctorIllnessDrop = 18f;
+        public const int DoctorMinMinutes = 24 * 60;
+        public const int DoctorMaxMinutes = 48 * 60;
+        public const float GuestStressAtMax = 12f;
+        public const float OfficeRestroomStressRelief = 2f;
+
         readonly Dictionary<int, float> _illness = new();
+        readonly Dictionary<int, float> _sickMarkMinutes = new();
         int _towerFloorCount;
 
         public CleanMode CleanMode { get; set; } = CleanMode.Normal;
@@ -141,6 +150,122 @@ namespace BuildATower
 
         static bool Approximately(float a, float b) =>
             Math.Abs(b - a) < Math.Max(0.000001f * Math.Max(Math.Abs(a), Math.Abs(b)), 1.1920928955078125e-7f * 8f);
+
+        /// <summary>
+        /// Adds time only while the floor stays at or above <see cref="IllnessMarkThreshold"/>.
+        /// Below it the floor's timer resets. Returns true (and resets) once
+        /// <see cref="IllnessMarkMinutes"/> have accumulated.
+        /// </summary>
+        public bool AdvanceSickMarkTimer(int floor, float deltaGameMinutes)
+        {
+            if (GetIllness(floor) < IllnessMarkThreshold)
+            {
+                _sickMarkMinutes.Remove(floor);
+                return false;
+            }
+
+            if (deltaGameMinutes < 0f)
+                deltaGameMinutes = 0f;
+
+            _sickMarkMinutes.TryGetValue(floor, out var minutes);
+            minutes += deltaGameMinutes;
+            if (minutes >= IllnessMarkMinutes)
+            {
+                _sickMarkMinutes.Remove(floor);
+                return true;
+            }
+
+            _sickMarkMinutes[floor] = minutes;
+            return false;
+        }
+
+        /// <summary>Puts the full mark window back when <see cref="AdvanceSickMarkTimer"/> fired but no room could be marked.</summary>
+        public void RestoreSickMarkTimer(int floor) =>
+            _sickMarkMinutes[floor] = IllnessMarkMinutes;
+
+        /// <summary>
+        /// Runs the floor's mark timer and, when it fires, marks one room sick. Returns true
+        /// when a room was marked.
+        /// </summary>
+        public bool TryMarkSickRoom(int floor, float deltaGameMinutes, IReadOnlyList<RoomInstance> rooms)
+        {
+            if (!AdvanceSickMarkTimer(floor, deltaGameMinutes))
+                return false;
+
+            var room = ChooseRoomToSicken(rooms, floor);
+            if (room == null)
+            {
+                RestoreSickMarkTimer(floor);
+                return false;
+            }
+
+            room.SetSick(true);
+            return true;
+        }
+
+        /// <summary>Hotel first, then office/condo; never sick or broken rooms. Ties go to the lowest instance id.</summary>
+        public RoomInstance ChooseRoomToSicken(IReadOnlyList<RoomInstance> rooms, int floor)
+        {
+            if (rooms == null)
+                return null;
+
+            RoomInstance best = null;
+            var bestRank = int.MaxValue;
+            for (var i = 0; i < rooms.Count; i++)
+            {
+                var room = rooms[i];
+                if (!IsTenantRoom(room) || room.Origin.y != floor || room.Sick || room.IsBroken)
+                    continue;
+
+                var rank = room.Type.category == RoomCategory.Hotel ? 0 : 1;
+                if (rank > bestRank)
+                    continue;
+                if (rank == bestRank && room.InstanceId >= best.InstanceId)
+                    continue;
+
+                best = room;
+                bestRank = rank;
+            }
+
+            return best;
+        }
+
+        public void ApplyDoctorCure(int floor) =>
+            SetIllness(floor, GetIllness(floor) - DoctorIllnessDrop);
+
+        public static float SickShare(int sick, int tenants) =>
+            tenants <= 0 ? 0f : sick / (float)tenants;
+
+        /// <summary>Counts placed hotels, offices, and condos; <paramref name="sick"/> is the sick subset.</summary>
+        public static int CountTenants(IReadOnlyList<RoomInstance> rooms, out int sick)
+        {
+            sick = 0;
+            if (rooms == null)
+                return 0;
+
+            var tenants = 0;
+            for (var i = 0; i < rooms.Count; i++)
+            {
+                var room = rooms[i];
+                if (!IsTenantRoom(room))
+                    continue;
+                tenants++;
+                if (room.Sick)
+                    sick++;
+            }
+
+            return tenants;
+        }
+
+        public static float GuestStressGain(float illness) =>
+            illness <= 0f ? 0f : GuestStressAtMax * (illness / MaxIllness);
+
+        public static bool IsTenantRoom(RoomInstance room)
+        {
+            if (room == null || ReferenceEquals(room.Type, null))
+                return false;
+            return room.Type.category is RoomCategory.Hotel or RoomCategory.Office or RoomCategory.Condo;
+        }
 
         public static float FillMultiplier(float sickShare, float threshold)
         {

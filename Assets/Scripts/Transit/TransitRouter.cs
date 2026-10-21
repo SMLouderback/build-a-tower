@@ -358,7 +358,7 @@ namespace BuildATower
             if (shaft == null || shaft.Kind != ElevatorShaftKind.Service)
                 return 0f;
 
-            var staff = role is AgentRole.Maid or AgentRole.Handyman;
+            var staff = role is AgentRole.Maid or AgentRole.Handyman or AgentRole.Doctor;
             return staff ? -20f : 80f;
         }
 

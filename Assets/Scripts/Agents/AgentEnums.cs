@@ -16,7 +16,8 @@ namespace BuildATower
         Maid,
         Handyman,
         Security,
-        Criminal
+        Criminal,
+        Doctor
     }
 
     public enum AgentPhase

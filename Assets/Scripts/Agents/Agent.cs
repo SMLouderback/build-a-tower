@@ -101,6 +101,15 @@ namespace BuildATower
         /// <summary>Day index when floor-crime stress was last applied, or -1.</summary>
         public int CrimeStressDay { get; set; } = -1;
 
+        /// <summary>Day index when hotel-guest illness stress was last applied, or -1.</summary>
+        public int HealthStressDay { get; set; } = -1;
+
+        /// <summary>Day index when office-restroom stress relief was last applied, or -1.</summary>
+        public int OfficeRestroomStressDay { get; set; } = -1;
+
+        /// <summary>Doctor treatment game minutes left once on site; 0 means not rolled yet.</summary>
+        public float TreatmentMinutesRemaining { get; set; }
+
         /// <summary>Day index when amenity proximity stress relief was last applied, or -1.</summary>
         public int AmenityReliefDay { get; set; } = -1;
 

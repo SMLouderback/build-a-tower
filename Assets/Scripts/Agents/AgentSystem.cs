@@ -59,6 +59,9 @@ namespace BuildATower
         public const string HousekeepingId = "service_housekeeping";
         public const string MaintenanceId = "service_maintenance";
         public const string SecurityId = "service_security";
+        public const string ClinicId = "service_clinic";
+        public const string PublicRestroomId = "service_public_restroom";
+        public const string OfficeRestroomId = "service_office_restroom";
         public const float PatrolDwellMinutes = 8f;
         /// <summary>Max maid-minutes applied per trip so hotels are not starved by venue cleans.</summary>
         public const float MaidCleanShiftMinutes = 30f;
@@ -91,6 +94,7 @@ namespace BuildATower
         MetroSystem _metro;
         CrimeSystem _crime;
         ResearchSystem _research;
+        HealthSystem _health;
         int _nextId = 1;
         int _lastTotalMinutes = int.MinValue;
         float _nowTotalMinutes;
@@ -155,6 +159,20 @@ namespace BuildATower
         public void SetWeather(WeatherSystem weather) => _weather = weather;
 
         public void SetMetro(MetroSystem metro) => _metro = metro;
+
+        public void SetHealth(HealthSystem health) => _health = health;
+
+        bool Quarantined => _health != null && _health.Quarantined;
+
+        /// <summary>
+        /// Fill multiplier from the tower's sick-room share. 1 when health is not wired in.
+        /// </summary>
+        float HealthFillMultiplier(TowerGrid grid, float threshold)
+        {
+            if (_health == null || grid == null) return 1f;
+            var tenants = HealthSystem.CountTenants(grid.Rooms, out var sick);
+            return HealthSystem.FillMultiplier(HealthSystem.SickShare(sick, tenants), threshold);
+        }
 
         public void SyncHomes(
             TowerGrid grid,
@@ -349,6 +367,7 @@ namespace BuildATower
             room = null;
             slot = 0;
             if (grid == null || rng == null) return false;
+            if (Quarantined) return false;
 
             RoomInstance best = null;
             var bestSlot = 0;
@@ -379,6 +398,7 @@ namespace BuildATower
 
             var fill = LivingLuxury.CheckInFillMultiplier(EffectiveOfficeLuxuryBand(best.Type), climateStep);
             fill *= ClassClashFillMultiplier(grid, best);
+            fill *= HealthFillMultiplier(grid, HealthSystem.OfficeFillThreshold);
             if (fill < 1f && rng.NextDouble() >= fill)
                 return false;
 
@@ -468,6 +488,7 @@ namespace BuildATower
             room = null;
             slot = 0;
             if (grid == null || rng == null) return false;
+            if (Quarantined) return false;
 
             RoomInstance best = null;
             var bestSlot = 0;
@@ -498,6 +519,7 @@ namespace BuildATower
                                   AmenitySystem.HotelDemandBonus(grid, best) +
                                   AtriumMarketing.HotelFillBonusFor(grid));
             fill *= ClassClashFillMultiplier(grid, best);
+            fill *= HealthFillMultiplier(grid, HealthSystem.HotelFillThreshold);
             if (fill < 1f && rng.NextDouble() >= fill)
                 return false;
 
@@ -591,6 +613,7 @@ namespace BuildATower
         {
             room = null;
             if (grid == null || rng == null) return false;
+            if (Quarantined) return false;
 
             RoomInstance best = null;
             var bestRank = int.MaxValue;
@@ -616,6 +639,7 @@ namespace BuildATower
 
             var fill = LivingLuxury.CheckInFillMultiplier(EffectiveCondoLuxuryBand(best.Type), climateStep);
             fill *= ClassClashFillMultiplier(grid, best);
+            fill *= HealthFillMultiplier(grid, HealthSystem.CondoFillThreshold);
             if (fill < 1f && rng.NextDouble() >= fill)
                 return false;
 
@@ -736,6 +760,7 @@ namespace BuildATower
                 EnsureDisposable(agent, clock.DayIndex);
                 ApplyLowConditionStress(agent, clock.DayIndex);
                 ApplyCrimeStressDaily(agent, _crime, clock.DayIndex);
+                ApplyHealthStressDaily(agent, grid, clock.DayIndex);
                 AmenitySystem.TryApplyDailyRelief(agent, grid, clock.DayIndex);
                 if (agent.Phase == AgentPhase.Working && advanced > 0)
                     agent.WorkedMinutes += advanced;
@@ -802,6 +827,7 @@ namespace BuildATower
                     break;
                 case AgentRole.Maid:
                 case AgentRole.Handyman:
+                case AgentRole.Doctor:
                     UpdateServiceAgent(agent, grid, deltaGameMinutes);
                     break;
                 case AgentRole.Security:
@@ -825,7 +851,7 @@ namespace BuildATower
             var assigned = false;
             foreach (var agent in _agents)
             {
-                if (agent.Role is not (AgentRole.Maid or AgentRole.Handyman)) continue;
+                if (agent.Role is not (AgentRole.Maid or AgentRole.Handyman or AgentRole.Doctor)) continue;
                 if (agent.ServiceTarget != null) continue;
                 if (agent.Phase is AgentPhase.Moving or AgentPhase.WaitingAtElevator or AgentPhase.Riding)
                     continue;
@@ -860,12 +886,13 @@ namespace BuildATower
             foreach (var room in grid.Rooms)
             {
                 if (room?.Type?.id == null) continue;
-                if (room.Type.id is not (HousekeepingId or MaintenanceId or SecurityId)) continue;
+                if (room.Type.id is not (HousekeepingId or MaintenanceId or SecurityId or ClinicId)) continue;
                 staffHomes.Add(room);
                 var role = room.Type.id switch
                 {
                     HousekeepingId => AgentRole.Maid,
                     MaintenanceId => AgentRole.Handyman,
+                    ClinicId => AgentRole.Doctor,
                     _ => AgentRole.Security
                 };
                 var want = room.StaffedWorkers;
@@ -1357,6 +1384,12 @@ namespace BuildATower
 
             if (agent.ServiceTarget == null) return;
 
+            if (agent.Role == AgentRole.Doctor)
+            {
+                UpdateDoctorTreatment(agent, deltaGameMinutes, grid);
+                return;
+            }
+
             // Midnight can decay 1→0 while a handyman job is in progress; abort before repairing.
             if (agent.Role == AgentRole.Handyman && agent.ServiceTarget.IsBroken)
             {
@@ -1380,6 +1413,9 @@ namespace BuildATower
 
             if (agent.Role == AgentRole.Maid)
                 return TryAssignMaidCleanJob(agent, grid);
+
+            if (agent.Role == AgentRole.Doctor)
+                return TryAssignDoctorJob(agent, grid);
 
             if (agent.Role == AgentRole.Handyman)
             {
@@ -1406,7 +1442,8 @@ namespace BuildATower
                 var progress = Mathf.Min(MaidCleanShiftMinutes, target.CleanWorkRemaining);
                 if (progress <= 0f) continue;
 
-                var mult = ResearchEffects.CleanMinutesMultiplier(_research);
+                var mult = ResearchEffects.CleanMinutesMultiplier(_research) *
+                           CleanModeRules.TimeMultiplier(_health?.CleanMode ?? CleanMode.Normal);
                 var workMinutes = Mathf.Max(0.1f, progress * mult);
                 agent.ServiceCleanProgress = progress;
                 if (TryBeginServiceTrip(agent, grid, target, workMinutes))
@@ -1415,6 +1452,76 @@ namespace BuildATower
 
             agent.ServiceCleanProgress = 0f;
             return false;
+        }
+
+        /// <summary>
+        /// A free doctor claims the sick hotel, office, or condo with the lowest instance id that
+        /// has no doctor on it yet.
+        /// </summary>
+        bool TryAssignDoctorJob(Agent agent, TowerGrid grid)
+        {
+            RoomInstance best = null;
+            foreach (var room in grid.Rooms)
+            {
+                if (!HealthSystem.IsTenantRoom(room) || !room.Sick) continue;
+                if (CountServiceClaims(room, AgentRole.Doctor) > 0) continue;
+                if (best == null || room.InstanceId < best.InstanceId)
+                    best = room;
+            }
+
+            if (best == null) return false;
+
+            agent.ServiceCleanProgress = 0f;
+            agent.TreatmentMinutesRemaining = 0f;
+            return TryBeginServiceTrip(agent, grid, best, 0.1f);
+        }
+
+        /// <summary>
+        /// On arrival rolls the treatment length, then counts it down while the job is active.
+        /// A vanished or already-cured room cancels the job.
+        /// </summary>
+        void UpdateDoctorTreatment(Agent agent, float deltaGameMinutes, TowerGrid grid)
+        {
+            var target = agent.ServiceTarget;
+            if (!GridContainsRoom(grid, target) || !target.Sick)
+            {
+                ClearServiceClaim(agent);
+                if (!TryAssignJobFor(agent, grid))
+                    BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, agent.HomeSlot), AgentPhase.AtHome, grid);
+                return;
+            }
+
+            if (agent.TreatmentMinutesRemaining <= 0f)
+            {
+                agent.TreatmentMinutesRemaining =
+                    _rng.Next(HealthSystem.DoctorMinMinutes, HealthSystem.DoctorMaxMinutes + 1);
+            }
+
+            agent.TreatmentMinutesRemaining -= deltaGameMinutes;
+            if (agent.TreatmentMinutesRemaining > 0f) return;
+
+            FinishServiceJob(agent);
+            if (!TryAssignJobFor(agent, grid))
+                BeginTrip(agent, agent.Cell, HomeCell(agent.HomeRoom, agent.HomeSlot), AgentPhase.AtHome, grid);
+        }
+
+        static bool GridContainsRoom(TowerGrid grid, RoomInstance room)
+        {
+            if (grid == null || room == null) return false;
+            var rooms = grid.Rooms;
+            for (var i = 0; i < rooms.Count; i++)
+            {
+                if (ReferenceEquals(rooms[i], room)) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>Completes a doctor's treatment now: lowers the floor's illness and clears the room's sick flag.</summary>
+        public void ApplyDoctorCompletion(Agent doctor)
+        {
+            if (doctor == null || doctor.Role != AgentRole.Doctor) return;
+            FinishServiceJob(doctor);
         }
 
         bool TryBeginServiceTrip(Agent agent, TowerGrid grid, RoomInstance target, float workMinutes)
@@ -1461,12 +1568,13 @@ namespace BuildATower
             return null;
         }
 
-        static int CleanPriorityRank(RoomInstance room)
+        public static int CleanPriorityRank(RoomInstance room)
         {
             if (room?.Type == null) return 99;
             if (room.Type.category == RoomCategory.Hotel) return 0;
-            if (room.Type.id == ConferenceSystem.ConferenceId) return 1;
-            if (room.Type.id == ConferenceSystem.EventHallId) return 2;
+            if (room.Type.id == PublicRestroomId || room.Type.id == OfficeRestroomId) return 1;
+            if (room.Type.id == ConferenceSystem.ConferenceId) return 2;
+            if (room.Type.id == ConferenceSystem.EventHallId) return 3;
             return 9;
         }
 
@@ -1515,13 +1623,15 @@ namespace BuildATower
             return bestJob ?? bestCondition;
         }
 
-        static bool NeedsMaidClean(RoomInstance room)
+        public static bool NeedsMaidClean(RoomInstance room)
         {
             if (room?.Type == null || room.IsBroken) return false;
             if (!room.Dirty && room.CleanWorkRemaining <= 0f) return false;
             if (room.Type.category == RoomCategory.Hotel) return true;
             var id = room.Type.id;
             if (id == ConferenceSystem.ConferenceId || id == ConferenceSystem.EventHallId)
+                return true;
+            if (id == PublicRestroomId || id == OfficeRestroomId)
                 return true;
             return false;
         }
@@ -1556,7 +1666,19 @@ namespace BuildATower
             if (agent.Role == AgentRole.Maid)
             {
                 if (target != null)
+                {
                     target.ApplyCleanWork(agent.ServiceCleanProgress);
+                    if (_health != null)
+                        CleanModeRules.ApplyCleanResult(target, _health.CleanMode, (float)_rng.NextDouble());
+                }
+            }
+            else if (agent.Role == AgentRole.Doctor)
+            {
+                if (target != null)
+                {
+                    _health?.ApplyDoctorCure(target.Origin.y);
+                    target.SetSick(false);
+                }
             }
             else if (agent.Role == AgentRole.Handyman)
             {
@@ -1580,6 +1702,7 @@ namespace BuildATower
             agent.ServiceWorkRemaining = 0f;
             agent.ServiceCleanProgress = 0f;
             agent.ServiceTravelMinutes = 0f;
+            agent.TreatmentMinutesRemaining = 0f;
         }
 
         static void MarkRoomDirtyForCleaning(RoomInstance room)
@@ -1589,11 +1712,11 @@ namespace BuildATower
         }
 
         static bool IsServiceRole(AgentRole role) =>
-            role is AgentRole.Maid or AgentRole.Handyman or AgentRole.Security;
+            role is AgentRole.Maid or AgentRole.Handyman or AgentRole.Security or AgentRole.Doctor;
 
         static bool IsNonPopulationRole(AgentRole role) =>
             role is AgentRole.StreetVisitor or AgentRole.EventVisitor or AgentRole.Maid
-                or AgentRole.Handyman or AgentRole.Security or AgentRole.Criminal;
+                or AgentRole.Handyman or AgentRole.Security or AgentRole.Criminal or AgentRole.Doctor;
 
         /// <summary>
         /// Star / HUD population: condo residents after move-in, office workers (even when Outside),
@@ -1609,7 +1732,7 @@ namespace BuildATower
 
         static bool IsEphemeralOrStaffRole(AgentRole role) =>
             role is AgentRole.StreetVisitor or AgentRole.EventVisitor or AgentRole.Maid
-                or AgentRole.Handyman or AgentRole.Security or AgentRole.Criminal;
+                or AgentRole.Handyman or AgentRole.Security or AgentRole.Criminal or AgentRole.Doctor;
 
         void UpdateCondo(Agent agent, GameClock clock, TowerGrid grid, float deltaGameMinutes)
         {
@@ -1954,7 +2077,7 @@ namespace BuildATower
             }
 
             if (candidates.Count == 0) return null;
-            return ShopVisitRules.PickDemandWeightedShop(candidates, _rng, streetOrigin, grid);
+            return ShopVisitRules.PickDemandWeightedShop(candidates, _rng, streetOrigin, grid, Quarantined);
         }
 
         bool CanReachShopFromLobby(TowerGrid grid, RoomInstance shop) =>
@@ -2042,7 +2165,7 @@ namespace BuildATower
                 var chance = StreetSpawnChance(
                     stars,
                     AtriumMarketing.StreetSpawnMultiplierFor(grid),
-                    _weather?.StreetTrafficMultiplier ?? 1f,
+                    Quarantined ? 0f : _weather?.StreetTrafficMultiplier ?? 1f,
                     _metro?.StreetTrafficMultiplier ?? 1f);
                 if (chance <= 0f) continue;
                 if (_rng.NextDouble() >= chance) continue;
@@ -2058,6 +2181,7 @@ namespace BuildATower
         public bool TrySpawnStreetVisitor(TowerGrid grid, GameClock clock)
         {
             if (grid == null || clock == null) return false;
+            if (Quarantined) return false;
             if (CountStreetVisitors() >= MaxConcurrentStreetVisitors) return false;
 
             var remaining = AgentWealth.RollDailyDisposable(
@@ -2936,6 +3060,57 @@ namespace BuildATower
             agent.CrimeStressDay = dayIndex;
         }
 
+        HashSet<int> _officeRestroomCovered;
+        int _officeRestroomCoveredDay = int.MinValue;
+        int _officeRestroomCoveredRoomCount = -1;
+
+        /// <summary>
+        /// Hotel guests take illness stress once per day; restroom-covered office workers lose
+        /// <see cref="HealthSystem.OfficeRestroomStressRelief"/> once per day. Office relief does not touch illness.
+        /// </summary>
+        void ApplyHealthStressDaily(Agent agent, TowerGrid grid, int dayIndex)
+        {
+            if (agent == null || agent.HomeRoom == null) return;
+
+            if (agent.Role == AgentRole.HotelGuest)
+            {
+                if (_health == null) return;
+                if (agent.HealthStressDay == dayIndex || agent.Phase == AgentPhase.Outside) return;
+                var gain = HealthSystem.GuestStressGain(_health.GetIllness(agent.HomeRoom.Origin.y));
+                if (gain <= 0f) return;
+                agent.Stress = Mathf.Min(100f, agent.Stress + gain);
+                agent.HealthStressDay = dayIndex;
+                return;
+            }
+
+            if (agent.Role == AgentRole.OfficeWorker)
+            {
+                if (agent.OfficeRestroomStressDay == dayIndex) return;
+                if (!IsOfficeRestroomCovered(grid, agent.HomeRoom, dayIndex)) return;
+                agent.RelieveStress(HealthSystem.OfficeRestroomStressRelief);
+                agent.OfficeRestroomStressDay = dayIndex;
+            }
+        }
+
+        bool IsOfficeRestroomCovered(TowerGrid grid, RoomInstance office, int dayIndex)
+        {
+            if (grid == null) return false;
+            if (_officeRestroomCovered == null ||
+                _officeRestroomCoveredDay != dayIndex ||
+                _officeRestroomCoveredRoomCount != grid.Rooms.Count)
+            {
+                _officeRestroomCovered ??= new HashSet<int>();
+                _officeRestroomCovered.Clear();
+                var assignments = HealthCoverage.AssignOfficeRestrooms(grid.Rooms);
+                for (var i = 0; i < assignments.Count; i++)
+                    _officeRestroomCovered.Add(assignments[i].NeedInstanceId);
+                _officeRestroomCoveredDay = dayIndex;
+                _officeRestroomCoveredRoomCount = grid.Rooms.Count;
+            }
+
+            return _officeRestroomCovered.Contains(office.InstanceId);
+        }
+
         public static void UpdateCrimeProximityStress(
             Agent agent,
             IReadOnlyList<Agent> agents,
@@ -2965,7 +3140,8 @@ namespace BuildATower
         }
 
         static bool IsCrimeStressExempt(AgentRole role) =>
-            role is AgentRole.Security or AgentRole.Maid or AgentRole.Handyman or AgentRole.Criminal;
+            role is AgentRole.Security or AgentRole.Maid or AgentRole.Handyman or AgentRole.Criminal
+                or AgentRole.Doctor;
 
         void UpdateStress(Agent agent, float deltaGameMinutes)
         {

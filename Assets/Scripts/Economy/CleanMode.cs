@@ -25,6 +25,28 @@ namespace BuildATower
                 CleanMode.Deep => 0.02f,
             };
 
+        public static bool IllnessOccurs(CleanMode mode, float unitRoll) =>
+            unitRoll < IllnessChance(mode);
+
+        /// <summary>
+        /// Runs after the clean has already been applied. On a hit, tenant rooms turn sick and
+        /// public venues / restrooms are queued for cleaning again.
+        /// </summary>
+        public static void ApplyCleanResult(RoomInstance room, CleanMode mode, float unitRoll)
+        {
+            if (room == null || ReferenceEquals(room.Type, null)) return;
+            if (!IllnessOccurs(mode, unitRoll)) return;
+
+            if (MarksTenantSick(room.Type.category))
+            {
+                room.SetSick(true);
+                return;
+            }
+
+            if (RedirtiesInstead(room.Type.id))
+                room.QueueCleanWork(RoomConditionRules.CleanMinutes(room.Type));
+        }
+
         public static bool MarksTenantSick(RoomCategory category) =>
             category == RoomCategory.Hotel
             || category == RoomCategory.Office

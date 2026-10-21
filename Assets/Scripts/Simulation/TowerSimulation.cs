@@ -160,6 +160,7 @@ namespace BuildATower
                     shopDemand: _shopDemand,
                     weather: _weather,
                     metro: _metro);
+                _agents.SetHealth(_health);
                 _crime = new CrimeSystem();
                 _economy = new EconomySystem();
                 _research = new ResearchSystem();
@@ -177,6 +178,7 @@ namespace BuildATower
             {
                 _metro ??= new MetroSystem();
                 _agents?.SetMetro(_metro);
+                _agents?.SetHealth(_health);
             }
 
             SyncStructureArtToStars();
@@ -309,12 +311,101 @@ namespace BuildATower
                 _criminalFloors,
                 ResearchEffects.CrimeSuppressionMultiplier(research),
                 CountFloorsWithRooms(build.Grid));
+            TickHealth(_clock.LastTickGameMinutes);
             research?.TickProgress(
                 _clock.LastTickGameMinutes,
                 EconomySystem.CountResearcherPool(build.Grid));
             SampleAgentsForMaps(_clock.LastTickGameMinutes);
             if (agentView != null)
                 agentView.Sync(_agents.Agents, build?.Grid);
+        }
+
+        const int HealthNewsPriority = 9;
+        const int QuarantineNewsPriority = 10;
+        float _lastSickShare;
+        bool _sickShareKnown;
+
+        void TickHealth(float deltaGameMinutes)
+        {
+            var grid = build?.Grid;
+            if (_health == null || grid == null || _agents == null || deltaGameMinutes <= 0f) return;
+
+            var rooms = grid.Rooms;
+            var guestsByFloor = new Dictionary<int, int>();
+            var guestHotels = new HashSet<RoomInstance>();
+            foreach (var agent in _agents.Agents)
+            {
+                if (agent == null || agent.Role != AgentRole.HotelGuest) continue;
+                if (agent.Phase == AgentPhase.Outside || agent.HomeRoom == null) continue;
+                var floor = agent.HomeRoom.Origin.y;
+                guestsByFloor.TryGetValue(floor, out var count);
+                guestsByFloor[floor] = count + 1;
+                guestHotels.Add(agent.HomeRoom);
+            }
+
+            var trashCovered = new Dictionary<int, bool>();
+            foreach (var hotel in guestHotels)
+            {
+                var floor = hotel.Origin.y;
+                var coveredSoFar = !trashCovered.TryGetValue(floor, out var prior) || prior;
+                trashCovered[floor] = coveredSoFar && HealthCoverage.TrashCovers(floor, hotel.Origin.x, rooms);
+            }
+
+            var sickRoomsByFloor = new Dictionary<int, int>();
+            var clinicFloors = new List<int>();
+            var tenantFloors = new HashSet<int>();
+            for (var i = 0; i < rooms.Count; i++)
+            {
+                var room = rooms[i];
+                if (room == null || ReferenceEquals(room.Type, null)) continue;
+                if (HealthSystem.IsTenantRoom(room))
+                {
+                    tenantFloors.Add(room.Origin.y);
+                    if (room.Sick)
+                    {
+                        sickRoomsByFloor.TryGetValue(room.Origin.y, out var sick);
+                        sickRoomsByFloor[room.Origin.y] = sick + 1;
+                    }
+                }
+                else if (room.Type.id == AgentSystem.ClinicId && !room.IsBroken)
+                {
+                    clinicFloors.Add(room.Origin.y);
+                }
+            }
+
+            _health.Tick(
+                deltaGameMinutes,
+                guestsByFloor,
+                trashCovered,
+                sickRoomsByFloor,
+                clinicFloors,
+                CountFloorsWithRooms(grid));
+
+            foreach (var floor in tenantFloors)
+                _health.TryMarkSickRoom(floor, deltaGameMinutes, rooms);
+
+            var tenants = HealthSystem.CountTenants(rooms, out var sickTenants);
+            var newShare = HealthSystem.SickShare(sickTenants, tenants);
+            var previousShare = _sickShareKnown ? _lastSickShare : newShare;
+            var wasQuarantined = _health.Quarantined;
+            var quarantined = HealthSystem.EvaluateQuarantine(wasQuarantined, newShare);
+            _health.Quarantined = quarantined;
+            _lastSickShare = newShare;
+            _sickShareKnown = true;
+
+            if (_news == null) return;
+            var day = _clock.DayIndex;
+            var items = HealthNews.Collect(previousShare, newShare, wasQuarantined, quarantined);
+            for (var i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                item.Priority = item.Category == TowerNewsCategory.MajorEvent
+                    ? QuarantineNewsPriority
+                    : HealthNewsPriority;
+                item.CreatedDayIndex = day;
+                item.ExpireDayIndex = day + 5;
+                _news.Push(item);
+            }
         }
 
         void SampleAgentsForMaps(float gameMinutes)
