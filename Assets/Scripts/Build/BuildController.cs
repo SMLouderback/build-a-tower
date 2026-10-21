@@ -464,7 +464,7 @@ namespace BuildATower
 
         public static bool IsStaffedServiceRoom(RoomTypeSO type) =>
             type != null && type.id is "service_housekeeping" or "service_maintenance" or "service_security"
-                or "service_research";
+                or "service_research" or "service_clinic";
 
         public string GetElevatorStatusText()
         {

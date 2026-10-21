@@ -94,6 +94,23 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void IsStaffedServiceRoom_clinic_staffed_public_restroom_not()
+        {
+            var clinic = Resources.Load<RoomTypeSO>("Rooms/ServiceClinic");
+            var restroom = Resources.Load<RoomTypeSO>("Rooms/ServicePublicRestroom");
+            Assert.IsNotNull(clinic);
+            Assert.IsNotNull(restroom);
+            Assert.IsTrue(BuildController.IsStaffedServiceRoom(clinic));
+            Assert.IsFalse(BuildController.IsStaffedServiceRoom(restroom));
+
+            var clinicRoom = new RoomInstance(99, clinic, Vector2Int.zero, clinic.size);
+            clinicRoom.SetStaffedWorkers(9);
+            Assert.AreEqual(4, clinicRoom.StaffedWorkers);
+            clinicRoom.SetStaffedWorkers(-1);
+            Assert.AreEqual(0, clinicRoom.StaffedWorkers);
+        }
+
+        [Test]
         public void ApplyAutoHireOnPlace_clinic_hires_one_public_restroom_stays_zero()
         {
             var clinic = Resources.Load<RoomTypeSO>("Rooms/ServiceClinic");
