@@ -50,5 +50,24 @@ namespace BuildATower.Tests
                 new Dictionary<int, int>(), new List<int> { 0, 1 }, towerFloorCount: 2);
             Assert.Less(two.GetIllness(0), near.GetIllness(0));
         }
+
+        [Test]
+        public void Fill_is_full_below_threshold_and_085_at_threshold()
+        {
+            Assert.AreEqual(1f, HealthSystem.FillMultiplier(0.09f, HealthSystem.HotelFillThreshold), 0.0001f);
+            Assert.AreEqual(0.85f, HealthSystem.FillMultiplier(0.10f, HealthSystem.HotelFillThreshold), 0.0001f);
+            Assert.AreEqual(0f, HealthSystem.FillMultiplier(0.25f, HealthSystem.HotelFillThreshold), 0.0001f);
+            Assert.AreEqual(0.85f, HealthSystem.FillMultiplier(0.15f, HealthSystem.OfficeFillThreshold), 0.0001f);
+            Assert.AreEqual(0.85f, HealthSystem.FillMultiplier(0.20f, HealthSystem.CondoFillThreshold), 0.0001f);
+        }
+
+        [Test]
+        public void Quarantine_latches_until_22_percent()
+        {
+            Assert.IsFalse(HealthSystem.EvaluateQuarantine(false, 0.24f));
+            Assert.IsTrue(HealthSystem.EvaluateQuarantine(false, 0.25f));
+            Assert.IsTrue(HealthSystem.EvaluateQuarantine(true, 0.23f));
+            Assert.IsFalse(HealthSystem.EvaluateQuarantine(true, 0.22f));
+        }
     }
 }

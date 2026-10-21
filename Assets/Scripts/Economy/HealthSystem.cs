@@ -13,6 +13,12 @@ namespace BuildATower
         public const float ClinicProximityPerMinute = 0.20f;
         public const int ClinicProximityFloors = 8;
 
+        public const float QuarantineOn = 0.25f;
+        public const float QuarantineOff = 0.22f;
+        public const float HotelFillThreshold = 0.10f;
+        public const float OfficeFillThreshold = 0.15f;
+        public const float CondoFillThreshold = 0.20f;
+
         readonly Dictionary<int, float> _illness = new();
         int _towerFloorCount;
 
@@ -132,5 +138,31 @@ namespace BuildATower
 
         static bool Approximately(float a, float b) =>
             Math.Abs(b - a) < Math.Max(0.000001f * Math.Max(Math.Abs(a), Math.Abs(b)), 1.1920928955078125e-7f * 8f);
+
+        public static float FillMultiplier(float sickShare, float threshold)
+        {
+            if (sickShare < threshold)
+                return 1f;
+
+            var span = 0.25f - threshold;
+            var t = (sickShare - threshold) / span;
+            if (t < 0f)
+                t = 0f;
+            else if (t > 1f)
+                t = 1f;
+            return 0.85f * (1f - t);
+        }
+
+        public static bool EvaluateQuarantine(bool currentlyOn, float sickShare)
+        {
+            if (currentlyOn)
+            {
+                if (sickShare <= QuarantineOff)
+                    return false;
+                return true;
+            }
+
+            return sickShare >= QuarantineOn;
+        }
     }
 }
