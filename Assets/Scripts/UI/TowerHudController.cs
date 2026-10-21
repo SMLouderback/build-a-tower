@@ -1324,6 +1324,7 @@ namespace BuildATower
             DrawChip(climateName, 78f);
 
             DrawChip(GameSession.Difficulty.ToString(), 88f);
+            DrawChip(FormatHealthBarText(), 240f);
 
             // Reserve space for right-cluster Menu/Maps/Research/Info/Goals buttons.
             var clusterW = 56f + 8f; // Menu
@@ -2447,6 +2448,7 @@ namespace BuildATower
                     lines.Add($"Pop {pop}");
                     lines.Add($"Stress {stress:0}");
                     lines.Add($"Crime {simulation?.Crime?.AverageCrime ?? 0f:0}");
+                    lines.Add(FormatHealthBarText());
                     if (agents?.Agents != null)
                     {
                         var inTower = 0;
@@ -2735,8 +2737,17 @@ namespace BuildATower
             if (PricePricing.IsPricedRoom(build.SelectedRoom?.Type))
                 cy = DrawPriceTierButtons(cx, cy, inner, btnH, row, label, stars);
 
+            if (build.SelectedRoom?.Sick == true)
+            {
+                GUI.Label(new Rect(cx, cy, inner, row), HealthHudFormat.WaitingOnDoctor, label);
+                cy += row;
+            }
+
             if (BuildController.IsStaffedServiceRoom(build.SelectedRoom?.Type))
                 cy = DrawStaffStepper(cx, cy, inner, btnH, row, label);
+
+            if (build.SelectedRoom?.Type?.id == "service_housekeeping" && simulation?.Health != null)
+                cy = DrawCleanModeButtons(cx, cy, inner, btnH, row, label);
 
             if (build.SelectedRoom?.Type?.id == EconomySystem.ResearchId)
             {
@@ -3389,7 +3400,10 @@ namespace BuildATower
             var room = build.SelectedRoom;
             if (room == null) return cy;
 
-            GUI.Label(new Rect(cx, cy, inner, row), $"Staff ({room.StaffedWorkers}/4)", label);
+            GUI.Label(
+                new Rect(cx, cy, inner, row),
+                HealthHudFormat.StaffLabel(room.Type?.id, room.StaffedWorkers),
+                label);
             cy += row;
 
             const float gap = 4f;
@@ -3406,6 +3420,50 @@ namespace BuildATower
 
             cy += btnH + 4f;
             return cy;
+        }
+
+        float DrawCleanModeButtons(
+            float cx,
+            float cy,
+            float inner,
+            float btnH,
+            float row,
+            GUIStyle label)
+        {
+            var health = simulation?.Health;
+            if (health == null) return cy;
+
+            GUI.Label(new Rect(cx, cy, inner, row), "Clean mode", label);
+            cy += row;
+
+            const float gap = 4f;
+            var labels = new[] { "Quick", "Normal", "Deep" };
+            var modes = new[] { CleanMode.Quick, CleanMode.Normal, CleanMode.Deep };
+            var count = labels.Length;
+            var bw = (inner - gap * (count - 1)) / count;
+            for (var i = 0; i < count; i++)
+            {
+                var mode = modes[i];
+                var active = health.CleanMode == mode;
+                var rect = new Rect(cx + i * (bw + gap), cy, bw, btnH);
+                if (GUI.Toggle(rect, active, labels[i], GUI.skin.button) && !active)
+                    health.CleanMode = mode;
+            }
+
+            cy += btnH + 4f;
+            return cy;
+        }
+
+        string FormatHealthBarText()
+        {
+            var health = simulation?.Health;
+            if (health == null)
+                return HealthHudFormat.FormatBar(0f, 0f, false);
+
+            var rooms = build.Grid?.Rooms;
+            var tenants = HealthSystem.CountTenants(rooms, out var sick);
+            var share = HealthSystem.SickShare(sick, tenants);
+            return HealthHudFormat.FormatBar(health.AverageIllness, share, health.Quarantined);
         }
 
         void DrawTimeSpeedButtons(float x, float y, float width, float height)
