@@ -10,11 +10,13 @@ namespace BuildATower
         public const int HandymanWagePerDay = 300;
         public const int SecurityGuardWagePerDay = 250;
         public const int ResearchWagePerDay = 350;
+        public const int DoctorWagePerDay = 400;
         public const string ResearchId = "service_research";
 
         const string HousekeepingId = "service_housekeeping";
         const string MaintenanceId = "service_maintenance";
         const string SecurityId = "service_security";
+        const string ClinicId = "service_clinic";
 
         readonly Dictionary<int, int> _lastIncomeByRoom = new();
         readonly Dictionary<int, int> _lastExpenseByRoom = new();
@@ -414,6 +416,7 @@ namespace BuildATower
                 MaintenanceId => room.StaffedWorkers * HandymanWagePerDay,
                 SecurityId => room.StaffedWorkers * SecurityGuardWagePerDay,
                 ResearchId => room.StaffedWorkers * ResearchWagePerDay,
+                ClinicId => room.StaffedWorkers * DoctorWagePerDay,
                 _ => 0
             };
         }

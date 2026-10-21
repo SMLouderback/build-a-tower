@@ -258,7 +258,7 @@ namespace BuildATower
         {
             if (room?.Type == null) return;
             if (room.Type.id is "service_housekeeping" or "service_maintenance" or "service_security"
-                or "service_research")
+                or "service_research" or "service_clinic")
                 room.SetStaffedWorkers(1);
         }
 
