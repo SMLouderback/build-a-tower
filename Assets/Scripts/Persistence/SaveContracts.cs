@@ -52,6 +52,8 @@ namespace BuildATower
         public MetroSnapshotV1 metro;
         /// <summary>Optional: null or absent (older saves) restores neutral weekly market pulse.</summary>
         public MarketPulseSnapshotV1 marketPulse;
+        /// <summary>Optional: null or absent (older saves) restores healthy floors, CleanMode.Normal, and quarantine off.</summary>
+        public HealthSnapshotV1 health;
         public RoomSnapshotV1[] rooms;
     }
 
@@ -61,6 +63,16 @@ namespace BuildATower
         public float livingPulseMult;
         public float commercialPulseMult;
         public int nextPulseDayIndex;
+    }
+
+    [Serializable]
+    public sealed class HealthSnapshotV1
+    {
+        public float[] floorIndices;
+        public float[] illness;
+        /// <summary><see cref="CleanMode"/> enum name.</summary>
+        public string cleanMode;
+        public bool quarantined;
     }
 
     [Serializable]
@@ -154,6 +166,7 @@ namespace BuildATower
         public int shopRevenueYesterday;
         public int shopUpkeepYesterday;
         public int[] visitHistory;
+        public bool sick;
     }
 
     public enum GridRestoreError
@@ -221,7 +234,8 @@ namespace BuildATower
         InvalidResearch,
         InvalidWeather,
         InvalidMetro,
-        InvalidMarketPulse
+        InvalidMarketPulse,
+        InvalidHealth
     }
 
     public sealed class SnapshotValidationResult

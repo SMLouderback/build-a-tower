@@ -17,6 +17,7 @@ namespace BuildATower
         public int Condition { get; set; } = 100;
         public bool IsBroken => Condition <= 0;
         public bool Dirty { get; private set; }
+        public bool Sick { get; private set; }
         /// <summary>
         /// Total maid-minutes of cleaning still owed (shared pool). Multiple maids chip away
         /// in short shifts instead of locking exclusive multi-hour jobs.
@@ -207,6 +208,8 @@ namespace BuildATower
         public void SetStaffedWorkers(int count) =>
             StaffedWorkers = Mathf.Clamp(count, 0, 4);
 
+        public void SetSick(bool value) => Sick = value;
+
         public RoomSnapshotV1 CaptureSnapshot(float nowRealtime)
         {
             var remaining = IsInBuildGrace(nowRealtime)
@@ -239,7 +242,8 @@ namespace BuildATower
                 shopEarningsToday = ShopEarningsToday,
                 shopRevenueYesterday = ShopRevenueYesterday,
                 shopUpkeepYesterday = ShopUpkeepYesterday,
-                visitHistory = _visitHistory.CaptureValues()
+                visitHistory = _visitHistory.CaptureValues(),
+                sick = Sick
             };
         }
 
@@ -288,6 +292,7 @@ namespace BuildATower
             ShopRevenueYesterday = Mathf.Max(0, snapshot.shopRevenueYesterday);
             ShopUpkeepYesterday = Mathf.Max(0, snapshot.shopUpkeepYesterday);
             _visitHistory.RestoreValues(snapshot.visitHistory);
+            Sick = snapshot.sick;
         }
     }
 }

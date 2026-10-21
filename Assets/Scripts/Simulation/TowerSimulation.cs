@@ -89,7 +89,10 @@ namespace BuildATower
         MarketClimate _climate;
         MacroEconomicController _macro;
         WeatherSystem _weather;
+        HealthSystem _health;
         MetroSystem _metro;
+        TutorialDirector _tutorialDirector;
+        bool _tutorialBootAttempted;
         readonly System.Random _climateRng = new();
         readonly System.Random _conferenceRng = new();
         readonly System.Random _newsRng = new();
@@ -110,10 +113,14 @@ namespace BuildATower
         public MarketClimate Climate => _climate;
         public MacroEconomicController MacroEconomy => _macro;
         public WeatherSystem Weather => _weather;
+        public HealthSystem Health => _health;
         public MetroSystem Metro => _metro;
         public StairsPathfinder Pathfinder => _pathfinder;
         public ElevatorSystem Elevators => _elevators;
         public TransitRouter Router => _router;
+
+        /// <summary>Guided new-player coach. HUD (Task 5) reads this for coach UI.</summary>
+        public TutorialDirector TutorialDirector => _tutorialDirector;
 
         const float AgentSampleIntervalGameMinutes = 2f;
         float _agentSampleAccumulator;
@@ -140,6 +147,7 @@ namespace BuildATower
 
             EnsureDayNightSkyController();
             ParallaxBackdrop.EnsureInScene();
+            SkyCloudLayer.EnsureInScene();
             WeatherFx.EnsureInScene();
             MetroTunnelView.EnsureInScene();
 
@@ -151,6 +159,7 @@ namespace BuildATower
                 _router = new TransitRouter(_pathfinder, _elevators);
                 _shopDemand = new ShopDemandSystem();
                 _weather = new WeatherSystem();
+                _health = new HealthSystem();
                 _metro = new MetroSystem();
                 _agents = new AgentSystem(
                     _router,
@@ -193,6 +202,26 @@ namespace BuildATower
             }
             elevatorView.Bind(_elevators);
             EnsureCelebrationController();
+            EnsureTutorialDirector();
+        }
+
+        void EnsureTutorialDirector()
+        {
+            _tutorialDirector ??= new TutorialDirector();
+            if (_tutorialBootAttempted)
+                return;
+            _tutorialBootAttempted = true;
+            TutorialBoot.TryStartFromSession(_tutorialDirector);
+        }
+
+        void TickTutorialDirector()
+        {
+            if (_tutorialDirector == null || build?.Grid == null)
+                return;
+            _tutorialDirector.Tick(
+                build.Grid,
+                _stars?.CurrentStars ?? 0,
+                TutorialBoot.IsLobbyToolSelected(build));
         }
 
         void RestorePendingClockAndStars()
@@ -208,6 +237,7 @@ namespace BuildATower
                 if (pending.research != null)
                     _research.RestoreSnapshot(pending.research);
                 _weather.RestoreSnapshot(pending.weather, _clock.DayIndex, _clock.MinuteOfDay);
+                _health.RestoreSnapshot(pending.health);
                 _metro.RestoreSnapshot(pending.metro);
                 _macro?.RestoreSnapshot(pending.marketPulse, _clock.DayIndex);
             }
@@ -278,6 +308,7 @@ namespace BuildATower
         void Update()
         {
             if (build?.Grid == null || _clock == null || _agents == null) return;
+            TickTutorialDirector();
             _clock.Tick(Time.deltaTime);
             _weather?.AdvanceTo(_clock.DayIndex, _clock.MinuteOfDay);
             var research = _research;
