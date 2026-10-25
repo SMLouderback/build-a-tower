@@ -129,6 +129,7 @@ namespace BuildATower
                 }
                 SyncQueues(shaft.UpQueues, shaft.MinFloor, shaft.MaxFloor);
                 SyncQueues(shaft.DownQueues, shaft.MinFloor, shaft.MaxFloor);
+                ElevatorShaftRuntime.SyncMaintenanceFromRoom(room, shaft);
                 _shafts.Add(shaft);
             }
         }
@@ -177,6 +178,18 @@ namespace BuildATower
             }
 
             return false;
+        }
+
+        public void SyncShaftMaintenanceFromGrid(TowerGrid grid)
+        {
+            if (grid == null) return;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null || !room.Type.isElevatorShaft) continue;
+                var shaft = FindByRoomId(room.InstanceId);
+                if (shaft == null) continue;
+                ElevatorShaftRuntime.SyncMaintenanceFromRoom(room, shaft);
+            }
         }
 
         public ElevatorShaftRuntime FindByRoomId(int roomInstanceId)

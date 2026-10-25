@@ -178,6 +178,45 @@ namespace BuildATower
         bool Quarantined => _health != null && _health.Quarantined;
 
         /// <summary>
+        /// Clears tenants, visitors, and parking claims when a room loses power.
+        /// </summary>
+        public void VacateRoomLostPower(RoomInstance room, TowerGrid grid = null)
+        {
+            if (room?.Type == null) return;
+
+            if (room.Type.category == RoomCategory.Condo)
+                room.CondoSold = false;
+
+            var removedHotelGuest = false;
+            for (var i = _agents.Count - 1; i >= 0; i--)
+            {
+                var agent = _agents[i];
+                if (ReferenceEquals(agent.ParkingRoom, room))
+                {
+                    CancelCommercialVisit(agent);
+                    ParkingStalls.Release(agent);
+                    continue;
+                }
+
+                if (ReferenceEquals(agent.VisitTarget, room))
+                {
+                    CancelCommercialVisit(agent);
+                    continue;
+                }
+
+                if (!ReferenceEquals(agent.HomeRoom, room)) continue;
+
+                if (agent.Role == AgentRole.HotelGuest)
+                    removedHotelGuest = true;
+                CancelCommercialVisit(agent);
+                RemoveAgentAt(i);
+            }
+
+            if (removedHotelGuest && CountHomeOccupants(room) == 0)
+                MarkRoomDirtyForCleaning(room);
+        }
+
+        /// <summary>
         /// Fill multiplier from the tower's sick-room share. 1 when health is not wired in.
         /// </summary>
         float HealthFillMultiplier(TowerGrid grid, float threshold)
@@ -433,7 +472,7 @@ namespace BuildATower
             // (FormatterServices / net8 hosts), which would false-negative claimable checks.
             if (room == null || ReferenceEquals(room.Type, null)) return false;
             if (room.Type.category != RoomCategory.Office) return false;
-            if (room.IsBroken) return false;
+            if (room.IsBroken || !room.Powered) return false;
             if (room.Type.maxOccupants <= 0) return false;
             return true;
         }
@@ -670,7 +709,7 @@ namespace BuildATower
         {
             if (room == null || ReferenceEquals(room.Type, null)) return false;
             if (room.Type.category != RoomCategory.Condo) return false;
-            if (room.IsBroken) return false;
+            if (room.IsBroken || !room.Powered) return false;
             if (room.CondoSold) return false;
             if (room.Type.maxOccupants <= 0) return false;
             return true;
@@ -909,7 +948,9 @@ namespace BuildATower
                     _ => AgentRole.Security
                 };
                 var want = room.StaffedWorkers;
-                if (room.Type.id == ClinicId && room.IsBroken)
+                if (room.Type.id == ClinicId && (room.IsBroken || !room.Powered))
+                    want = 0;
+                if (room.Type.id == HousekeepingId && !room.Powered)
                     want = 0;
                 var existing = 0;
                 for (var i = 0; i < _agents.Count; i++)
@@ -1427,10 +1468,16 @@ namespace BuildATower
             if (agent == null || grid == null || agent.ServiceTarget != null) return false;
 
             if (agent.Role == AgentRole.Maid)
+            {
+                if (agent.HomeRoom != null && !agent.HomeRoom.Powered) return false;
                 return TryAssignMaidCleanJob(agent, grid);
+            }
 
             if (agent.Role == AgentRole.Doctor)
+            {
+                if (agent.HomeRoom != null && !agent.HomeRoom.Powered) return false;
                 return TryAssignDoctorJob(agent, grid);
+            }
 
             if (agent.Role == AgentRole.Handyman)
             {
@@ -2006,7 +2053,7 @@ namespace BuildATower
             foreach (var room in grid.Rooms)
             {
                 if (room?.Type == null) continue;
-                if (room.IsBroken) continue;
+                if (room.IsBroken || !room.Powered) continue;
                 if (!ShopVisitRules.IsTrafficVenue(room.Type)) continue;
                 if (!ShopVisitRules.IsOpen(room.Type, minuteOfDay)) continue;
                 if (room.ConcurrentVisitors >= ShopVisitRules.SlotCount(room.Type)) continue;
@@ -2573,7 +2620,7 @@ namespace BuildATower
             if (room == null || ReferenceEquals(room.Type, null)) return false;
             if (room.Type.category != RoomCategory.Hotel) return false;
             if (room.Dirty) return false;
-            if (room.IsBroken) return false;
+            if (room.IsBroken || !room.Powered) return false;
             if (room.Type.maxOccupants <= 0) return false;
             return true;
         }
@@ -2689,6 +2736,7 @@ namespace BuildATower
                 agent.HomeRoom != null &&
                 !agent.HomeRoom.Dirty &&
                 !agent.HomeRoom.IsBroken &&
+                agent.HomeRoom.Powered &&
                 IsHotelCheckInDue(minute, agent.CheckInMinute))
             {
                 var spawn = ArrivalSpawnCell(agent, grid, lobby);

@@ -370,7 +370,7 @@ namespace BuildATower
                         sickRoomsByFloor[room.Origin.y] = sick + 1;
                     }
                 }
-                else if (room.Type.id == AgentSystem.ClinicId && !room.IsBroken)
+                else if (room.Type.id == AgentSystem.ClinicId && !room.IsBroken && room.Powered)
                 {
                     clinicFloors.Add(room.Origin.y);
                 }
@@ -488,6 +488,13 @@ namespace BuildATower
 
             var capacity = PowerSystem.Capacity(plantLevels.ToArray(), plantBroken.ToArray());
             var poweredIds = new HashSet<int>(PowerSystem.Assign(needs, capacity));
+            var wasPowered = new Dictionary<int, bool>();
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null || !DrawsPowerWhenHealthy(room)) continue;
+                wasPowered[room.InstanceId] = room.Powered;
+            }
+
             foreach (var room in grid.Rooms)
             {
                 if (room?.Type == null) continue;
@@ -501,6 +508,15 @@ namespace BuildATower
                 room.Powered = !room.IsBroken && poweredIds.Contains(room.InstanceId);
             }
 
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                if (!wasPowered.TryGetValue(room.InstanceId, out var hadPower) || !hadPower || room.Powered)
+                    continue;
+                _agents?.VacateRoomLostPower(room, grid);
+            }
+
+            _elevators?.SyncShaftMaintenanceFromGrid(grid);
             CapturePowerBrokenSnapshot(grid);
         }
 

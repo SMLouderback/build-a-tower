@@ -40,7 +40,7 @@ namespace BuildATower
             for (var i = 0; i < rooms.Count; i++)
             {
                 var room = rooms[i];
-                if (room?.Type == null || room.Type.id != TrashId || room.IsBroken)
+                if (room?.Type == null || room.Type.id != TrashId || room.IsBroken || !room.Powered)
                     continue;
 
                 if (WithinRange(originX, floor, room.Origin.x, room.Origin.y, TrashHorizontalRange, TrashVerticalRange))
@@ -93,7 +93,7 @@ namespace BuildATower
 
                 if (room.Type.id == facilityTypeId)
                 {
-                    if (!room.IsBroken && !room.Dirty)
+                    if (!room.IsBroken && !room.Dirty && room.Powered)
                         facilities.Add(room);
                     continue;
                 }

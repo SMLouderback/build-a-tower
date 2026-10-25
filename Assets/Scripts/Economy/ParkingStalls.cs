@@ -310,7 +310,7 @@ namespace BuildATower
 
             foreach (var room in grid.Rooms)
             {
-                if (!IsParkingAccessible(grid, room)) continue;
+                if (!IsParkingAccessible(grid, room) || !room.Powered) continue;
                 var cap = Mathf.Max(0, room.Type.maxOccupants);
                 var used = 0;
                 if (agents != null)

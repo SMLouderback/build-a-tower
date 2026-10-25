@@ -1,3 +1,4 @@
+using System.Linq;
 using BuildATower;
 using NUnit.Framework;
 using UnityEngine;
@@ -6,6 +7,7 @@ namespace BuildATower.Tests
 {
     public class PowerTickTests
     {
+        static readonly System.Random GuestRng = new(7);
         [TearDown]
         public void TearDown()
         {
@@ -63,6 +65,94 @@ namespace BuildATower.Tests
                 PowerSystem.Capacity(new[] { plant.UtilityLevel }, new[] { true }));
         }
 
+        [Test]
+        public void Dark_hotel_is_not_offered_to_new_guests()
+        {
+            var (sim, grid, _, hotel) = CreateTowerWithElevatorAndHotel();
+            sim.Power();
+            var agents = sim.Agents;
+
+            Assert.IsTrue(
+                agents.TryFindHotelRoomForGuest(grid, WealthBand.Basic, 0, GuestRng, out _, out _));
+
+            hotel.Powered = false;
+            Assert.IsFalse(
+                agents.TryFindHotelRoomForGuest(grid, WealthBand.Basic, 0, GuestRng, out _, out _));
+        }
+
+        [Test]
+        public void Powered_to_dark_edge_vacates_hotel_guest_once()
+        {
+            var (sim, grid, _, hotel) = CreateTowerWithElevatorAndHotel();
+            sim.Power();
+            sim.Agents.SyncHomes(grid, currentStars: 5, averageCrime: 0f);
+
+            var guestsBefore = sim.Agents.Agents.Count(a => ReferenceEquals(a.HomeRoom, hotel));
+            Assert.Greater(guestsBefore, 0, "Hotel should have at least one guest after SyncHomes.");
+
+            hotel.Condition = 0;
+            sim.Power();
+            Assert.IsFalse(hotel.Powered);
+
+            var guestsAfterFirst = sim.Agents.Agents.Count(a => ReferenceEquals(a.HomeRoom, hotel));
+            Assert.AreEqual(0, guestsAfterFirst, "Guests should leave when the hotel goes dark.");
+            Assert.IsTrue(hotel.Dirty, "Vacated hotel should be marked dirty for housekeeping.");
+
+            sim.Power();
+            Assert.IsFalse(hotel.Powered, "Hotel should stay dark at capacity.");
+            var guestsAfterSecond = sim.Agents.Agents.Count(a => ReferenceEquals(a.HomeRoom, hotel));
+            Assert.AreEqual(0, guestsAfterSecond, "Staying dark must not vacate again.");
+        }
+
+        [Test]
+        public void Player_maintenance_persists_while_shaft_is_powered_and_after_power_returns()
+        {
+            var (sim, grid, elevator, _) = CreateTowerWithElevatorAndHotel();
+            sim.Power();
+            var shaft = sim.Elevators.FindByRoomId(elevator.InstanceId);
+            Assert.IsNotNull(shaft);
+
+            elevator.PlayerMaintenance = true;
+            SyncElevatorMaintenance(elevator, shaft);
+            Assert.IsTrue(elevator.Powered);
+            Assert.IsTrue(shaft.InMaintenance, "Player maintenance stops a powered shaft.");
+
+            elevator.Powered = false;
+            SyncElevatorMaintenance(elevator, shaft);
+            Assert.IsTrue(
+                shaft.InMaintenance,
+                "Player maintenance stays active while the shaft is dark.");
+
+            elevator.Powered = true;
+            SyncElevatorMaintenance(elevator, shaft);
+            Assert.IsTrue(
+                shaft.InMaintenance,
+                "Player maintenance survives once shaft power returns.");
+
+            elevator.PlayerMaintenance = false;
+            SyncElevatorMaintenance(elevator, shaft);
+            Assert.IsFalse(shaft.InMaintenance, "Exit maintenance on a powered shaft restores service.");
+
+            elevator.Powered = false;
+            elevator.PlayerMaintenance = true;
+            SyncElevatorMaintenance(elevator, shaft);
+            elevator.PlayerMaintenance = false;
+            SyncElevatorMaintenance(elevator, shaft);
+            Assert.IsTrue(
+                shaft.InMaintenance,
+                "Exit maintenance on a dark shaft leaves it stopped.");
+        }
+
+        static void SyncElevatorMaintenance(RoomInstance elevator, ElevatorShaftRuntime shaft) =>
+            ElevatorShaftRuntime.SyncMaintenanceFromRoom(elevator, shaft);
+
+        static void ShedHotelPower(TowerSimulation sim, TowerGrid grid)
+        {
+            for (var i = 0; i < 18; i++)
+                Assert.IsTrue(grid.TryPlace(FillerType(), FillerCell(i), out _));
+            sim.Power();
+        }
+
         static (TowerSimulation sim, TowerGrid grid, RoomInstance elevator, RoomInstance hotel)
             CreateTowerWithElevatorAndHotel()
         {
@@ -77,6 +167,7 @@ namespace BuildATower.Tests
             Assert.IsTrue(grid.TryPlace(ElevatorType(), new Vector2Int(0, 0), out var elevator));
             Assert.IsTrue(grid.TryPlace(HotelType(), new Vector2Int(4, 1), out var hotel));
 
+            sim.Router.Rebuild(grid);
             return (sim, grid, elevator, hotel);
         }
 

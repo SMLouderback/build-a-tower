@@ -397,8 +397,10 @@ namespace BuildATower
                 return false;
             var sim = GetComponent<TowerSimulation>();
             if (sim?.Elevators == null) return false;
-            if (!sim.Elevators.TrySetMaintenance(SelectedRoom.InstanceId, inMaintenance))
-                return false;
+            SelectedRoom.PlayerMaintenance = inMaintenance;
+            var shaft = sim.Elevators.FindByRoomId(SelectedRoom.InstanceId);
+            if (shaft == null) return false;
+            ElevatorShaftRuntime.SyncMaintenanceFromRoom(SelectedRoom, shaft);
 
             // Re-route anyone the shaft can no longer serve so nobody is left queued.
             sim.Agents?.OnElevatorServiceChanged(SelectedRoom.InstanceId);

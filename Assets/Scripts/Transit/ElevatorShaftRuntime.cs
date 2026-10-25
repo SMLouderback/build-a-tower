@@ -19,6 +19,12 @@ namespace BuildATower
         public Dictionary<int, Queue<int>> DownQueues;
         public bool InMaintenance;
 
+        public static void SyncMaintenanceFromRoom(RoomInstance room, ElevatorShaftRuntime shaft)
+        {
+            if (shaft == null) return;
+            shaft.InMaintenance = room != null && (room.PlayerMaintenance || !room.Powered);
+        }
+
         public int PassengersToday { get; private set; }
         public float WaitSumToday { get; private set; }
         public int WaitSamplesToday { get; private set; }
