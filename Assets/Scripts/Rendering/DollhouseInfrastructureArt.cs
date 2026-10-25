@@ -15,9 +15,9 @@ namespace BuildATower
         public static readonly Color Cement = new(0.48f, 0.46f, 0.42f, 1f);
         public static readonly Color CementDark = new(0.38f, 0.36f, 0.33f, 1f);
 
-        public const float FloorBandFrac = 0.14f;
-        public const float CeilingBandFrac = 0.11f;
-        public const float PartyWallFrac = 0.07f;
+        public const float FloorBandFrac = 0.16f;
+        public const float CeilingBandFrac = 0.14f;
+        public const float PartyWallFrac = 0.10f;
 
         static readonly Dictionary<CacheKey, Sprite> Cache = new();
 

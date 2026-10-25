@@ -51,7 +51,21 @@
   align-items: stretch;
   flex-grow: 1;
   flex-shrink: 1;
+  min-height: 0;
   overflow: hidden;
+}
+
+.panel-scroll {
+  flex-grow: 1;
+  flex-shrink: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.panel-back {
+  flex-shrink: 0;
+  margin-top: 10px;
+  margin-bottom: 0;
 }
 
 .brand {

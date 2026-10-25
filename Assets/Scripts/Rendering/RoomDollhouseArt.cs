@@ -409,14 +409,18 @@ namespace BuildATower
         public static bool IsDollhouseChromaKey(Color c)
         {
             if (c.a < 0.08f) return true;
-            // Charcoal frames / mauve plaster / lamp spill have more green.
-            if (c.g > 0.16f) return false;
-            if (c.r < 0.70f) return false;
+            // Mauve plaster / cool grey walls carry more green — keep them.
+            if (c.g > 0.19f) return false;
             Color.RGBToHSV(c, out var h, out var s, out var v);
-            var magentaHue = h < 0.10f || h > 0.72f;
-            // Hot pink panes (~R237 G0 B108) and #FF00FF — high sat, low G.
-            if (magentaHue && s >= 0.55f && v >= 0.70f
-                && c.r >= c.g + 0.45f && c.b >= c.g + 0.25f)
+            var magentaHue = h < 0.12f || h > 0.70f;
+            if (!magentaHue || s < 0.40f) return false;
+            // Bright hot pink / #FF00FF glass (~R203 G54 B111 needs g<=0.19).
+            if (c.r >= 0.74f && v >= 0.50f
+                && c.r >= c.g + 0.45f && c.b >= c.g + 0.22f && c.r >= c.b + 0.15f)
+                return true;
+            // Darker pink plate fringe (~R113 G10 B58). Must stay clear of mauve plaster.
+            if (c.r >= 0.24f && c.g <= 0.13f && c.b >= 0.12f
+                && c.r >= c.b + 0.09f && c.r >= c.g + 0.22f && c.b >= c.g + 0.07f)
                 return true;
             if (c.r >= 0.85f && c.g <= 0.10f && c.b >= 0.85f)
                 return true;

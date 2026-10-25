@@ -1,0 +1,38 @@
+{
+  "label": "office-art-mix",
+  "stars": 5,
+  "funds": 8000000,
+  "lobbyMin": 0,
+  "lobbyMax": 28,
+  "placements": [
+    { "type": "office_micro", "x": 0, "y": 1 },
+    { "type": "office_micro", "x": 3, "y": 1 },
+    { "type": "office_micro", "x": 6, "y": 1 },
+    { "type": "office_studio", "x": 9, "y": 1 },
+    { "type": "office_studio", "x": 13, "y": 1 },
+    { "type": "office_studio", "x": 17, "y": 1 },
+    { "type": "office_micro", "x": 0, "y": 2 },
+    { "type": "office_micro", "x": 3, "y": 2 },
+    { "type": "office_studio", "x": 6, "y": 2 },
+    { "type": "office_base", "x": 10, "y": 2 },
+    { "type": "office_base", "x": 16, "y": 2 },
+    { "type": "office_studio", "x": 0, "y": 3 },
+    { "type": "office_base", "x": 4, "y": 3 },
+    { "type": "office_mid_standard", "x": 10, "y": 3 },
+    { "type": "office_mid_standard", "x": 18, "y": 3 },
+    { "type": "office_base", "x": 0, "y": 4 },
+    { "type": "office_mid_standard", "x": 6, "y": 4 },
+    { "type": "office_studio", "x": 14, "y": 4 },
+    { "type": "office_studio", "x": 18, "y": 4 }
+  ],
+  "expect": {
+    "maxMagentaPct": 0.12,
+    "maxClearEdgePct": 10.0,
+    "notes": [
+      "No hot magenta on ceilings or frames.",
+      "Office walls read solid cool-grey (not hollow sky through entire room).",
+      "Window panes show sky (alpha), not flat grey fill.",
+      "Adjacent rooms seal shared-side windows."
+    ]
+  }
+}

@@ -46,9 +46,9 @@
 - Keys: `bat.tutorial.guided`, `bat.tutorial.hoverTips`
 - `ResetForTests()` clears keys
 
-- [ ] **Step 1: Failing tests** — defaults on; set/get round-trip
-- [ ] **Step 2: Implement**
-- [ ] **Step 3: PASS**
+- [x] **Step 1: Failing tests** — defaults on; set/get round-trip
+- [x] **Step 2: Implement**
+- [x] **Step 3: PASS**
 - [ ] **Step 4: Commit** only if asked
 
 ---
@@ -60,14 +60,14 @@
 - Create: `TutorialDirectorTests.cs`
 
 **Interfaces:**
-- Enum: `LobbyTool, PlaceLobby, PlaceLiving, PlaceStairs, WaitElevator, PlaceElevator, ExtendElevator, Done, Inactive`
+- Enum: `Inactive, Intro, LobbyTool, PlaceLobby, PlaceLiving, PlaceStairs, WaitElevator, PlaceElevator, ExtendElevator, Done`
 - `TryStart()`, `Skip()`, `Tick(grid, stars, lobbyToolSelected)`, `CurrentStep`, `IsActive`
 - Snapshot elevator max span when entering PlaceElevator for extend detection
 - Living = Office/Condo/Hotel categories
 
-- [ ] **Step 1: Failing tests** for each completion rule + Skip + skip-ahead when lobby already exists
-- [ ] **Step 2: Implement**
-- [ ] **Step 3: PASS**
+- [x] **Step 1: Failing tests** for each completion rule + Skip + skip-ahead when lobby already exists
+- [x] **Step 2: Implement**
+- [x] **Step 3: PASS**
 - [ ] **Step 4: Commit** only if asked
 
 ---
@@ -83,9 +83,9 @@
 - `StartNewGame`: set true iff difficulty is Sandbox|Easy|Normal && `TutorialPrefs.GuidedTutorialEnabled`
 - Load / ApplySnapshot path: set false
 
-- [ ] **Step 1: Failing tests**
-- [ ] **Step 2: Implement**
-- [ ] **Step 3: PASS**
+- [x] **Step 1: Failing tests**
+- [x] **Step 2: Implement**
+- [x] **Step 3: PASS**
 - [ ] **Step 4: Commit** only if asked
 
 ---
@@ -96,9 +96,9 @@
 - Modify: `TowerSimulation.cs` and/or `TowerHudController.cs`
 - Test: boot calls `TryStart` when flag consumed
 
-- [ ] **Step 1: Failing test or thin seam test**
-- [ ] **Step 2: Wire Tick after builds / each frame with grid+stars+tool state**
-- [ ] **Step 3: PASS**
+- [x] **Step 1: Failing test or thin seam test** — `TutorialBoot` + `TutorialBootTests`
+- [x] **Step 2: Wire Tick after builds / each frame with grid+stars+tool state** — `TowerSimulation` owns director; HUD exposes `TutorialDirector`
+- [x] **Step 3: PASS** — EditMode `TutorialBootTests` green
 - [ ] **Step 4: Commit** only if asked
 
 ---
@@ -115,9 +115,9 @@
 - Pulse target rects for lobby tool / family icons / stairs / elevator; world strip for lobby band / elevator top
 - Short copy per step (const strings OK)
 
-- [ ] **Step 1: Minimal EditMode test for copy/highlight helper if extracted**
-- [ ] **Step 2: Draw coach + highlights**
-- [ ] **Step 3: Play-smoke checklist manually noted in progress**
+- [x] **Step 1: Minimal EditMode test for copy/highlight helper if extracted** — `TutorialHudChromeTests`
+- [x] **Step 2: Draw coach + highlights** — coach card, pulse/arrow on tool rects, world hints for lobby band / shaft
+- [x] **Step 3: Play-smoke checklist manually noted in progress**
 - [ ] **Step 4: Commit** only if asked
 
 ---
@@ -128,9 +128,9 @@
 - Modify: `TowerHudController.DrawPauseOptions`
 - Gate `_hoverTooltip` / `GUI.tooltip` path when hover tips off
 
-- [ ] **Step 1: Test prefs reflected / tip helper returns empty when off**
-- [ ] **Step 2: UI toggles + gate**
-- [ ] **Step 3: PASS**
+- [x] **Step 1: Test prefs reflected / tip helper returns empty when off** — `TutorialHudChrome.ResolveHoverTip` / `GateHoverTip`
+- [x] **Step 2: UI toggles + gate** — Options Guided/Hover tips; tip path gated
+- [x] **Step 3: PASS**
 - [ ] **Step 4: Commit** only if asked
 
 ---

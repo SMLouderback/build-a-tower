@@ -91,6 +91,8 @@ namespace BuildATower
         WeatherSystem _weather;
         HealthSystem _health;
         MetroSystem _metro;
+        TutorialDirector _tutorialDirector;
+        bool _tutorialBootAttempted;
         readonly System.Random _climateRng = new();
         readonly System.Random _conferenceRng = new();
         readonly System.Random _newsRng = new();
@@ -116,6 +118,9 @@ namespace BuildATower
         public StairsPathfinder Pathfinder => _pathfinder;
         public ElevatorSystem Elevators => _elevators;
         public TransitRouter Router => _router;
+
+        /// <summary>Guided new-player coach. HUD (Task 5) reads this for coach UI.</summary>
+        public TutorialDirector TutorialDirector => _tutorialDirector;
 
         const float AgentSampleIntervalGameMinutes = 2f;
         float _agentSampleAccumulator;
@@ -145,6 +150,7 @@ namespace BuildATower
 
             EnsureDayNightSkyController();
             ParallaxBackdrop.EnsureInScene();
+            SkyCloudLayer.EnsureInScene();
             WeatherFx.EnsureInScene();
             MetroTunnelView.EnsureInScene();
 
@@ -201,6 +207,26 @@ namespace BuildATower
             }
             elevatorView.Bind(_elevators);
             EnsureCelebrationController();
+            EnsureTutorialDirector();
+        }
+
+        void EnsureTutorialDirector()
+        {
+            _tutorialDirector ??= new TutorialDirector();
+            if (_tutorialBootAttempted)
+                return;
+            _tutorialBootAttempted = true;
+            TutorialBoot.TryStartFromSession(_tutorialDirector);
+        }
+
+        void TickTutorialDirector()
+        {
+            if (_tutorialDirector == null || build?.Grid == null)
+                return;
+            _tutorialDirector.Tick(
+                build.Grid,
+                _stars?.CurrentStars ?? 0,
+                TutorialBoot.IsLobbyToolSelected(build));
         }
 
         void RestorePendingClockAndStars()
@@ -288,6 +314,7 @@ namespace BuildATower
         void Update()
         {
             if (build?.Grid == null || _clock == null || _agents == null) return;
+            TickTutorialDirector();
             _clock.Tick(Time.deltaTime);
             _weather?.AdvanceTo(_clock.DayIndex, _clock.MinuteOfDay);
             var research = _research;

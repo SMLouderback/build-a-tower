@@ -138,9 +138,9 @@
 - After place/remove, repaint rooms that shared an edge with the changed footprint
 - Keep dirty/broken `DollhouseTint` behavior
 
-- [ ] **Step 1: Failing test** or focused host test for neighbor rebuild invocation
-- [ ] **Step 2: Wire paint + rebuild**
-- [ ] **Step 3: PASS**
+- [x] **Step 1: Failing test** or focused host test for neighbor rebuild invocation
+- [x] **Step 2: Wire paint + rebuild**
+- [x] **Step 3: PASS**
 - [ ] **Step 4: Commit** only if asked
 
 ---

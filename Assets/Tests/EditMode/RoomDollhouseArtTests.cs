@@ -122,8 +122,11 @@ namespace BuildATower.Tests
         {
             Assert.IsTrue(RoomDollhouseArt.IsDollhouseChromaKey(new Color(1f, 0f, 1f, 1f)));
             Assert.IsTrue(RoomDollhouseArt.IsDollhouseChromaKey(new Color(0.93f, 0.04f, 0.72f, 1f)));
+            // Dark pink outer-shell fringe that was reading as pink towers.
+            Assert.IsTrue(RoomDollhouseArt.IsDollhouseChromaKey(new Color(113f / 255f, 10f / 255f, 58f / 255f, 1f)));
             // Mauve hotel plaster — must stay opaque.
             Assert.IsFalse(RoomDollhouseArt.IsDollhouseChromaKey(new Color(0.62f, 0.42f, 0.55f, 1f)));
+            Assert.IsFalse(RoomDollhouseArt.IsDollhouseChromaKey(new Color(76f / 255f, 44f / 255f, 62f / 255f, 1f)));
             Assert.IsFalse(RoomDollhouseArt.IsDollhouseChromaKey(new Color(0.72f, 0.55f, 0.28f, 1f)));
         }
 

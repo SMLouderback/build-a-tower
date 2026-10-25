@@ -16,12 +16,22 @@ namespace BuildATower
 
         /// <summary>Exterior sky-influence factor for subterranean / parking cells.</summary>
         public const float SubterraneanSkyBlend = 0.22f;
+        /// <summary>Softens exterior sky color for occupied above-ground interiors.</summary>
+        public const float MidTowerInteriorSkyBlend = 0.62f;
 
         public static Color Apply(Color baseColor, int minuteOfDay, bool subterranean)
+        {
+            var skyBlend = subterranean ? SubterraneanSkyBlend : 1f;
+            return Apply(baseColor, minuteOfDay, subterranean, skyBlend);
+        }
+
+        public static Color Apply(Color baseColor, int minuteOfDay, bool subterranean, float skyBlend)
         {
             var light = LightAtMinute(minuteOfDay);
             if (subterranean)
                 light = Color.Lerp(Fluorescent, light, SubterraneanSkyBlend);
+            else if (skyBlend < 0.999f)
+                light = Color.Lerp(Fluorescent, light, Mathf.Clamp01(skyBlend));
 
             return new Color(
                 Mathf.Clamp01(baseColor.r * light.r),

@@ -50,5 +50,26 @@ namespace BuildATower.Tests
             Assert.IsTrue(AgentView.ShouldFlipX(-0.05f, previousFlip: false, moving: true));
             Assert.IsFalse(AgentView.ShouldFlipX(0.05f, previousFlip: true, moving: true));
         }
+
+        [Test]
+        public void PlayZoomContrast_boosts_value_and_preserves_alpha()
+        {
+            var source = new Color(0.2f, 0.35f, 0.5f, 0.6f);
+            var boosted = AgentView.PlayZoomContrast(source);
+
+            Assert.Greater(boosted.grayscale, source.grayscale);
+            Assert.AreEqual(source.a, boosted.a, 0.001f);
+            Assert.LessOrEqual(boosted.r, 1f);
+            Assert.LessOrEqual(boosted.g, 1f);
+            Assert.LessOrEqual(boosted.b, 1f);
+        }
+
+        [Test]
+        public void PlayZoomSpriteTint_uses_subtle_value_boost_for_agent_sheets()
+        {
+            Assert.Greater(AgentView.PlayZoomSpriteTint.r, 1f);
+            Assert.Greater(AgentView.PlayZoomSpriteTint.g, 1f);
+            Assert.AreEqual(1f, AgentView.PlayZoomSpriteTint.a, 0.001f);
+        }
     }
 }

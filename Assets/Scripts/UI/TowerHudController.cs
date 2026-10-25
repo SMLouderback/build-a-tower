@@ -106,6 +106,8 @@ namespace BuildATower
             IconRect(cx, cy, index, MenuStripColumns);
 
         const string BuildDockPrefsKey = "bat.buildDock";
+        const string TutorialCoachPrefsKey = "bat.tutorialCoach";
+        const float TutorialCoachGripHeight = 22f;
         const string BuildInfoPrefsKey = "bat.buildInfo";
         const float BuildDockGripHeight = 24f;
         const float BuildPanelPad = 8f;
@@ -164,6 +166,30 @@ namespace BuildATower
         Texture2D _whiteTex;
         string _hoverTooltip;
         readonly TowerNewsHud _newsHud = new();
+
+        // Last-drawn build-control rects for tutorial pulse (cleared each OnGUI).
+        Rect _tutorialLobbyToolRect;
+        Rect _tutorialLivingOfficeRect;
+        Rect _tutorialLivingHotelRect;
+        Rect _tutorialLivingCondoRect;
+        Rect _tutorialTransitFamilyRect;
+        Rect _tutorialStairsToolRect;
+        Rect _tutorialElevatorToolRect;
+        bool _tutorialHasLobbyTool;
+        bool _tutorialHasLivingOffice;
+        bool _tutorialHasLivingHotel;
+        bool _tutorialHasLivingCondo;
+        bool _tutorialHasTransitFamily;
+        bool _tutorialHasStairsTool;
+        bool _tutorialHasElevatorTool;
+        /// <summary>0 = intro pose, 1 = docked near tools (after Continue).</summary>
+        float _tutorialCardDockBlend;
+        TutorialStep _tutorialCardStepSeen = TutorialStep.Inactive;
+        Rect _tutorialCoachRect;
+        Rect _tutorialWorldHintRect;
+        bool _tutorialCoachPinned;
+        bool _tutorialDragging;
+        Vector2 _tutorialDragOffset;
 
         enum PauseUiState
         {
@@ -330,6 +356,10 @@ namespace BuildATower
                 celebration = controller;
         }
 
+        /// <summary>Guided coach owned by simulation; Task 5 draws from this.</summary>
+        public TutorialDirector TutorialDirector =>
+            simulation != null ? simulation.TutorialDirector : null;
+
         /// <summary>True when the GUI point (IMGUI / flipped Y) is over the top bar, info/goals/maps dropdown, graph, or side panel.</summary>
         public bool ContainsGuiPoint(Vector2 guiPoint) =>
             GameSession.HasRestoreFallbackNotice ||
@@ -343,7 +373,21 @@ namespace BuildATower
             (_researchOpen && _researchDropdownRect.Contains(guiPoint)) ||
             (_mapsGraphRect.width > 0f && _mapsGraphRect.Contains(guiPoint)) ||
             (_mapsLegendRect.width > 0f && _mapsLegendRect.Contains(guiPoint)) ||
+            TutorialChromeContains(guiPoint) ||
             _newsHud.ContainsGuiPoint(guiPoint);
+
+        /// <summary>
+        /// Coach card and world hint sit over the tower. Clicks there must not
+        /// deselect a room or start a one-cell lobby drag.
+        /// </summary>
+        bool TutorialChromeContains(Vector2 guiPoint)
+        {
+            var director = TutorialDirector;
+            if (director == null || !director.IsActive)
+                return false;
+            return (_tutorialCoachRect.width > 0f && _tutorialCoachRect.Contains(guiPoint))
+                || (_tutorialWorldHintRect.width > 0f && _tutorialWorldHintRect.Contains(guiPoint));
+        }
 
         void Awake()
         {
@@ -685,6 +729,7 @@ namespace BuildATower
                 simulation = build.GetComponent<TowerSimulation>() ?? FindAnyObjectByType<TowerSimulation>();
 
             _hoverTooltip = null;
+            ClearTutorialHighlightRects();
 
             var gap = edgeGapPixels;
             const float row = 20f;
@@ -758,6 +803,7 @@ namespace BuildATower
             DrawFamilyPopout(iconStyle, title, label, stars);
             DrawBuildInfoPanel(title, label, stars, agents, row, btnH);
 
+            DrawTutorialCoach(title, label);
             DrawHoverTooltip(label);
             DrawRestoreFallbackOverlay(title, label);
             DrawPauseOverlay(title, label);
@@ -876,7 +922,7 @@ namespace BuildATower
             float panelH = _pauseUi switch
             {
                 PauseUiState.ConfirmQuit => 184f,
-                PauseUiState.Options => 360f,
+                PauseUiState.Options => 420f,
                 PauseUiState.Account => 260f,
                 PauseUiState.Feedback => 440f,
                 PauseUiState.Load => 360f,
@@ -1180,44 +1226,57 @@ namespace BuildATower
             cy += 36f;
 
             var audio = TowerAudio.Ensure();
-            var buses = audio.Buses;
-            if (buses == null)
+            var buses = audio != null ? audio.Buses : null;
+            if (buses != null)
             {
-                if (GUI.Button(new Rect(cx, cy, inner, btnH), "Back"))
-                    _pauseUi = PauseUiState.Paused;
-                return;
+                bool mute = GUI.Toggle(new Rect(cx, cy, inner, 22f), buses.MasterMute, " Master Mute", label);
+                if (mute != buses.MasterMute)
+                {
+                    buses.MasterMute = mute;
+                    PersistAudioBuses(audio);
+                }
+
+                cy += 28f;
+                cy = DrawVolumeSlider(cx, cy, inner, "Master", buses.Master, label, v =>
+                {
+                    buses.Master = v;
+                    PersistAudioBuses(audio);
+                });
+                cy = DrawVolumeSlider(cx, cy, inner, "SFX", buses.Sfx, label, v =>
+                {
+                    buses.Sfx = v;
+                    PersistAudioBuses(audio);
+                });
+                cy = DrawVolumeSlider(cx, cy, inner, "Ambience", buses.Ambience, label, v =>
+                {
+                    buses.Ambience = v;
+                    PersistAudioBuses(audio);
+                });
+                cy = DrawVolumeSlider(cx, cy, inner, "Music", buses.Music, label, v =>
+                {
+                    buses.Music = v;
+                    PersistAudioBuses(audio);
+                });
+                cy += 6f;
             }
 
-            bool mute = GUI.Toggle(new Rect(cx, cy, inner, 22f), buses.MasterMute, " Master Mute", label);
-            if (mute != buses.MasterMute)
-            {
-                buses.MasterMute = mute;
-                PersistAudioBuses(audio);
-            }
+            var guided = GUI.Toggle(
+                new Rect(cx, cy, inner, 22f),
+                TutorialPrefs.GuidedTutorialEnabled,
+                " Guided tutorial",
+                label);
+            if (guided != TutorialPrefs.GuidedTutorialEnabled)
+                TutorialPrefs.GuidedTutorialEnabled = guided;
+            cy += 26f;
+            var hoverTips = GUI.Toggle(
+                new Rect(cx, cy, inner, 22f),
+                TutorialPrefs.HoverTipsEnabled,
+                " Hover tips",
+                label);
+            if (hoverTips != TutorialPrefs.HoverTipsEnabled)
+                TutorialPrefs.HoverTipsEnabled = hoverTips;
 
             cy += 28f;
-            cy = DrawVolumeSlider(cx, cy, inner, "Master", buses.Master, label, v =>
-            {
-                buses.Master = v;
-                PersistAudioBuses(audio);
-            });
-            cy = DrawVolumeSlider(cx, cy, inner, "SFX", buses.Sfx, label, v =>
-            {
-                buses.Sfx = v;
-                PersistAudioBuses(audio);
-            });
-            cy = DrawVolumeSlider(cx, cy, inner, "Ambience", buses.Ambience, label, v =>
-            {
-                buses.Ambience = v;
-                PersistAudioBuses(audio);
-            });
-            cy = DrawVolumeSlider(cx, cy, inner, "Music", buses.Music, label, v =>
-            {
-                buses.Music = v;
-                PersistAudioBuses(audio);
-            });
-
-            cy += 8f;
             if (GUI.Button(new Rect(cx, cy, inner, btnH), "Reset layout"))
                 ResetBuildMenuLayout();
             cy += btnH + 8f;
@@ -2847,8 +2906,10 @@ namespace BuildATower
                     var family = _catalog[i];
                     var selected = _expandedFamily == family.Family;
                     var tip = $"{family.Label}\nClick to {(selected ? "collapse" : "expand")}";
+                    var iconRect = IconRect(cx, cy, i, MenuStripColumns);
+                    RememberTutorialFamilyRect(family.Family, iconRect);
                     if (DrawPictureButton(
-                            IconRect(cx, cy, i, MenuStripColumns),
+                            iconRect,
                             MenuIconIdForFamily(family.Family),
                             FamilyGlyph(family.Family),
                             tip,
@@ -2900,9 +2961,391 @@ namespace BuildATower
             return new Vector2(width, height);
         }
 
+        void ClearTutorialHighlightRects()
+        {
+            _tutorialHasLobbyTool = false;
+            _tutorialHasLivingOffice = false;
+            _tutorialHasLivingHotel = false;
+            _tutorialHasLivingCondo = false;
+            _tutorialHasTransitFamily = false;
+            _tutorialHasStairsTool = false;
+            _tutorialHasElevatorTool = false;
+        }
+
+        void RememberTutorialFamilyRect(BuildFamily family, Rect rect)
+        {
+            switch (family)
+            {
+                case BuildFamily.Office:
+                    _tutorialLivingOfficeRect = rect;
+                    _tutorialHasLivingOffice = true;
+                    break;
+                case BuildFamily.Hotel:
+                    _tutorialLivingHotelRect = rect;
+                    _tutorialHasLivingHotel = true;
+                    break;
+                case BuildFamily.Condo:
+                    _tutorialLivingCondoRect = rect;
+                    _tutorialHasLivingCondo = true;
+                    break;
+                case BuildFamily.Transit:
+                    _tutorialTransitFamilyRect = rect;
+                    _tutorialHasTransitFamily = true;
+                    break;
+            }
+        }
+
+        void RememberTutorialRoomRect(RoomTypeSO room, Rect rect)
+        {
+            if (room == null) return;
+            if (room.isStairs)
+            {
+                _tutorialStairsToolRect = rect;
+                _tutorialHasStairsTool = true;
+                return;
+            }
+
+            if (!room.isElevatorShaft) return;
+
+            // Prefer the starter (non-express/service) shaft for the coach pulse.
+            var id = room.id ?? string.Empty;
+            var isSpecial = id.Contains("express") || id.Contains("service");
+            if (!_tutorialHasElevatorTool || !isSpecial)
+            {
+                _tutorialElevatorToolRect = rect;
+                _tutorialHasElevatorTool = true;
+            }
+        }
+
+        void DrawTutorialCoach(GUIStyle title, GUIStyle label)
+        {
+            var director = TutorialDirector;
+            if (director == null || !director.IsActive)
+            {
+                _tutorialCoachPinned = false;
+                _tutorialDragging = false;
+                _tutorialCardStepSeen = TutorialStep.Inactive;
+                _tutorialCoachRect = default;
+                _tutorialWorldHintRect = default;
+                return;
+            }
+
+            if (_pauseUi != PauseUiState.Playing) return;
+            if (GameSession.HasRestoreFallbackNotice) return;
+
+            var highlight = director.GetHighlight();
+            var intro = director.AwaitingContinue;
+            var step = director.CurrentStep;
+            if (step != _tutorialCardStepSeen)
+            {
+                if (intro)
+                {
+                    _tutorialCardDockBlend = 0f;
+                    _tutorialCoachPinned = false;
+                }
+                else if (!_tutorialCoachPinned &&
+                         HudFloatingPanel.TryLoadRect(TutorialCoachPrefsKey, out var saved))
+                {
+                    _tutorialCoachRect = saved;
+                    _tutorialCoachPinned = true;
+                    _tutorialCardDockBlend = 1f;
+                }
+
+                _tutorialCardStepSeen = step;
+            }
+
+            var dockTarget = intro ? 0f : 1f;
+            if (!_tutorialCoachPinned)
+            {
+                var slideSpeed = 1f / Mathf.Max(0.05f, TutorialHudChrome.DockSlideSeconds);
+                _tutorialCardDockBlend = Mathf.MoveTowards(
+                    _tutorialCardDockBlend,
+                    dockTarget,
+                    Time.unscaledDeltaTime * slideSpeed);
+            }
+            else if (!intro)
+            {
+                _tutorialCardDockBlend = 1f;
+            }
+
+            if (!intro)
+            {
+                DrawTutorialTargetPulses(highlight.Target);
+                DrawTutorialWorldHint(highlight.Target, label);
+            }
+
+            if (string.IsNullOrEmpty(highlight.Title) && string.IsNullOrEmpty(highlight.Body))
+                return;
+
+            EnsureWhiteTex();
+            var introRect = TutorialHudChrome.IntroCardRect(Screen.width, Screen.height);
+            var dockRect = TutorialHudChrome.DockedCardRect(Screen.width, Screen.height);
+            var defaultCard = TutorialHudChrome.LerpCardRect(introRect, dockRect, _tutorialCardDockBlend);
+            // Extra height for the drag grip strip (like Build / Info panels).
+            defaultCard.height += TutorialCoachGripHeight;
+
+            if (!_tutorialCoachPinned)
+            {
+                _tutorialCoachRect = defaultCard;
+            }
+            else
+            {
+                _tutorialCoachRect.width = defaultCard.width;
+                _tutorialCoachRect.height = defaultCard.height;
+            }
+
+            _tutorialCoachRect = HudFloatingPanel.SoftClamp(
+                _tutorialCoachRect,
+                Screen.width,
+                Screen.height);
+
+            var card = _tutorialCoachRect;
+            var grip = new Rect(card.x, card.y, card.width, TutorialCoachGripHeight);
+            var wasDragging = _tutorialDragging;
+            if (HudFloatingPanel.DragGrip(
+                    grip,
+                    ref _tutorialCoachRect,
+                    Screen.width,
+                    Screen.height,
+                    ref _tutorialDragging,
+                    ref _tutorialDragOffset))
+            {
+                _tutorialCoachPinned = true;
+                card = _tutorialCoachRect;
+                grip = new Rect(card.x, card.y, card.width, TutorialCoachGripHeight);
+                if (wasDragging && !_tutorialDragging)
+                    HudFloatingPanel.SaveRect(TutorialCoachPrefsKey, _tutorialCoachRect);
+            }
+
+            var compact = _tutorialCardDockBlend > 0.55f;
+            var body = new Rect(card.x, card.y + TutorialCoachGripHeight, card.width, card.height - TutorialCoachGripHeight);
+
+            GUI.DrawTexture(
+                card,
+                _whiteTex,
+                ScaleMode.StretchToFill,
+                false,
+                0f,
+                TutorialHudChrome.CardFill,
+                0f,
+                0f);
+            GUI.DrawTexture(
+                grip,
+                _whiteTex,
+                ScaleMode.StretchToFill,
+                false,
+                0f,
+                new Color(0.18f, 0.16f, 0.13f, 0.92f),
+                0f,
+                0f);
+            DrawTutorialRectOutline(card, TutorialHudChrome.CardBorder, 2f);
+
+            var gripLabel = new GUIStyle(title)
+            {
+                fontSize = 11,
+                alignment = TextAnchor.MiddleLeft
+            };
+            gripLabel.normal.textColor = TutorialHudChrome.TitleText;
+            GUI.Label(new Rect(grip.x + 8f, grip.y, grip.width - 56f, grip.height), "Tutorial · drag", gripLabel);
+            if (GUI.Button(new Rect(grip.xMax - 52f, grip.y + 2f, 48f, grip.height - 4f), "Reset"))
+            {
+                HudFloatingPanel.ClearRect(TutorialCoachPrefsKey);
+                _tutorialCoachPinned = false;
+                _tutorialCardDockBlend = intro ? 0f : 1f;
+                _tutorialCoachRect = defaultCard;
+            }
+
+            var titleStyle = new GUIStyle(title)
+            {
+                fontSize = compact ? 13 : 16,
+                wordWrap = true
+            };
+            titleStyle.normal.textColor = TutorialHudChrome.TitleText;
+            var bodyStyle = new GUIStyle(label)
+            {
+                fontSize = compact ? 11 : 13,
+                wordWrap = true
+            };
+            bodyStyle.normal.textColor = TutorialHudChrome.BodyText;
+
+            var pad = compact ? 10f : 16f;
+            var inner = body.width - pad * 2f;
+            var cy = body.y + (compact ? 8f : 14f);
+            GUI.Label(new Rect(body.x + pad, cy, inner, compact ? 20f : 26f), highlight.Title ?? string.Empty, titleStyle);
+            cy += compact ? 22f : 30f;
+            var bodyH = compact ? 40f : 58f;
+            GUI.Label(new Rect(body.x + pad, cy, inner, bodyH), highlight.Body ?? string.Empty, bodyStyle);
+
+            var btnH = compact ? 24f : 30f;
+            var btnY = body.yMax - btnH - (compact ? 8f : 12f);
+            if (intro)
+            {
+                var gap = 8f;
+                var btnW = (inner - gap) * 0.5f;
+                if (GUI.Button(new Rect(body.x + pad, btnY, btnW, btnH), "Skip"))
+                {
+                    _tutorialCardDockBlend = 0f;
+                    _tutorialCoachPinned = false;
+                    director.Skip();
+                }
+
+                if (GUI.Button(new Rect(body.x + pad + btnW + gap, btnY, btnW, btnH), "Continue…"))
+                    director.Continue();
+            }
+            else
+            {
+                if (GUI.Button(new Rect(body.x + pad, btnY, inner, btnH), "Skip tutorial"))
+                {
+                    _tutorialCardDockBlend = 0f;
+                    _tutorialCoachPinned = false;
+                    director.Skip();
+                }
+            }
+        }
+
+        void DrawTutorialTargetPulses(TutorialHighlightTarget target)
+        {
+            switch (target)
+            {
+                case TutorialHighlightTarget.LobbyTool:
+                    if (_tutorialHasLobbyTool)
+                        DrawTutorialPulseWithArrow(_tutorialLobbyToolRect);
+                    break;
+                case TutorialHighlightTarget.LivingFamily:
+                    if (_tutorialHasLivingOffice)
+                        DrawTutorialPulseWithArrow(_tutorialLivingOfficeRect);
+                    if (_tutorialHasLivingHotel)
+                        DrawTutorialPulseWithArrow(_tutorialLivingHotelRect);
+                    if (_tutorialHasLivingCondo)
+                        DrawTutorialPulseWithArrow(_tutorialLivingCondoRect);
+                    break;
+                case TutorialHighlightTarget.StairsTool:
+                    if (_tutorialHasStairsTool)
+                        DrawTutorialPulseWithArrow(_tutorialStairsToolRect);
+                    else if (_tutorialHasTransitFamily)
+                        DrawTutorialPulseWithArrow(_tutorialTransitFamilyRect);
+                    break;
+                case TutorialHighlightTarget.ElevatorTool:
+                    if (_tutorialHasElevatorTool)
+                        DrawTutorialPulseWithArrow(_tutorialElevatorToolRect);
+                    else if (_tutorialHasTransitFamily)
+                        DrawTutorialPulseWithArrow(_tutorialTransitFamilyRect);
+                    break;
+            }
+        }
+
+        void DrawTutorialWorldHint(TutorialHighlightTarget target, GUIStyle label)
+        {
+            string hint = target switch
+            {
+                TutorialHighlightTarget.LobbyFloorBand =>
+                    "↓ Drag a lobby band across the ground floor",
+                TutorialHighlightTarget.ElevatorShaft =>
+                    "↓ Extend the elevator shaft to serve more floors",
+                _ => null
+            };
+            if (hint == null)
+            {
+                _tutorialWorldHintRect = default;
+                return;
+            }
+
+            var style = new GUIStyle(label)
+            {
+                fontSize = 13,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                wordWrap = true
+            };
+            style.normal.textColor = TutorialHudChrome.TitleText;
+            var rect = new Rect(Screen.width * 0.5f - 220f, Screen.height - 56f, 440f, 28f);
+            _tutorialWorldHintRect = rect;
+            EnsureWhiteTex();
+            GUI.DrawTexture(
+                rect,
+                _whiteTex,
+                ScaleMode.StretchToFill,
+                false,
+                0f,
+                new Color(0.14f, 0.12f, 0.09f, 0.75f),
+                0f,
+                0f);
+            GUI.Label(rect, hint, style);
+        }
+
+        void DrawTutorialPulseWithArrow(Rect target)
+        {
+            if (target.width <= 0f || target.height <= 0f) return;
+            EnsureWhiteTex();
+            var outline = TutorialHudChrome.PulseOutlineColor(Time.unscaledTime);
+            var pad = 3f + 2f * (outline.a - 0.35f);
+            var pulse = new Rect(
+                target.x - pad,
+                target.y - pad,
+                target.width + pad * 2f,
+                target.height + pad * 2f);
+            DrawTutorialRectOutline(pulse, outline, 2f);
+
+            // Soft arrow above the control (warm industrial, no neon).
+            var arrowStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 16,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter
+            };
+            arrowStyle.normal.textColor = outline;
+            var arrow = new Rect(target.x + target.width * 0.5f - 10f, target.y - 18f, 20f, 16f);
+            GUI.Label(arrow, "▼", arrowStyle);
+        }
+
+        void DrawTutorialRectOutline(Rect rect, Color color, float thickness)
+        {
+            EnsureWhiteTex();
+            var t = Mathf.Max(1f, thickness);
+            GUI.DrawTexture(
+                new Rect(rect.x, rect.y, rect.width, t),
+                _whiteTex,
+                ScaleMode.StretchToFill,
+                false,
+                0f,
+                color,
+                0f,
+                0f);
+            GUI.DrawTexture(
+                new Rect(rect.x, rect.yMax - t, rect.width, t),
+                _whiteTex,
+                ScaleMode.StretchToFill,
+                false,
+                0f,
+                color,
+                0f,
+                0f);
+            GUI.DrawTexture(
+                new Rect(rect.x, rect.y, t, rect.height),
+                _whiteTex,
+                ScaleMode.StretchToFill,
+                false,
+                0f,
+                color,
+                0f,
+                0f);
+            GUI.DrawTexture(
+                new Rect(rect.xMax - t, rect.y, t, rect.height),
+                _whiteTex,
+                ScaleMode.StretchToFill,
+                false,
+                0f,
+                color,
+                0f,
+                0f);
+        }
+
         void DrawHoverTooltip(GUIStyle label)
         {
-            var tip = string.IsNullOrEmpty(_hoverTooltip) ? GUI.tooltip : _hoverTooltip;
+            var tip = TutorialHudChrome.ResolveHoverTip(
+                _hoverTooltip,
+                GUI.tooltip,
+                TutorialPrefs.HoverTipsEnabled);
             if (string.IsNullOrEmpty(tip)) return;
 
             var mouse = Event.current.mousePosition;
@@ -2950,6 +3393,9 @@ namespace BuildATower
 
                     if (room == null) return;
 
+                    var iconRect = IconRect(cx, cy, i, MenuStripColumns);
+                    RememberTutorialRoomRect(room, iconRect);
+
                     var canBuild = stars == null || stars.CanBuild(room);
                     var tip = RoomTooltip(room, canBuild);
                     var color = room.placeholderColor;
@@ -2959,7 +3405,7 @@ namespace BuildATower
                     var wasEnabled = GUI.enabled;
                     GUI.enabled = wasEnabled && canBuild;
                     if (DrawPictureButton(
-                            IconRect(cx, cy, i, MenuStripColumns),
+                            iconRect,
                             MenuIconIdForRoom(room),
                             RoomGlyph(room),
                             tip,
@@ -3010,8 +3456,15 @@ namespace BuildATower
                 i =>
                 {
                     var tool = tools[i];
+                    var iconRect = IconRect(cx, cy, i, MenuStripColumns);
+                    if (tool.id == BuildMenuTool.Lobby)
+                    {
+                        _tutorialLobbyToolRect = iconRect;
+                        _tutorialHasLobbyTool = true;
+                    }
+
                     if (DrawPictureButton(
-                            IconRect(cx, cy, i, MenuStripColumns),
+                            iconRect,
                             MenuIconIdForTool(tool.id),
                             tool.glyph,
                             tool.tip,
@@ -3101,12 +3554,13 @@ namespace BuildATower
             GUI.backgroundColor = new Color(1f, 1f, 1f, 0f);
             GUI.contentColor = Luminance(color) > 0.55f ? Color.black : Color.white;
             var label = hasTex ? string.Empty : fallbackGlyph ?? string.Empty;
-            var clicked = GUI.Button(rect, new GUIContent(label, tooltip), style);
+            var tipForGui = TutorialHudChrome.GateHoverTip(tooltip, TutorialPrefs.HoverTipsEnabled);
+            var clicked = GUI.Button(rect, new GUIContent(label, tipForGui), style);
             GUI.backgroundColor = prevBg;
             GUI.contentColor = prevContent;
 
-            if (rect.Contains(Event.current.mousePosition) && !string.IsNullOrEmpty(tooltip))
-                _hoverTooltip = tooltip;
+            if (rect.Contains(Event.current.mousePosition) && !string.IsNullOrEmpty(tipForGui))
+                _hoverTooltip = tipForGui;
 
             return clicked;
         }
@@ -3194,17 +3648,7 @@ namespace BuildATower
             _ => "?"
         };
 
-        static Color FamilyColor(BuildFamily family) => family switch
-        {
-            BuildFamily.Office => new Color(0.35f, 0.55f, 0.85f),
-            BuildFamily.Hotel => new Color(0.62f, 0.35f, 0.85f),
-            BuildFamily.Condo => new Color(0.35f, 0.75f, 0.45f),
-            BuildFamily.Shops => new Color(0.9f, 0.6f, 0.25f),
-            BuildFamily.Leisure => new Color(0.25f, 0.65f, 0.70f),
-            BuildFamily.Utility => new Color(0.45f, 0.7f, 0.75f),
-            BuildFamily.Transit => new Color(0.7f, 0.7f, 0.35f),
-            _ => Color.gray
-        };
+        static Color FamilyColor(BuildFamily family) => BuildFamilyColors.For(family);
 
         static string RoomGlyph(RoomTypeSO room)
         {

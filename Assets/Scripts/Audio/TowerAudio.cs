@@ -30,6 +30,7 @@ namespace BuildATower
         public const string SfxBuildPlacePath = "Audio/Sfx/build_place";
         public const string SfxElevatorPingPath = "Audio/Sfx/elevator_ping";
         public const string SfxElevatorDoorPath = "Audio/Sfx/elevator_door";
+        public const string SfxFireworksPath = "Audio/Sfx/fireworks";
 
         static readonly SoundProfile[] AmbienceProfiles =
         {

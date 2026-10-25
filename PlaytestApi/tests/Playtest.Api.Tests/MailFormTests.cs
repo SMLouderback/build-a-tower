@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,8 +23,10 @@ public sealed class MailFormTests : IAsyncLifetime
         _mailbox = new RecordingEmailSender();
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
+            builder.UseSetting("ASPNETCORE_ENVIRONMENT", "Testing");
             builder.UseSetting("Playtest:DataDirectory", _dataDir);
             builder.UseSetting("Playtest:OperatorEmail", "escapemobileproductions@gmail.com");
+            builder.UseSetting("Playtest:PublicBaseUrl", "https://escapeproductions.biz");
             builder.ConfigureTestServices(services =>
             {
                 var existing = services.SingleOrDefault(d => d.ServiceType == typeof(IEmailSender));
@@ -49,20 +52,88 @@ public sealed class MailFormTests : IAsyncLifetime
     [Fact]
     public async Task Request_key_invalid_email_does_not_mail()
     {
-        var response = await _client.PostAsJsonAsync("/playtest/request-key", new { email = "not-an-email" });
+        var response = await _client.PostAsJsonAsync("/playtest/request-key", new
+        {
+            name = "Friend",
+            email = "not-an-email"
+        });
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Empty(_mailbox.Sent);
     }
 
     [Fact]
-    public async Task Request_key_valid_email_mails_operator_without_key()
+    public async Task Request_key_sends_confirmation_to_requester_not_operator()
     {
-        var response = await _client.PostAsJsonAsync("/playtest/request-key", new { email = "friend@example.com" });
-        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var response = await _client.PostAsJsonAsync("/playtest/request-key", new
+        {
+            name = "Friend",
+            email = "friend@example.com",
+            note = "Love SimTower"
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Single(_mailbox.Sent);
-        Assert.Equal("escapemobileproductions@gmail.com", _mailbox.Sent[0].To);
-        Assert.Contains("friend@example.com", _mailbox.Sent[0].Body);
+        Assert.Equal("friend@example.com", _mailbox.Sent[0].To);
+        Assert.Contains("confirm-key-request?token=", _mailbox.Sent[0].Body);
         Assert.DoesNotContain("family-test-key", _mailbox.Sent[0].Body);
+        Assert.NotEqual("escapemobileproductions@gmail.com", _mailbox.Sent[0].To);
+    }
+
+    [Fact]
+    public async Task Confirm_notifies_operator_once()
+    {
+        await _client.PostAsJsonAsync("/playtest/request-key", new
+        {
+            name = "Pat Tester",
+            email = "v.a.le.nc.ia.o.p.r.a.pl@gmail.com",
+            note = "please"
+        });
+        var match = Regex.Match(_mailbox.Sent[0].Body, @"token=([0-9a-f]+)");
+        Assert.True(match.Success);
+        var token = match.Groups[1].Value;
+
+        var confirm = await _client.GetAsync("/playtest/confirm-key-request?token=" + token);
+        Assert.Equal(HttpStatusCode.OK, confirm.StatusCode);
+        Assert.Equal(2, _mailbox.Sent.Count);
+        Assert.Equal("escapemobileproductions@gmail.com", _mailbox.Sent[1].To);
+        Assert.Contains("confirmed", _mailbox.Sent[1].Subject, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Pat Tester", _mailbox.Sent[1].Body);
+        Assert.Contains("valenciaoprapl@gmail.com", _mailbox.Sent[1].Body);
+
+        var again = await _client.GetAsync("/playtest/confirm-key-request?token=" + token);
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.Equal(2, _mailbox.Sent.Count);
+    }
+
+    [Fact]
+    public async Task Request_key_honeypot_is_silent()
+    {
+        var response = await _client.PostAsJsonAsync("/playtest/request-key", new
+        {
+            name = "Bot",
+            email = "bot@example.com",
+            website = "http://spam.example"
+        });
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Empty(_mailbox.Sent);
+    }
+
+    [Fact]
+    public async Task Request_key_gmail_dot_variants_share_pending_window()
+    {
+        var first = await _client.PostAsJsonAsync("/playtest/request-key", new
+        {
+            name = "Val",
+            email = "v.a.le.nc.ia.o.p.r.a.pl@gmail.com"
+        });
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        var second = await _client.PostAsJsonAsync("/playtest/request-key", new
+        {
+            name = "Val",
+            email = "va.le.n.c.ia.opra.pl@gmail.com"
+        });
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.Single(_mailbox.Sent);
     }
 
     [Fact]
@@ -89,10 +160,15 @@ public sealed class MailFormTests : IAsyncLifetime
             });
         });
         using var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/playtest/request-key", new { email = "friend@example.com" });
+        var response = await client.PostAsJsonAsync("/playtest/request-key", new
+        {
+            name = "Friend",
+            email = "friend@example.com"
+        });
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        var log = File.ReadAllText(Path.Combine(_dataDir, "key-requests.log"));
-        Assert.Contains("friend@example.com", log);
+        var logPath = Path.Combine(_dataDir, "key-requests.log");
+        Assert.False(File.Exists(logPath));
+        Assert.Empty(Directory.EnumerateFiles(Path.Combine(_dataDir, "pending-key-requests"), "*.json"));
     }
 
     [Fact]

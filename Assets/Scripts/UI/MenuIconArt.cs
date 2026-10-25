@@ -13,6 +13,16 @@ namespace BuildATower
         public const string ResourcesRoot = "Art/Menu/";
         public const int OutputPixels = 128;
 
+        /// <summary>
+        /// Baked warehouse tan/cement icons — never chroma-key to clear (shows as pink in UI).
+        /// </summary>
+        static readonly HashSet<string> CementPlateIconIds = new(System.StringComparer.Ordinal)
+        {
+            "service_mail",
+            "service_recycling",
+            "service_loading_dock",
+        };
+
         static readonly Dictionary<string, Texture2D> _cache = new();
         static readonly HashSet<string> _ownedIds = new();
 
@@ -100,6 +110,15 @@ namespace BuildATower
             var w = source.width;
             var h = source.height;
 
+            // Cement-plate icons (and any other already-composited tan plates): keep opaque,
+            // paint magenta→tan/floor. Never key to clear — clear reads as pink in the strip.
+            if (CementPlateIconIds.Contains(id) || HasOpaqueScenePlate(px, w, h))
+            {
+                PaintMagentaFringeToPlate(px, w, h);
+                var coveredPlate = CoverIntoSquare(px, w, h, OutputPixels, overscan: 1.02f);
+                return MakeOutputTex(coveredPlate, id);
+            }
+
             FloodKeyMagentaPlate(px, w, h);
             KeyHotMagenta(px);
             ScrubNearMagentaFringe(px, w, h);
@@ -122,6 +141,11 @@ namespace BuildATower
             var covered = CoverIntoSquare(cropped, cw, ch, OutputPixels, overscan: 1.12f);
             KeyHotMagenta(covered);
 
+            return MakeOutputTex(covered, id);
+        }
+
+        static Texture2D MakeOutputTex(Color[] covered, string id)
+        {
             var tex = new Texture2D(OutputPixels, OutputPixels, TextureFormat.RGBA32, false)
             {
                 filterMode = FilterMode.Bilinear,
@@ -131,6 +155,107 @@ namespace BuildATower
             tex.SetPixels(covered);
             tex.Apply(false, false);
             return tex;
+        }
+
+        /// <summary>
+        /// True when corners are solid non-magenta (baked warehouse tan/floor), not a key plate.
+        /// </summary>
+        static bool HasOpaqueScenePlate(Color[] px, int w, int h)
+        {
+            var samples = 0;
+            var opaqueScene = 0;
+            void Sample(int x, int y)
+            {
+                x = Mathf.Clamp(x, 0, w - 1);
+                y = Mathf.Clamp(y, 0, h - 1);
+                var c = px[y * w + x];
+                samples++;
+                if (c.a < 0.95f) return;
+                if (IsHotMagenta(c) || IsNearMagentaFringe(c)) return;
+                opaqueScene++;
+            }
+
+            const int inset = 4;
+            for (var i = 0; i < 8; i++)
+            {
+                var t = i / 7f;
+                Sample(Mathf.RoundToInt(Mathf.Lerp(inset, w - 1 - inset, t)), inset);
+                Sample(Mathf.RoundToInt(Mathf.Lerp(inset, w - 1 - inset, t)), h - 1 - inset);
+                Sample(inset, Mathf.RoundToInt(Mathf.Lerp(inset, h - 1 - inset, t)));
+                Sample(w - 1 - inset, Mathf.RoundToInt(Mathf.Lerp(inset, h - 1 - inset, t)));
+            }
+
+            return samples > 0 && opaqueScene >= samples * 0.85f;
+        }
+
+        /// <summary>
+        /// Replace hot/soft magenta fringe with corner plate color (tan) or dark floor band.
+        /// Keeps the icon fully opaque for locked/greyed menu drawing.
+        /// </summary>
+        static void PaintMagentaFringeToPlate(Color[] px, int w, int h)
+        {
+            var wallSamples = 0;
+            var wr = 0f;
+            var wg = 0f;
+            var wb = 0f;
+            void AccrueWall(int x, int y)
+            {
+                var c = px[y * w + x];
+                if (c.a < 0.95f || IsHotMagenta(c) || IsNearMagentaFringe(c)) return;
+                // Prefer warm wall tones over dark floor when sampling corners.
+                if (c.r + c.g + c.b < 0.55f) return;
+                wr += c.r;
+                wg += c.g;
+                wb += c.b;
+                wallSamples++;
+            }
+
+            const int inset = 6;
+            for (var i = 0; i < 6; i++)
+            {
+                var t = i / 5f;
+                AccrueWall(Mathf.RoundToInt(Mathf.Lerp(inset, w - 1 - inset, t)), inset);
+                AccrueWall(inset, Mathf.RoundToInt(Mathf.Lerp(inset, h - 1 - inset, t)));
+            }
+
+            var wall = wallSamples > 0
+                ? new Color(wr / wallSamples, wg / wallSamples, wb / wallSamples, 1f)
+                : new Color(0.70f, 0.58f, 0.47f, 1f);
+
+            var floorSamples = 0;
+            var fr = 0f;
+            var fg = 0f;
+            var fb = 0f;
+            for (var y = (int)(h * 0.78f); y < h; y++)
+            for (var x = 0; x < w; x += 4)
+            {
+                var c = px[y * w + x];
+                if (c.a < 0.95f || IsHotMagenta(c)) continue;
+                if (c.r > 0.40f || c.g > 0.40f || c.b > 0.40f) continue;
+                fr += c.r;
+                fg += c.g;
+                fb += c.b;
+                floorSamples++;
+            }
+
+            var hasFloor = floorSamples > 40;
+            var floor = hasFloor
+                ? new Color(fr / floorSamples, fg / floorSamples, fb / floorSamples, 1f)
+                : wall;
+            var horizon = (int)(h * 0.62f);
+
+            for (var pass = 0; pass < 2; pass++)
+            {
+                var copy = (Color[])px.Clone();
+                for (var y = 0; y < h; y++)
+                for (var x = 0; x < w; x++)
+                {
+                    var i = y * w + x;
+                    var c = copy[i];
+                    if (!IsHotMagenta(c) && !IsNearMagentaFringe(c)) continue;
+                    px[i] = hasFloor && y >= horizon ? floor : wall;
+                }
+            }
         }
 
         static Color[] CoverIntoSquare(Color[] src, int sw, int sh, int size, float overscan)
@@ -288,22 +413,27 @@ namespace BuildATower
             if (c.a < 0.08f) return true;
             if (c.g > 0.40f) return false;
             if (c.r < 0.45f) return false;
-            // Soft pink / magenta bleed (looser than plate key).
+            // Soft pink / magenta bleed (looser than plate key; rejects tan).
             return (c.r - c.g) > 0.18f && c.b > 0.22f && (c.b - c.g) > 0.08f;
         }
 
         /// <summary>
         /// AI menu plates are often hot pink (~R237 G10 B126), not pure #FF00FF.
+        /// Crimson dollhouse plates (~R186 G0 B71) also key; warm red bins do not.
         /// </summary>
         public static bool IsHotMagenta(Color c)
         {
             if (c.a < 0.08f) return true;
             if (c.g > 0.34f) return false;
             if (c.r < 0.50f) return false;
-            if (c.b < 0.28f) return false;
-            if ((c.r - c.g) < 0.24f) return false;
-            if ((c.b - c.g) < 0.14f) return false;
-            return true;
+            // Classic hot magenta / pink plate
+            if (c.b >= 0.26f && (c.r - c.g) >= 0.24f && (c.b - c.g) >= 0.12f)
+                return true;
+            // Crimson key fringe (near-zero G, B above G)
+            if (c.g <= 0.12f && c.b >= 0.08f && c.r > c.b
+                && (c.r - c.g) >= 0.35f && (c.b - c.g) >= 0.08f)
+                return true;
+            return false;
         }
 
         static void FindOpaqueBounds(

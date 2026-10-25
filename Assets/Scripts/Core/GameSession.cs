@@ -16,11 +16,21 @@ namespace BuildATower
         static string _currentAccountId;
         static bool _isSaveDirty;
         static string _restoreFallbackNotice;
+        static bool _tutorialMayStart;
 
         public const string RestoreFallbackPlayerMessage =
             "The saved tower could not be restored, so a new Normal tower was started. Your original save was kept.";
 
         public static bool HasDifficulty => _hasDifficulty;
+
+        public static bool TutorialMayStart => _tutorialMayStart;
+
+        public static bool ConsumeTutorialMayStart()
+        {
+            var mayStart = _tutorialMayStart;
+            _tutorialMayStart = false;
+            return mayStart;
+        }
 
         public static GameDifficulty Difficulty
         {
@@ -83,6 +93,8 @@ namespace BuildATower
             _isSaveDirty = true;
             _difficulty = difficulty;
             _hasDifficulty = true;
+            _tutorialMayStart = TutorialPrefs.GuidedTutorialEnabled
+                                && IsTutorialEligibleDifficulty(difficulty);
         }
 
         public static SessionLoadResult PrepareLoad(TowerSnapshotV1 snapshot)
@@ -103,6 +115,7 @@ namespace BuildATower
             _hasDifficulty = true;
             _lastLoadError = null;
             _restoreFallbackNotice = null;
+            _tutorialMayStart = false;
             return SessionLoadResult.Succeeded();
         }
 
@@ -118,6 +131,7 @@ namespace BuildATower
 
             _lastLoadError = null;
             _restoreFallbackNotice = null;
+            _tutorialMayStart = false;
         }
 
         public static void FailLoad(SessionLoadError error, string errorMessage)
@@ -167,6 +181,7 @@ namespace BuildATower
             ClearCurrentAccount();
             _isSaveDirty = false;
             _restoreFallbackNotice = null;
+            _tutorialMayStart = false;
         }
 
         static void RecordFailure(SessionLoadResult failure)
@@ -178,7 +193,13 @@ namespace BuildATower
             _restoreFallbackNotice = RestoreFallbackPlayerMessage;
             ClearIdentity();
             _isSaveDirty = true;
+            _tutorialMayStart = false;
         }
+
+        static bool IsTutorialEligibleDifficulty(GameDifficulty difficulty) =>
+            difficulty == GameDifficulty.Sandbox
+            || difficulty == GameDifficulty.Easy
+            || difficulty == GameDifficulty.Normal;
 
         static void ClearIdentity()
         {

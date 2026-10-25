@@ -96,6 +96,9 @@ namespace BuildATower
                 panelW,
                 panelH);
 
+            if (promote)
+                StarFireworks.DrawBehindBanner(panel);
+
             var prevBg = GUI.backgroundColor;
             GUI.backgroundColor = panelColor;
             GUI.Box(panel, GUIContent.none);
@@ -160,7 +163,7 @@ namespace BuildATower
             simulation?.SetSpeedPreset(_snapshot.MinutesPerRealSecond, paused: true);
 
             if (_current.Kind == StarChangeKind.Promoted)
-                StarFireworks.Play(transform, ResolveTowerTopWorld());
+                StarFireworks.Play();
         }
 
         void OnContinue()
@@ -174,29 +177,6 @@ namespace BuildATower
             _showing = false;
 
             TryBeginNext();
-        }
-
-        Vector3 ResolveTowerTopWorld()
-        {
-            var grid = build?.Grid;
-            if (grid == null || grid.Rooms == null || grid.Rooms.Count == 0)
-                return new Vector3(0f, 8f, 0f);
-
-            var minX = float.MaxValue;
-            var maxX = float.MinValue;
-            var maxY = float.MinValue;
-            foreach (var room in grid.Rooms)
-            {
-                if (room == null) continue;
-                minX = Mathf.Min(minX, room.Origin.x);
-                maxX = Mathf.Max(maxX, room.Origin.x + room.Size.x);
-                maxY = Mathf.Max(maxY, room.Origin.y + room.Size.y);
-            }
-
-            if (minX > maxX || maxY == float.MinValue)
-                return new Vector3(0f, 8f, 0f);
-
-            return new Vector3((minX + maxX) * 0.5f, maxY + 1.25f, 0f);
         }
 
         void ResolveRefs()

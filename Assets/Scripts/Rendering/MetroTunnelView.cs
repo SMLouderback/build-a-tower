@@ -10,8 +10,13 @@ namespace BuildATower
     public sealed class MetroTunnelView : MonoBehaviour
     {
         public const string TunnelResourcePath = "Art/World/metro_tunnel";
-        public const float TrainTilesPerSecond = 6f;
+        public const string TrainResourcePath = "Art/World/metro_train";
+        /// <summary>At 1× clock (1 game-min / real-sec) matches the old 6 tiles/sec cruise.</summary>
+        public const float TrainTilesPerGameMinute = 6f;
+        public const float TrainTilesPerSecond = TrainTilesPerGameMinute;
         public const float TrainCarTiles = 6f;
+        /// <summary>Painted car sits slightly under one floor tile so wheels clear the rails.</summary>
+        public const float TrainHeightTiles = 0.82f;
         /// <summary>Behind dollhouse rooms (5) so station plates cover the bore.</summary>
         public const int TunnelSortingOrder = 3;
         public const int TrainSortingOrder = 4;
@@ -23,10 +28,12 @@ namespace BuildATower
         SpriteRenderer _train;
         Sprite _tunnelSprite;
         Sprite _trainSprite;
-        float _elapsed;
+        MetroTrainMotion.State _trainState;
+        readonly List<float> _stopPathScratch = new List<float>(8);
 
         public bool TunnelVisible => _tunnel != null && _tunnel.enabled;
         public bool TrainVisible => _train != null && _train.enabled;
+        public bool TrainDwelling => _trainState.DwellGameMinutesRemaining > 0f;
         public float TunnelCenterX => _tunnel != null ? _tunnel.transform.position.x : 0f;
         public float TunnelCenterY => _tunnel != null ? _tunnel.transform.position.y : 0f;
         public float TunnelWidthTiles => _tunnel != null ? _tunnel.size.x : 0f;
@@ -90,17 +97,24 @@ namespace BuildATower
 
             var metro = simulation != null ? simulation.Metro : null;
             var floorY = 0;
+            var stations = metro != null ? metro.Stations : null;
             var has = metro != null &&
                       metro.HasTunnel &&
-                      TryTunnelFloorY(metro.Stations, out floorY);
+                      TryTunnelFloorY(stations, out floorY);
 
             var grid = build != null ? build.Grid : null;
             WorldSpan(grid != null ? grid.MinX : 0, grid != null ? grid.MaxX : 0, out var minX, out var maxX);
-            _elapsed += Time.deltaTime;
-            Apply(has, floorY, minX, maxX, _elapsed);
+            var deltaGameMinutes = simulation?.Clock != null ? simulation.Clock.LastTickGameMinutes : 0f;
+            Apply(has, floorY, minX, maxX, stations, deltaGameMinutes);
         }
 
-        public void Apply(bool hasTunnel, int floorY, int minX, int maxX, float elapsedSeconds)
+        public void Apply(
+            bool hasTunnel,
+            int floorY,
+            int minX,
+            int maxX,
+            IReadOnlyList<RectInt> stations,
+            float deltaGameMinutes)
         {
             EnsureRig();
             if (!hasTunnel || maxX < minX)
@@ -118,14 +132,25 @@ namespace BuildATower
             _tunnel.transform.localScale = Vector3.one;
             _tunnel.transform.position = new Vector3(minX + width * 0.5f, floorY + 0.5f, 0f);
 
-            var left = TrainOffsetX(elapsedSeconds, width, TrainTilesPerSecond, TrainCarTiles);
+            MetroTrainMotion.CollectStopPathDistances(
+                stations, minX, width, TrainCarTiles, _stopPathScratch);
+            _trainState = MetroTrainMotion.Advance(
+                _trainState,
+                deltaGameMinutes,
+                width,
+                TrainCarTiles,
+                TrainTilesPerGameMinute,
+                MetroTrainMotion.StationDwellGameMinutes,
+                _stopPathScratch);
+
+            var left = MetroTrainMotion.LeftOffset(_trainState.PathDistance, TrainCarTiles);
             var trainBounds = _trainSprite.bounds.size;
             var trainW = trainBounds.x > 0.01f ? trainBounds.x : 1f;
             var trainH = trainBounds.y > 0.01f ? trainBounds.y : 1f;
             _train.enabled = true;
             _train.sprite = _trainSprite;
             _train.drawMode = SpriteDrawMode.Simple;
-            _train.transform.localScale = new Vector3(TrainCarTiles / trainW, 0.72f / trainH, 1f);
+            _train.transform.localScale = new Vector3(TrainCarTiles / trainW, TrainHeightTiles / trainH, 1f);
             _train.transform.position = new Vector3(
                 minX + left + TrainCarTiles * 0.5f,
                 floorY + 0.5f,
@@ -137,8 +162,10 @@ namespace BuildATower
             if (_tunnel != null && _train != null)
                 return;
 
-            _tunnelSprite ??= LoadTunnelSprite() ?? ProceduralTunnelSprite();
-            _trainSprite ??= ProceduralTrainSprite();
+            _tunnelSprite ??= LoadWorldSprite(TunnelResourcePath, TextureWrapMode.Repeat)
+                              ?? ProceduralTunnelSprite();
+            _trainSprite ??= LoadWorldSprite(TrainResourcePath, TextureWrapMode.Clamp)
+                             ?? ProceduralTrainSprite();
 
             var tunnelGo = new GameObject("MetroTunnel");
             tunnelGo.transform.SetParent(transform, false);
@@ -156,13 +183,13 @@ namespace BuildATower
             _train.enabled = false;
         }
 
-        static Sprite LoadTunnelSprite()
+        static Sprite LoadWorldSprite(string resourcePath, TextureWrapMode wrap)
         {
-            var tex = LoadTunnelTexture();
+            var tex = LoadWorldTexture(resourcePath, wrap);
             if (tex == null)
                 return null;
 
-            tex.wrapMode = TextureWrapMode.Repeat;
+            tex.wrapMode = wrap;
             tex.filterMode = FilterMode.Bilinear;
             var ppu = Mathf.Max(1f, tex.height);
             return Sprite.Create(
@@ -174,13 +201,13 @@ namespace BuildATower
                 SpriteMeshType.FullRect);
         }
 
-        static Texture2D LoadTunnelTexture()
+        static Texture2D LoadWorldTexture(string resourcePath, TextureWrapMode wrap)
         {
-            var bytesAsset = Resources.Load<TextAsset>(TunnelResourcePath);
+            var bytesAsset = Resources.Load<TextAsset>(resourcePath);
             byte[] png = bytesAsset != null ? bytesAsset.bytes : null;
             if (png == null || png.Length < 32)
             {
-                var src = Resources.Load<Texture2D>(TunnelResourcePath);
+                var src = Resources.Load<Texture2D>(resourcePath);
                 if (src == null)
                     return null;
                 try
@@ -199,8 +226,8 @@ namespace BuildATower
             var decoded = new Texture2D(2, 2, TextureFormat.RGBA32, false)
             {
                 filterMode = FilterMode.Bilinear,
-                wrapMode = TextureWrapMode.Repeat,
-                name = TunnelResourcePath
+                wrapMode = wrap,
+                name = resourcePath
             };
             if (!decoded.LoadImage(png, false))
             {
@@ -268,9 +295,9 @@ namespace BuildATower
             const int h = 32;
             var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
             {
-                filterMode = FilterMode.Point,
+                filterMode = FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Clamp,
-                name = "metro_train"
+                name = "metro_train_fallback"
             };
             var px = new Color[w * h];
             var body = new Color(0.73f, 0.75f, 0.77f, 1f);

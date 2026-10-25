@@ -1,7 +1,7 @@
 # Build-A-Tower — New Player Tutorial (Guided Coach)
 
 **Date:** 2026-10-13  
-**Status:** Approved design  
+**Status:** Implemented (EditMode green; Play Mode smoke recommended)  
 **Depends on:** `GameSession` new vs load; `BuildController` lobby drag / place; build menu Office/Hotel/Condo/Stairs/Elevator; `StarSystem.CanBuild`; Pause Options; IMGUI `TowerHudController`  
 **Parent:** Economy backlog — tutorial tips + prefs toggle  
 **Follow-ups:** Localized copy; advanced coaches (metro/security/maps); cloud sync of prefs
@@ -43,6 +43,7 @@
 
 | Step | Complete when |
 |------|----------------|
+| Intro | Player chooses **Continue…** (or **Skip**) |
 | LobbyTool | Lobby tool selected or lobby exists |
 | PlaceLobby | `HasLobby` |
 | PlaceLiving | ≥1 Office/Condo/Hotel room |
@@ -56,7 +57,8 @@ Soft advance: when a later objective is already true, skip ahead when that step 
 
 ## 5. UI
 
-- Coach card: short copy + **Skip tutorial**; non-modal.  
+- **Intro gate:** centered pop-up (“there is a tutorial”) with **Skip** / **Continue…**. No pulses until Continue.  
+- **After Continue:** card slides/shrinks toward the build-tool strip; coaching steps show short copy + **Skip tutorial**; non-modal.  
 - Pulse outline on UI/world target; chevron toward target.  
 - Hover tips only if `HoverTipsEnabled`.  
 - Pause → Options: two toggles, persist immediately.

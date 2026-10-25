@@ -28,6 +28,8 @@ namespace BuildATower
         [SerializeField] float midTargetWidth = 18f;
         [SerializeField] float vegTargetWidth = 22f;
         [SerializeField] float coverageWidth = 140f;
+        /// <summary>Overlap fraction so alpha-faded plate edges do not flash sky seams.</summary>
+        const float SeamOverlapFraction = 0.12f;
 
         Transform _rig;
         Transform _mid;
@@ -278,7 +280,9 @@ namespace BuildATower
             var bw = Mathf.Max(0.01f, sprite.bounds.size.x);
             var bh = Mathf.Max(0.01f, sprite.bounds.size.y);
             var scale = Mathf.Min(maxH / bh, targetW / bw);
-            tileWorldW = bw * scale;
+            var drawnW = bw * scale;
+            // Spacing shorter than drawn width → overlap covers FadeSeamEdges holes.
+            tileWorldW = drawnW * (1f - Mathf.Clamp01(SeamOverlapFraction));
 
             var tiles = Mathf.Max(3, Mathf.CeilToInt(coverageWidth / tileWorldW) + 2);
             if ((tiles & 1) == 0) tiles++;
@@ -336,7 +340,7 @@ namespace BuildATower
             }
             else if (mode == PlateMode.GrassOpaque)
             {
-                FadeSeamEdges(px, w, h);
+                // Opaque grass tiles butt/overlap; alpha edge fade punched sky seams.
                 ForceOpaqueWhereVisible(px);
             }
             else // TreesAlpha

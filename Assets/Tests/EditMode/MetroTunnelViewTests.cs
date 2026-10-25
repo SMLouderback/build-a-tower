@@ -77,22 +77,19 @@ namespace BuildATower.Tests
         {
             var go = new GameObject("MetroTunnelViewTest");
             var view = go.AddComponent<MetroTunnelView>();
+            var stations = new List<RectInt> { new RectInt(0, -6, 8, 3) };
 
-            view.Apply(hasTunnel: false, floorY: -4, minX: -80, maxX: 100, elapsedSeconds: 0f);
+            view.Apply(hasTunnel: false, floorY: -4, minX: -80, maxX: 100, stations, 0f);
             Assert.IsFalse(view.TunnelVisible);
 
-            view.Apply(hasTunnel: true, floorY: -6, minX: -80, maxX: 100, elapsedSeconds: 0f);
+            view.Apply(hasTunnel: true, floorY: -6, minX: -80, maxX: 100, stations, 0f);
             Assert.IsTrue(view.TunnelVisible);
             Assert.IsTrue(view.TrainVisible);
             Assert.AreEqual(-6f + 0.5f, view.TunnelCenterY, 0.001f);
             Assert.AreEqual(181f, view.TunnelWidthTiles, 0.001f);
             Assert.AreEqual((-80f + 101f) * 0.5f, view.TunnelCenterX, 0.001f);
 
-            var left = MetroTunnelView.TrainOffsetX(
-                0f,
-                181f,
-                MetroTunnelView.TrainTilesPerSecond,
-                MetroTunnelView.TrainCarTiles);
+            var left = MetroTrainMotion.LeftOffset(0f, MetroTunnelView.TrainCarTiles);
             Assert.AreEqual(-80f + left + MetroTunnelView.TrainCarTiles * 0.5f, view.TrainCenterX, 0.02f);
         }
 
@@ -148,6 +145,14 @@ namespace BuildATower.Tests
             var loaded = Resources.Load<TextAsset>("Art/World/metro_tunnel");
             Assert.IsNotNull(loaded);
             Assert.Greater(loaded.bytes.Length, 32);
+
+            Assert.AreEqual("Art/World/metro_train", MetroTunnelView.TrainResourcePath);
+            var train = Path.Combine(Application.dataPath, "Resources/Art/World/metro_train.bytes");
+            Assert.IsTrue(File.Exists(train), train);
+            Assert.Greater(new FileInfo(train).Length, 1024);
+            var trainAsset = Resources.Load<TextAsset>(MetroTunnelView.TrainResourcePath);
+            Assert.IsNotNull(trainAsset);
+            Assert.Greater(trainAsset.bytes.Length, 32);
         }
     }
 }

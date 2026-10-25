@@ -16,3 +16,9 @@ Task 4: complete (commits 2e28cd6..77cd082, review accept; follow-up AverageStre
 
 Task 5: complete (commits ec40b92..cf60b32 — shop assets, HUD, README)
 
+Task 5: complete (77cd082..9c52b8c, review approved)
+Task 6: final review
+
+Task 6: complete — final review ready to merge; slot-leak fix 2319c91
+All E1 tasks complete.
+

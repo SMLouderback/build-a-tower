@@ -2,7 +2,7 @@
 
 **Status:** DONE
 
-**Commit:** `e70aa17` — feat: require vehicle access for recycling and loading dock
+**Commit:** `c1ebf36` — feat: require vehicle access for recycling and loading dock
 
 ## Summary
 

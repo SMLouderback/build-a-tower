@@ -15,19 +15,27 @@ def is_magenta_gutter(r: int, g: int, b: int) -> bool:
 
 def is_magenta_key(r: int, g: int, b: int) -> bool:
     """
-    Strict key for glass/plate alpha — must NOT match mauve hotel plaster
-    (higher green, lower saturation) or warm lamp spill.
-    Covers #FF00FF and generator hot-pink panes like (237,0,108).
+    Key hot pink / magenta glass + dark pink plate fringe.
+    Must NOT match mauve hotel plaster (e.g. 76,44,62 / 144,59,85).
     """
-    if g > 40:
+    if g > 48:
         return False
-    if r < 200:
-        return False
-    # Classic magenta glass
-    if b >= 160 and r >= g + 120 and b >= g + 100:
+    # Classic #FF00FF
+    if r >= 200 and b >= 160 and r >= g + 120 and b >= g + 100:
         return True
-    # Hot pink panes (common AI plate)
-    if b >= 90 and r >= g + 140 and b >= g + 70:
+    # Bright hot-pink panes / top fringe (221,44,111) / (203,54,111)
+    if r >= 190 and g <= 48 and b >= 90 and r >= g + 130 and r >= b + 40:
+        return True
+    # Dark pink outer-shell fringe (113,10,58) / (71,16,46) — not mauve walls.
+    # Require red clearly ahead of blue so purple plaster stays opaque.
+    if (
+        r >= 60
+        and g <= 32
+        and b >= 30
+        and r >= b + 24
+        and r >= g + 55
+        and b >= g + 18
+    ):
         return True
     return False
 
@@ -71,6 +79,96 @@ def find_content_bands(im: Image.Image, mag_frac_thresh: float = 0.72) -> list[t
     return [(a, b) for a, b in bands if (b - a) >= 24]
 
 
+def is_shell_frame_rgb(r: int, g: int, b: int, a: int) -> bool:
+    """
+    Generator picture-frame + pink fringe (not mauve plaster / furniture).
+    Clear counts as shell for column/row fraction tests.
+    """
+    if a < 8:
+        return True
+    if is_magenta_key(r, g, b):
+        return True
+    mx = max(r, g, b)
+    mn = min(r, g, b)
+    # Charcoal / graphite outer shell (~35-65).
+    if mx <= 70 and (mx - mn) <= 22:
+        return True
+    # Purple-grey modular frame (65,55,63) / (82,51,69) — not bright mauve walls.
+    if (
+        mx <= 86
+        and (mx - mn) <= 34
+        and 45 <= g <= 64
+        and r <= 88
+        and abs(r - b) <= 22
+    ):
+        return True
+    # Dark / mid pink plate fringe (not saturated micro walls ~248,56,128).
+    if (
+        mx <= 220
+        and g <= 40
+        and r >= 40
+        and r >= b + 12
+        and r >= g + 28
+        and b <= 140
+    ):
+        return True
+    return False
+
+
+def strip_outer_shell_frame(
+    strip: Image.Image, max_side_inset: int = 36, max_vert_inset: int = 18
+) -> Image.Image:
+    """
+    Remove the generator's dark grey picture-frame so adjacent rooms seam
+    without city showing through double borders / pink fringe gaps.
+
+    Side insets can be deep (thick vertical pillars). Vertical insets are
+    capped so dark floors/ceilings are not mistaken for the shell ring.
+    """
+    rgba = strip.convert("RGBA")
+    w, h = rgba.size
+    pixels = rgba.load()
+
+    def col_shell_frac(x: int) -> float:
+        n = hit = 0
+        for y in range(h):
+            r, g, b, a = pixels[x, y]
+            n += 1
+            if is_shell_frame_rgb(r, g, b, a):
+                hit += 1
+        return hit / max(1, n)
+
+    def row_shell_frac(y: int) -> float:
+        n = hit = 0
+        for x in range(w):
+            r, g, b, a = pixels[x, y]
+            n += 1
+            if is_shell_frame_rgb(r, g, b, a):
+                hit += 1
+        return hit / max(1, n)
+
+    def advance(size: int, frac_at, positive: bool, max_inset: int) -> int:
+        limit = min(max_inset, size // 3)
+        inset = 0
+        while inset < limit:
+            idx = inset if positive else size - 1 - inset
+            if frac_at(idx) < 0.72:
+                break
+            inset += 1
+        return inset
+
+    left = advance(w, col_shell_frac, True, max_side_inset)
+    right = advance(w, col_shell_frac, False, max_side_inset)
+    top = advance(h, row_shell_frac, True, max_vert_inset)
+    bot = advance(h, row_shell_frac, False, max_vert_inset)
+
+    if top + bot + left + right == 0:
+        return rgba
+    if left + right >= w - 8 or top + bot >= h - 8:
+        return rgba
+    return rgba.crop((left, top, w - right, h - bot))
+
+
 def crop_opaque_bounds(strip: Image.Image) -> Image.Image:
     rgba = strip.convert("RGBA")
     w, h = rgba.size
@@ -104,6 +202,61 @@ def key_magenta_to_alpha(strip: Image.Image) -> Image.Image:
             r, g, b, a = pixels[x, y]
             # Strict key only — loose gutter pinks on mauve walls stay opaque.
             if is_magenta_key(r, g, b):
+                pixels[x, y] = (r, g, b, 0)
+    return rgba
+
+
+def scrub_plate_edge_fringe(strip: Image.Image, depth: int = 3) -> Image.Image:
+    """
+    Final pass: clear leftover pink fringe on the outer ring only.
+    Caps max channel so saturated micro pink walls (~248) on the edge stay.
+    """
+    rgba = strip.convert("RGBA")
+    pixels = rgba.load()
+    w, h = rgba.size
+    depth = max(1, depth)
+    for y in range(h):
+        for x in range(w):
+            if x >= depth and x < w - depth and y >= depth and y < h - depth:
+                continue
+            r, g, b, a = pixels[x, y]
+            if a < 8:
+                continue
+            if is_magenta_key(r, g, b):
+                pixels[x, y] = (r, g, b, 0)
+                continue
+            mx = max(r, g, b)
+            if (
+                mx <= 230
+                and r >= 160
+                and g <= 56
+                and b >= 80
+                and r >= b + 30
+                and r >= g + 100
+            ):
+                pixels[x, y] = (r, g, b, 0)
+    return rgba
+
+
+def clear_outer_frame_paint(strip: Image.Image, depth: int = 2) -> Image.Image:
+    """Clear charcoal FRAME paint on the outer ring so plates seam cleanly."""
+    rgba = strip.convert("RGBA")
+    pixels = rgba.load()
+    w, h = rgba.size
+    depth = max(1, depth)
+    fr, fg, fb, _ = FRAME
+    for y in range(h):
+        for x in range(w):
+            if x >= depth and x < w - depth and y >= depth and y < h - depth:
+                continue
+            r, g, b, a = pixels[x, y]
+            if a < 8:
+                continue
+            if abs(r - fr) <= 6 and abs(g - fg) <= 6 and abs(b - fb) <= 6:
+                pixels[x, y] = (r, g, b, 0)
+                continue
+            # Residual purple-grey shell on the border after resize.
+            if is_shell_frame_rgb(r, g, b, a) and max(r, g, b) <= 86:
                 pixels[x, y] = (r, g, b, 0)
     return rgba
 
@@ -347,6 +500,8 @@ def main() -> None:
         strip = im.crop((0, y0, im.width, y1))
         strip = crop_opaque_bounds(strip)
         strip = key_magenta_to_alpha(strip)
+        strip = strip_outer_shell_frame(strip)
+        strip = key_magenta_to_alpha(strip)
         if args.clear_flat_glass:
             strip = clear_flat_glass_panes(strip)
         if args.clear_sky_glass:
@@ -357,6 +512,12 @@ def main() -> None:
             strip = fit_to_cell_canvas(strip, cells[0], cells[1])
         # Re-apply frames after resize so they stay ~2px at final resolution.
         strip = paint_window_frames(strip, thickness=2)
+        # Final edge pink scrub — JPG fringe often reappears after resize.
+        strip = key_magenta_to_alpha(strip)
+        strip = scrub_plate_edge_fringe(strip, depth=3)
+        # Window-frame paint must not rebuild a modular picture-frame on the
+        # plate border (reads as grey seams between stacked rooms).
+        strip = clear_outer_frame_paint(strip, depth=2)
         png_path = args.out_dir / f"{leaf}.png"
         bytes_path = args.out_dir / f"{leaf}.bytes"
         strip.save(png_path, format="PNG")

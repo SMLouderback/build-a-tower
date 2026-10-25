@@ -26,5 +26,35 @@ namespace BuildATower.Tests
             // Basement stays closer to fluorescent (brighter / less cool) than open night.
             Assert.Greater(belowNight.grayscale, aboveNight.grayscale);
         }
+
+        [Test]
+        public void Apply_mid_tower_blend_softens_sky_without_replacing_basement_fluorescent()
+        {
+            var baseColor = Color.white;
+            var openNight = InteriorLighting.Apply(baseColor, 0, subterranean: false);
+            var midInterior = InteriorLighting.Apply(
+                baseColor,
+                0,
+                subterranean: false,
+                skyBlend: InteriorLighting.MidTowerInteriorSkyBlend);
+            var basementDefault = InteriorLighting.Apply(baseColor, 0, subterranean: true);
+            var basementWithParam = InteriorLighting.Apply(
+                baseColor,
+                0,
+                subterranean: true,
+                skyBlend: InteriorLighting.MidTowerInteriorSkyBlend);
+
+            Assert.Greater(midInterior.grayscale, openNight.grayscale);
+            Assert.Less(midInterior.grayscale, basementDefault.grayscale);
+            AssertColorClose(basementDefault, basementWithParam);
+        }
+
+        static void AssertColorClose(Color expected, Color actual)
+        {
+            Assert.AreEqual(expected.r, actual.r, 0.001f);
+            Assert.AreEqual(expected.g, actual.g, 0.001f);
+            Assert.AreEqual(expected.b, actual.b, 0.001f);
+            Assert.AreEqual(expected.a, actual.a, 0.001f);
+        }
     }
 }

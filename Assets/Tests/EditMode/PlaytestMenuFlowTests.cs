@@ -43,6 +43,53 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Submenu_back_buttons_return_to_root()
+        {
+            var menu = CreateBoundMenu(out var root);
+            var panelRoot = root.Q("panel-root");
+            Assert.IsNotNull(panelRoot);
+
+            var cases = new (string openButton, string panel, string backButton)[]
+            {
+                ("btn-new-game", "panel-difficulty", "btn-diff-back"),
+                ("btn-load-game", "panel-local-saves", "btn-local-saves-back"),
+                ("btn-account", "panel-account", "btn-account-back"),
+                ("btn-feedback", "panel-feedback", "btn-feedback-back"),
+                ("btn-contact", "panel-contact", "btn-contact-back"),
+                ("btn-about", "panel-about", "btn-about-back"),
+            };
+
+            foreach (var (openButton, panelName, backButton) in cases)
+            {
+                var open = root.Q<Button>(openButton);
+                var panel = root.Q(panelName);
+                var back = root.Q<Button>(backButton);
+                Assert.IsNotNull(open, openButton);
+                Assert.IsNotNull(panel, panelName);
+                Assert.IsNotNull(back, backButton);
+                Assert.AreEqual("Back to Main Menu", back.text, backButton);
+
+                using (var openEvt = ClickEvent.GetPooled())
+                {
+                    openEvt.target = open;
+                    open.SendEvent(openEvt);
+                }
+
+                Assert.IsFalse(panel.ClassListContains("hidden"), panelName + " should open");
+                Assert.IsTrue(panelRoot.ClassListContains("hidden"), "root hidden while " + panelName);
+
+                using (var backEvt = ClickEvent.GetPooled())
+                {
+                    backEvt.target = back;
+                    back.SendEvent(backEvt);
+                }
+
+                Assert.IsTrue(panel.ClassListContains("hidden"), panelName + " should close");
+                Assert.IsFalse(panelRoot.ClassListContains("hidden"), "root visible after " + backButton);
+            }
+        }
+
+        [Test]
         public async Task Empty_send_shows_write_a_note_first()
         {
             var posted = false;

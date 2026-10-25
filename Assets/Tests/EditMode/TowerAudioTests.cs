@@ -39,6 +39,7 @@ namespace BuildATower.Tests
             Assert.AreEqual("Audio/Sfx/build_place", TowerAudio.SfxBuildPlacePath);
             Assert.AreEqual("Audio/Sfx/elevator_ping", TowerAudio.SfxElevatorPingPath);
             Assert.AreEqual("Audio/Sfx/elevator_door", TowerAudio.SfxElevatorDoorPath);
+            Assert.AreEqual("Audio/Sfx/fireworks", TowerAudio.SfxFireworksPath);
         }
 
         [Test]

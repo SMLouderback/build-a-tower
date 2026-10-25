@@ -10,6 +10,7 @@ namespace BuildATower
         public const int DefaultSortingOrder = 20;
         /// <summary>Waiting or walking on an elevator shaft cell (in front of shaft occluder).</summary>
         public const int ElevatorFrontSortingOrder = 24;
+        public static readonly Color PlayZoomSpriteTint = new(1.07f, 1.07f, 1.05f, 1f);
 
         readonly List<SpriteRenderer> _renderers = new();
         readonly List<Agent> _bound = new();
@@ -92,7 +93,7 @@ namespace BuildATower
                 if (frame != null)
                 {
                     sr.sprite = frame;
-                    sr.color = Color.white;
+                    sr.color = PlayZoomSpriteTint;
                     sr.flipX = state.FlipX;
                     var scale = AgentSpriteArt.ScaleForTargetHeight(frame);
                     sr.transform.localScale = new Vector3(scale, scale, 1f);
@@ -105,7 +106,7 @@ namespace BuildATower
                 else
                 {
                     sr.sprite = _dot;
-                    sr.color = ColorFor(agent.Role);
+                    sr.color = PlayZoomContrast(ColorFor(agent.Role));
                     sr.flipX = false;
                     sr.transform.localScale = Vector3.one * 0.35f;
                     sr.transform.position = new Vector3(position.x, floorY, 0f);
@@ -165,6 +166,16 @@ namespace BuildATower
             if (moving && Mathf.Abs(deltaX) > MoveEpsilon)
                 return deltaX < 0f;
             return previousFlip;
+        }
+
+        public static Color PlayZoomContrast(Color source)
+        {
+            var lifted = Color.Lerp(source, Color.white, 0.16f);
+            return new Color(
+                Mathf.Clamp01(lifted.r * 1.06f),
+                Mathf.Clamp01(lifted.g * 1.06f),
+                Mathf.Clamp01(lifted.b * 1.06f),
+                source.a);
         }
 
         static void UpdateWalk(ref AgentVisualState state, bool moving, float dt)
