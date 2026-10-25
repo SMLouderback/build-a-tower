@@ -830,7 +830,6 @@ namespace BuildATower
             }
 
             _lastDayIndex = _clock.DayIndex;
-            Power();
         }
 
         void PushOpsAndQuirkNews(int dayIndex, TowerGrid grid, float averageStress, float averageCrime)
