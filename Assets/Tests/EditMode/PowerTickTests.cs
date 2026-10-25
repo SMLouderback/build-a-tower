@@ -238,5 +238,108 @@ namespace BuildATower.Tests
                     Object.DestroyImmediate(found[i].gameObject);
             }
         }
+
+        [Test]
+        public void Base_hotel_fill_ignores_water_multiplier_upper_guest_stress_once_per_day()
+        {
+            var go = new GameObject("WaterAgentHost");
+            var build = go.AddComponent<BuildController>();
+            build.InitializeTower();
+            var sim = go.GetComponent<TowerSimulation>() ?? go.AddComponent<TowerSimulation>();
+            sim.InitializeSimulation();
+            var grid = build.Grid;
+            var agents = sim.Agents;
+            var clock = sim.Clock;
+
+            Assert.IsTrue(grid.TryPlaceLobby(LobbyType(), 0, 40, 0, out _));
+            Assert.IsTrue(grid.TryPlace(ElevatorType(), new Vector2Int(0, 0), out _));
+            Assert.IsTrue(grid.TryPlace(HotelType(), new Vector2Int(4, 1), out var baseHotel));
+            for (var floor = 2; floor <= 4; floor++)
+            {
+                for (var x = 4; x <= 6; x++)
+                    Assert.IsTrue(grid.TryPlace(FillerType(), new Vector2Int(x, floor), out _));
+            }
+            Assert.IsTrue(
+                grid.TryPlace(UpperHotelType(), new Vector2Int(4, 5), out var upperHotel));
+            sim.Router.Rebuild(grid);
+            sim.Power();
+            upperHotel.Powered = true;
+            baseHotel.Powered = true;
+            agents.SetWaterPressure(0f);
+
+            var lowRoll = new FixedRollRandom(0.05);
+            Assert.IsTrue(
+                agents.TryFindHotelRoomForGuest(grid, WealthBand.Basic, 0, lowRoll, out var basePick, out _));
+            Assert.AreEqual(baseHotel, basePick);
+
+            var highRoll = new FixedRollRandom(0.95);
+            Assert.IsFalse(
+                agents.TryFindHotelRoomForGuest(
+                    grid,
+                    WealthBand.Premium,
+                    0,
+                    highRoll,
+                    out _,
+                    out _));
+
+            agents.SetWaterPressure(148f);
+            Assert.IsTrue(
+                agents.TryFindHotelRoomForGuest(
+                    grid,
+                    WealthBand.Premium,
+                    0,
+                    new FixedRollRandom(0.05),
+                    out var upperPick,
+                    out _));
+            Assert.AreEqual(upperHotel, upperPick);
+
+            agents.SetWaterPressure(148f);
+            agents.SyncHomes(grid, currentStars: 5, averageCrime: 0f);
+            var guest = agents.Agents.FirstOrDefault(a =>
+                a.Role == AgentRole.HotelGuest && ReferenceEquals(a.HomeRoom, upperHotel));
+            Assert.IsNotNull(guest, "Upper hotel should host a guest after SyncHomes.");
+
+            agents.SetWaterPressure(0f);
+
+            var before = guest.Stress;
+            agents.Tick(0f, clock, grid);
+            Assert.AreEqual(before + 8f, guest.Stress, 0.001f);
+
+            agents.Tick(0f, clock, grid);
+            Assert.AreEqual(before + 8f, guest.Stress, 0.001f, "Same day index must not re-apply water stress.");
+        }
+
+        static RoomTypeSO UpperHotelType()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = HotelLuxury.UpperKingId;
+            so.category = RoomCategory.Hotel;
+            so.luxuryBand = LuxuryBand.Upper;
+            so.size = new Vector2Int(3, 1);
+            so.maxOccupants = 2;
+            so.allowAboveGround = true;
+            return so;
+        }
+
+        static RoomTypeSO PumpType()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "service_pump";
+            so.category = RoomCategory.Service;
+            so.buildFamily = BuildFamily.Utility;
+            so.allowBasement = true;
+            so.allowAboveGround = false;
+            so.size = new Vector2Int(6, 1);
+            return so;
+        }
+
+        sealed class FixedRollRandom : System.Random
+        {
+            readonly double _roll;
+
+            public FixedRollRandom(double roll) => _roll = roll;
+
+            public override double NextDouble() => _roll;
+        }
     }
 }

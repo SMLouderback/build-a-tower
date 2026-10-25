@@ -103,6 +103,8 @@ namespace BuildATower
         int _lastEventVisitorSpawnDay = int.MinValue;
         int _eventVisitorsSpawnedToday;
         int _condoJobsAssignedDay = -1;
+        float _waterPressurePercent = 100f;
+        readonly Dictionary<int, int> _upperWaterStressDay = new();
 
         public IReadOnlyList<Agent> Agents => _agents;
         public string LastCaptureMessage { get; private set; }
@@ -162,6 +164,8 @@ namespace BuildATower
         public void SetMetro(MetroSystem metro) => _metro = metro;
 
         public void SetHealth(HealthSystem health) => _health = health;
+
+        public void SetWaterPressure(float pressurePercent) => _waterPressurePercent = pressurePercent;
 
         /// <summary>Test hook: next maid clean illness roll; consumed once, then <see cref="_rng"/> again.</summary>
         public void SetNextCleanRoll(double roll) => _nextCleanRoll = roll;
@@ -572,6 +576,8 @@ namespace BuildATower
                                   AtriumMarketing.HotelFillBonusFor(grid));
             fill *= ClassClashFillMultiplier(grid, best);
             fill *= HealthFillMultiplier(grid, HealthSystem.HotelFillThreshold);
+            if (EffectiveHotelLuxuryBand(best.Type) == LuxuryBand.Upper)
+                fill *= WaterSystem.UpperFillMultiplier(_waterPressurePercent);
             if (fill < 1f && rng.NextDouble() >= fill)
                 return false;
 
@@ -692,6 +698,8 @@ namespace BuildATower
             var fill = LivingLuxury.CheckInFillMultiplier(EffectiveCondoLuxuryBand(best.Type), climateStep);
             fill *= ClassClashFillMultiplier(grid, best);
             fill *= HealthFillMultiplier(grid, HealthSystem.CondoFillThreshold);
+            if (EffectiveCondoLuxuryBand(best.Type) == LuxuryBand.Upper)
+                fill *= WaterSystem.UpperFillMultiplier(_waterPressurePercent);
             if (fill < 1f && rng.NextDouble() >= fill)
                 return false;
 
@@ -813,6 +821,7 @@ namespace BuildATower
                 ApplyLowConditionStress(agent, clock.DayIndex);
                 ApplyCrimeStressDaily(agent, _crime, clock.DayIndex);
                 ApplyHealthStressDaily(agent, grid, clock.DayIndex);
+                ApplyUpperWaterStressDaily(agent, clock.DayIndex);
                 AmenitySystem.TryApplyDailyRelief(agent, grid, clock.DayIndex);
                 if (agent.Phase == AgentPhase.Working && advanced > 0)
                     agent.WorkedMinutes += advanced;
@@ -3094,6 +3103,7 @@ namespace BuildATower
         void RemoveAgentAt(int index)
         {
             if (index < 0 || index >= _agents.Count) return;
+            _upperWaterStressDay.Remove(_agents[index].Id);
             ReleaseStairsOccupancy(_agents[index]);
             ParkingStalls.Release(_agents[index]);
             _agents.RemoveAt(index);
@@ -3102,6 +3112,7 @@ namespace BuildATower
         void RemoveAgent(Agent agent)
         {
             if (agent == null) return;
+            _upperWaterStressDay.Remove(agent.Id);
             ReleaseStairsOccupancy(agent);
             ParkingStalls.Release(agent);
             _agents.Remove(agent);
@@ -3116,6 +3127,30 @@ namespace BuildATower
 
             agent.Stress = Mathf.Min(100f, agent.Stress + LowConditionStressPerDay);
             agent.LowConditionStressDay = dayIndex;
+        }
+
+        void ApplyUpperWaterStressDaily(Agent agent, int dayIndex)
+        {
+            if (agent == null || agent.HomeRoom?.Type == null) return;
+            if (agent.Role is not (AgentRole.HotelGuest or AgentRole.CondoResident)) return;
+
+            var category = agent.HomeRoom.Type.category;
+            LuxuryBand band;
+            if (category == RoomCategory.Hotel)
+                band = EffectiveHotelLuxuryBand(agent.HomeRoom.Type);
+            else if (category == RoomCategory.Condo)
+                band = EffectiveCondoLuxuryBand(agent.HomeRoom.Type);
+            else
+                return;
+
+            if (band != LuxuryBand.Upper) return;
+            if (_upperWaterStressDay.TryGetValue(agent.Id, out var applied) && applied == dayIndex)
+                return;
+
+            var gain = WaterSystem.UpperStressGain(_waterPressurePercent);
+            if (gain > 0)
+                agent.Stress = Mathf.Min(100f, agent.Stress + gain);
+            _upperWaterStressDay[agent.Id] = dayIndex;
         }
 
         public static void ApplyCrimeStressDaily(Agent agent, CrimeSystem crime, int dayIndex)

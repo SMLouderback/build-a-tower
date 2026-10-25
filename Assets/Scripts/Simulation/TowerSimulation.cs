@@ -122,6 +122,8 @@ namespace BuildATower
         TowerMapController _mapController;
         readonly Dictionary<int, bool> _powerBrokenSnapshot = new();
 
+        public TowerWaterState Water { get; private set; }
+
         public void SetSpeedPreset(float minutesPerRealSecond, bool paused)
         {
             _clock.Paused = paused;
@@ -518,13 +520,64 @@ namespace BuildATower
 
             _elevators?.SyncShaftMaintenanceFromGrid(grid);
             CapturePowerBrokenSnapshot(grid);
+            ComputeWater();
+        }
+
+        /// <summary>Recomputes tower water pressure from powered pumps and upper-room demand.</summary>
+        public void ComputeWater()
+        {
+            var grid = build?.Grid;
+            if (grid == null)
+            {
+                Water = TowerWaterState.Empty;
+                _agents?.SetWaterPressure(0f);
+                return;
+            }
+
+            var lobbyFloor = TowerGrid.LobbyFloor;
+            var highest = lobbyFloor;
+            var upperHotels = 0;
+            var upperCondos = 0;
+            var supply = 0;
+
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+
+                var floor = room.Origin.y;
+                if (floor >= lobbyFloor && floor > highest)
+                    highest = floor;
+
+                if (room.Type.id == "service_pump" && !room.IsBroken && room.Powered)
+                    supply += WaterSystem.PumpSupply(room.UtilityLevel);
+
+                if (room.Type.category == RoomCategory.Hotel &&
+                    EffectiveLuxuryBand(room.Type) == LuxuryBand.Upper)
+                    upperHotels++;
+
+                if (room.Type.category == RoomCategory.Condo &&
+                    EffectiveLuxuryBand(room.Type) == LuxuryBand.Upper)
+                    upperCondos++;
+            }
+
+            var height = WaterSystem.Height(lobbyFloor, highest);
+            var demand = WaterSystem.Demand(height, upperHotels, upperCondos);
+            var pressure = WaterSystem.PressurePercent(supply, demand);
+            Water = new TowerWaterState(height, upperHotels, upperCondos, supply, demand, pressure);
+            _agents?.SetWaterPressure(pressure);
+        }
+
+        static LuxuryBand EffectiveLuxuryBand(RoomTypeSO type)
+        {
+            if (ReferenceEquals(type, null)) return LuxuryBand.None;
+            return type.luxuryBand == LuxuryBand.None ? LuxuryBand.Base : type.luxuryBand;
         }
 
         /// <summary>Advances plant upgrade clocks in game minutes (EditMode / simulation tick).</summary>
         public void TickPowerClocks(float deltaGameMinutes)
         {
             if (deltaGameMinutes <= 0f) return;
-            if (TickPlantUpgrades(deltaGameMinutes))
+            if (TickPlantUpgrades(deltaGameMinutes) | TickPumpUpgrades(deltaGameMinutes))
                 Power();
         }
 
@@ -532,6 +585,7 @@ namespace BuildATower
         {
             if (deltaGameMinutes <= 0f) return;
             var upgraded = TickPlantUpgrades(deltaGameMinutes);
+            upgraded |= TickPumpUpgrades(deltaGameMinutes);
             if (upgraded || SyncPowerBrokenTransitions())
                 Power();
         }
@@ -545,6 +599,30 @@ namespace BuildATower
             foreach (var room in grid.Rooms)
             {
                 if (room?.Type == null || room.Type.id != "service_power") continue;
+
+                var level = room.UtilityLevel;
+                var minutes = room.UpgradeMinutesRemaining;
+                var running = room.UpgradeRunning;
+                if (PowerSystem.TickUpgrade(ref level, ref minutes, ref running, deltaGameMinutes, room.IsBroken))
+                    anyCompleted = true;
+
+                room.UtilityLevel = level;
+                room.UpgradeMinutesRemaining = minutes;
+                room.UpgradeRunning = running;
+            }
+
+            return anyCompleted;
+        }
+
+        bool TickPumpUpgrades(float deltaGameMinutes)
+        {
+            var grid = build?.Grid;
+            if (grid == null || deltaGameMinutes <= 0f) return false;
+
+            var anyCompleted = false;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null || room.Type.id != "service_pump") continue;
 
                 var level = room.UtilityLevel;
                 var minutes = room.UpgradeMinutesRemaining;
@@ -1005,5 +1083,33 @@ namespace BuildATower
             if (cam.GetComponent<DayNightSkyController>() != null) return;
             cam.gameObject.AddComponent<DayNightSkyController>();
         }
+    }
+
+    public readonly struct TowerWaterState
+    {
+        public static TowerWaterState Empty => new(1, 0, 0, 0, 1, 0f);
+
+        public TowerWaterState(
+            int height,
+            int upperHotels,
+            int upperCondos,
+            int supply,
+            int demand,
+            float pressurePercent)
+        {
+            Height = height;
+            UpperHotels = upperHotels;
+            UpperCondos = upperCondos;
+            Supply = supply;
+            Demand = demand;
+            PressurePercent = pressurePercent;
+        }
+
+        public int Height { get; }
+        public int UpperHotels { get; }
+        public int UpperCondos { get; }
+        public int Supply { get; }
+        public int Demand { get; }
+        public float PressurePercent { get; }
     }
 }

@@ -1298,7 +1298,7 @@ namespace BuildATower
             {
                 DrawChip($"Save ${build.Wallet.Balance:N0}", 118f);
                 DrawChip(FormatPowerBarText(), 92f);
-                DrawChip(PowerHudFormat.FormatWater(0f), 72f);
+                DrawChip(FormatWaterBarText(), 72f);
                 DrawChip($"+${economy.LastIncome:N0}", 88f);
                 DrawChip($"-${economy.LastExpense:N0}", 88f);
                 DrawChip($"Avg ${economy.AverageDailyProfit:N0}/d", 110f);
@@ -1307,7 +1307,7 @@ namespace BuildATower
             {
                 DrawChip($"Save ${build.Wallet.Balance:N0}", 118f);
                 DrawChip(FormatPowerBarText(), 92f);
-                DrawChip(PowerHudFormat.FormatWater(0f), 72f);
+                DrawChip(FormatWaterBarText(), 72f);
             }
 
             x = DrawStarTrack(x, y, lineH, stars != null ? stars.CurrentStars : 0);
@@ -3480,6 +3480,9 @@ namespace BuildATower
             return PowerHudFormat.FormatPower(use, capacity);
         }
 
+        string FormatWaterBarText() =>
+            PowerHudFormat.FormatWater(simulation?.Water.PressurePercent ?? 0f);
+
         void QueryPowerTotals(out int use, out int capacity)
         {
             use = 0;
@@ -3538,10 +3541,10 @@ namespace BuildATower
             if (typeId == "service_pump")
             {
                 var level = Mathf.Clamp(room.UtilityLevel, 0, 3);
-                var supply = PumpDisplaySupply(level);
+                var supply = WaterSystem.PumpSupply(level);
                 GUI.Label(new Rect(cx, cy, inner, row), PowerHudFormat.FormatPump(level, supply), label);
                 cy += row;
-                return cy;
+                return DrawPumpUpgradeButton(cx, cy, inner, btnH, room);
             }
 
             var cost = PowerSystem.Cost(room.Type);
@@ -3554,16 +3557,41 @@ namespace BuildATower
             return cy;
         }
 
-        static int PumpDisplaySupply(int level)
+        float DrawPumpUpgradeButton(float cx, float cy, float inner, float btnH, RoomInstance room)
         {
-            switch (level)
+            const int maxLevel = 3;
+            if (room.UtilityLevel >= maxLevel)
+                return cy;
+
+            var nextLevel = room.UtilityLevel + 1;
+            var fee = WaterSystem.PumpUpgradeFee(nextLevel);
+            var days = WaterSystem.PumpUpgradeMinutes(nextLevel) / 1440;
+            var text = PowerHudFormat.FormatUpgrade(nextLevel, days, fee);
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), text))
             {
-                case 0: return 80;
-                case 1: return 120;
-                case 2: return 180;
-                case 3: return 260;
-                default: return 80;
+                var level = room.UtilityLevel;
+                var minutes = room.UpgradeMinutesRemaining;
+                var running = room.UpgradeRunning;
+                var wallet = build.Wallet.Balance;
+                if (PowerSystem.TryBeginUpgrade(
+                        ref level,
+                        ref minutes,
+                        ref running,
+                        maxLevel,
+                        fee,
+                        wallet,
+                        out var walletAfter))
+                {
+                    minutes = WaterSystem.PumpUpgradeMinutes(nextLevel);
+                    room.UtilityLevel = level;
+                    room.UpgradeMinutesRemaining = minutes;
+                    room.UpgradeRunning = running;
+                    build.Wallet.RestoreBalance(walletAfter);
+                }
             }
+
+            cy += btnH + 4f;
+            return cy;
         }
 
         float DrawPlantUpgradeButton(float cx, float cy, float inner, float btnH, RoomInstance room)
