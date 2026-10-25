@@ -1,7 +1,31 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace BuildATower
 {
+    public enum PowerBand
+    {
+        Elevator = 0,
+        Occupied = 1,
+        Other = 2,
+        ShedFirst = 3
+    }
+
+    public readonly struct PowerNeed
+    {
+        public int InstanceId { get; }
+        public int Cost { get; }
+        public PowerBand Band { get; }
+
+        public PowerNeed(int instanceId, int cost, PowerBand band)
+        {
+            InstanceId = instanceId;
+            Cost = cost;
+            Band = band;
+        }
+    }
+
     public static class PowerSystem
     {
         public const int FreeCapacity = 20;
@@ -56,6 +80,24 @@ namespace BuildATower
             }
 
             return total;
+        }
+
+        public static int[] Assign(IReadOnlyList<PowerNeed> needs, int capacity)
+        {
+            if (needs == null || needs.Count == 0)
+                return Array.Empty<int>();
+
+            var remaining = capacity;
+            var powered = new List<int>();
+            foreach (var need in needs.OrderBy(n => n.Band).ThenBy(n => n.InstanceId))
+            {
+                if (remaining < need.Cost)
+                    continue;
+                remaining -= need.Cost;
+                powered.Add(need.InstanceId);
+            }
+
+            return powered.ToArray();
         }
     }
 }

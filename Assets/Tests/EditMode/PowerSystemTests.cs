@@ -39,6 +39,51 @@ namespace BuildATower.Tests
             Assert.AreEqual(20, PowerSystem.Capacity(new[] { 0 }, new[] { true }));
         }
 
+        [Test]
+        public void ShedFirstGoesDarkBeforeOtherEmpty()
+        {
+            var powered = PowerSystem.Assign(new[]
+            {
+                new PowerNeed(1, 1, PowerBand.ShedFirst),
+                new PowerNeed(2, 1, PowerBand.Other)
+            }, 1);
+            CollectionAssert.AreEqual(new[] { 2 }, powered);
+        }
+
+        [Test]
+        public void ElevatorOutranksOccupiedAndEmpty()
+        {
+            var powered = PowerSystem.Assign(new[]
+            {
+                new PowerNeed(3, 1, PowerBand.Elevator),
+                new PowerNeed(2, 1, PowerBand.Occupied),
+                new PowerNeed(1, 1, PowerBand.Other)
+            }, 2);
+            CollectionAssert.AreEquivalent(new[] { 3, 2 }, powered);
+        }
+
+        [Test]
+        public void OlderRoomInABandKeepsPower()
+        {
+            var powered = PowerSystem.Assign(new[]
+            {
+                new PowerNeed(9, 1, PowerBand.Other),
+                new PowerNeed(4, 1, PowerBand.Other)
+            }, 1);
+            CollectionAssert.AreEqual(new[] { 4 }, powered);
+        }
+
+        [Test]
+        public void SkipsARoomThatCostsMoreThanWhatIsLeft()
+        {
+            var powered = PowerSystem.Assign(new[]
+            {
+                new PowerNeed(1, 3, PowerBand.Other),
+                new PowerNeed(2, 2, PowerBand.Other)
+            }, 2);
+            CollectionAssert.AreEqual(new[] { 2 }, powered);
+        }
+
         static RoomTypeSO StairsType()
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
