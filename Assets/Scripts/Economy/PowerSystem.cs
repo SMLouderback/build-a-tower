@@ -99,5 +99,44 @@ namespace BuildATower
 
             return powered.ToArray();
         }
+
+        public static bool TryBeginUpgrade(
+            ref int level,
+            ref float minutesRemaining,
+            ref bool running,
+            int maxLevel,
+            int fee,
+            int wallet,
+            out int walletAfter)
+        {
+            walletAfter = wallet;
+            if (running || level >= maxLevel || wallet < fee)
+                return false;
+
+            walletAfter = wallet - fee;
+            minutesRemaining = PlantUpgradeMinutes(level + 1);
+            running = true;
+            return true;
+        }
+
+        public static bool TickUpgrade(
+            ref int level,
+            ref float minutesRemaining,
+            ref bool running,
+            float deltaGameMinutes,
+            bool broken)
+        {
+            if (broken || !running)
+                return false;
+
+            minutesRemaining -= deltaGameMinutes;
+            if (minutesRemaining > 0f)
+                return false;
+
+            minutesRemaining = 0f;
+            level++;
+            running = false;
+            return true;
+        }
     }
 }

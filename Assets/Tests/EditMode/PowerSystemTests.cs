@@ -84,6 +84,99 @@ namespace BuildATower.Tests
             CollectionAssert.AreEqual(new[] { 2 }, powered);
         }
 
+        [Test]
+        public void UpgradeRefusesWhenWalletTooShort()
+        {
+            var level = 0;
+            var minutes = 0f;
+            var running = false;
+            var ok = PowerSystem.TryBeginUpgrade(
+                ref level,
+                ref minutes,
+                ref running,
+                maxLevel: 6,
+                fee: PowerSystem.PlantUpgradeFee(1),
+                wallet: 39999,
+                out var walletAfter);
+
+            Assert.IsFalse(ok);
+            Assert.AreEqual(0, level);
+            Assert.IsFalse(running);
+            Assert.AreEqual(39999, walletAfter);
+        }
+
+        [Test]
+        public void UpgradeStartChargesFeeAndSetsDuration()
+        {
+            var level = 0;
+            var minutes = 0f;
+            var running = false;
+            var fee = PowerSystem.PlantUpgradeFee(1);
+            var ok = PowerSystem.TryBeginUpgrade(
+                ref level,
+                ref minutes,
+                ref running,
+                maxLevel: 6,
+                fee: fee,
+                wallet: 50000,
+                out var walletAfter);
+
+            Assert.IsTrue(ok);
+            Assert.AreEqual(0, level);
+            Assert.IsTrue(running);
+            Assert.AreEqual(1440f, minutes);
+            Assert.AreEqual(50000 - 40000, walletAfter);
+        }
+
+        [Test]
+        public void UpgradeTickPausedWhileBroken()
+        {
+            var level = 0;
+            var minutes = 1440f;
+            var running = true;
+            var completed = PowerSystem.TickUpgrade(ref level, ref minutes, ref running, 100f, broken: true);
+
+            Assert.IsFalse(completed);
+            Assert.AreEqual(0, level);
+            Assert.IsTrue(running);
+            Assert.AreEqual(1440f, minutes);
+        }
+
+        [Test]
+        public void UpgradeCompletesAfterHealthyDuration()
+        {
+            var level = 0;
+            var minutes = 1440f;
+            var running = true;
+            var completed = PowerSystem.TickUpgrade(ref level, ref minutes, ref running, 1440f, broken: false);
+
+            Assert.IsTrue(completed);
+            Assert.AreEqual(1, level);
+            Assert.IsFalse(running);
+            Assert.AreEqual(0f, minutes);
+        }
+
+        [Test]
+        public void UpgradeCannotStartAtMaxLevel()
+        {
+            var level = 6;
+            var minutes = 0f;
+            var running = false;
+            var ok = PowerSystem.TryBeginUpgrade(
+                ref level,
+                ref minutes,
+                ref running,
+                maxLevel: 6,
+                fee: PowerSystem.PlantUpgradeFee(6),
+                wallet: 1_000_000,
+                out var walletAfter);
+
+            Assert.IsFalse(ok);
+            Assert.AreEqual(6, level);
+            Assert.IsFalse(running);
+            Assert.AreEqual(1_000_000, walletAfter);
+        }
+
         static RoomTypeSO StairsType()
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
