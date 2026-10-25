@@ -120,6 +120,7 @@ namespace BuildATower
         const float AgentSampleIntervalGameMinutes = 2f;
         float _agentSampleAccumulator;
         TowerMapController _mapController;
+        readonly Dictionary<int, bool> _powerBrokenSnapshot = new();
 
         public void SetSpeedPreset(float minutesPerRealSecond, bool paused)
         {
@@ -244,6 +245,7 @@ namespace BuildATower
                 BeginDailyDemand();
                 if (build != null)
                     build.RepaintAllRooms();
+                Power();
                 GameSession.CompleteLoad();
                 return;
             }
@@ -318,6 +320,7 @@ namespace BuildATower
             SampleAgentsForMaps(_clock.LastTickGameMinutes);
             if (agentView != null)
                 agentView.Sync(_agents.Agents, build?.Grid);
+            TickPowerSystems(_clock.LastTickGameMinutes);
         }
 
         const int HealthNewsPriority = 9;
@@ -455,6 +458,199 @@ namespace BuildATower
             if (build == null || build.Grid == null || _agents == null) return;
             _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
             DrainStarCelebrationsAndSyncArt();
+            Power();
+        }
+
+        /// <summary>Recomputes plant pool assignment for every drawing room.</summary>
+        public void Power()
+        {
+            var grid = build?.Grid;
+            if (grid == null) return;
+
+            var plantLevels = new List<int>();
+            var plantBroken = new List<bool>();
+            var needs = new List<PowerNeed>();
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                if (room.Type.id == "service_power")
+                {
+                    plantLevels.Add(room.UtilityLevel);
+                    plantBroken.Add(room.IsBroken);
+                    continue;
+                }
+
+                if (room.IsBroken) continue;
+                var cost = PowerSystem.Cost(room.Type);
+                if (cost <= 0) continue;
+                needs.Add(new PowerNeed(room.InstanceId, cost, PowerBandFor(room, _agents)));
+            }
+
+            var capacity = PowerSystem.Capacity(plantLevels.ToArray(), plantBroken.ToArray());
+            var poweredIds = new HashSet<int>(PowerSystem.Assign(needs, capacity));
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                var cost = PowerSystem.Cost(room.Type);
+                if (cost <= 0)
+                {
+                    room.Powered = true;
+                    continue;
+                }
+
+                room.Powered = !room.IsBroken && poweredIds.Contains(room.InstanceId);
+            }
+
+            CapturePowerBrokenSnapshot(grid);
+        }
+
+        /// <summary>Advances plant upgrade clocks in game minutes (EditMode / simulation tick).</summary>
+        public void TickPowerClocks(float deltaGameMinutes)
+        {
+            if (deltaGameMinutes <= 0f) return;
+            if (TickPlantUpgrades(deltaGameMinutes))
+                Power();
+        }
+
+        void TickPowerSystems(float deltaGameMinutes)
+        {
+            if (deltaGameMinutes <= 0f) return;
+            var upgraded = TickPlantUpgrades(deltaGameMinutes);
+            if (upgraded || SyncPowerBrokenTransitions())
+                Power();
+        }
+
+        bool TickPlantUpgrades(float deltaGameMinutes)
+        {
+            var grid = build?.Grid;
+            if (grid == null || deltaGameMinutes <= 0f) return false;
+
+            var anyCompleted = false;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null || room.Type.id != "service_power") continue;
+
+                var level = room.UtilityLevel;
+                var minutes = room.UpgradeMinutesRemaining;
+                var running = room.UpgradeRunning;
+                if (PowerSystem.TickUpgrade(ref level, ref minutes, ref running, deltaGameMinutes, room.IsBroken))
+                    anyCompleted = true;
+
+                room.UtilityLevel = level;
+                room.UpgradeMinutesRemaining = minutes;
+                room.UpgradeRunning = running;
+            }
+
+            return anyCompleted;
+        }
+
+        void CapturePowerBrokenSnapshot(TowerGrid grid)
+        {
+            _powerBrokenSnapshot.Clear();
+            foreach (var room in grid.Rooms)
+            {
+                if (!DrawsPowerWhenHealthy(room)) continue;
+                _powerBrokenSnapshot[room.InstanceId] = room.IsBroken;
+            }
+        }
+
+        bool SyncPowerBrokenTransitions()
+        {
+            var grid = build?.Grid;
+            if (grid == null) return false;
+
+            var changed = false;
+            foreach (var room in grid.Rooms)
+            {
+                if (!DrawsPowerWhenHealthy(room)) continue;
+                var broken = room.IsBroken;
+                if (_powerBrokenSnapshot.TryGetValue(room.InstanceId, out var was) && was != broken)
+                    changed = true;
+                _powerBrokenSnapshot[room.InstanceId] = broken;
+            }
+
+            return changed;
+        }
+
+        static bool DrawsPowerWhenHealthy(RoomInstance room) =>
+            room?.Type != null &&
+            (room.Type.id == "service_power" || PowerSystem.Cost(room.Type) > 0);
+
+        static PowerBand PowerBandFor(RoomInstance room, AgentSystem agents)
+        {
+            var type = room.Type;
+            if (type.isElevatorShaft) return PowerBand.Elevator;
+            if (type.ResolvedBuildFamily() == BuildFamily.Leisure) return PowerBand.ShedFirst;
+            if (type.category == RoomCategory.Hotel && CountHomeOccupants(room, agents) == 0)
+                return PowerBand.ShedFirst;
+            if (IsOccupiedForPower(room, agents)) return PowerBand.Occupied;
+            return PowerBand.Other;
+        }
+
+        static bool IsOccupiedForPower(RoomInstance room, AgentSystem agents)
+        {
+            if (room?.Type == null) return false;
+            if (room.CondoSold) return true;
+
+            var category = room.Type.category;
+            if (category is RoomCategory.Hotel or RoomCategory.Office or RoomCategory.Condo)
+                return CountHomeOccupants(room, agents) > 0;
+
+            if (ShopVisitRules.IsShop(room.Type) && room.ConcurrentVisitors > 0)
+                return true;
+
+            if (ParkingStalls.IsParking(room) && HasParkingOccupant(room, agents))
+                return true;
+
+            if (category == RoomCategory.Service)
+            {
+                if (room.StaffedWorkers > 0) return true;
+                if (HasPersonInside(room, agents)) return true;
+            }
+
+            return false;
+        }
+
+        static int CountHomeOccupants(RoomInstance room, AgentSystem agents)
+        {
+            if (room == null || agents?.Agents == null) return 0;
+
+            var count = 0;
+            foreach (var agent in agents.Agents)
+            {
+                if (agent != null && ReferenceEquals(agent.HomeRoom, room))
+                    count++;
+            }
+
+            return count;
+        }
+
+        static bool HasParkingOccupant(RoomInstance room, AgentSystem agents)
+        {
+            if (room == null || agents?.Agents == null) return false;
+            foreach (var agent in agents.Agents)
+            {
+                if (agent != null && ReferenceEquals(agent.ParkingRoom, room))
+                    return true;
+            }
+
+            return false;
+        }
+
+        static bool HasPersonInside(RoomInstance room, AgentSystem agents)
+        {
+            if (room == null || agents?.Agents == null) return false;
+            foreach (var agent in agents.Agents)
+            {
+                if (agent == null) continue;
+                if (ReferenceEquals(agent.HomeRoom, room)) return true;
+                if (ReferenceEquals(agent.VisitTarget, room)) return true;
+                if (ReferenceEquals(agent.ParkingRoom, room)) return true;
+                if (ReferenceEquals(agent.ServiceTarget, room) && agent.Phase != AgentPhase.Outside)
+                    return true;
+            }
+
+            return false;
         }
 
         public void RegisterMetroStation(RoomInstance room)
@@ -634,6 +830,7 @@ namespace BuildATower
             }
 
             _lastDayIndex = _clock.DayIndex;
+            Power();
         }
 
         void PushOpsAndQuirkNews(int dayIndex, TowerGrid grid, float averageStress, float averageCrime)
