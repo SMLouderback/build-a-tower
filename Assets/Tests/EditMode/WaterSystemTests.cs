@@ -76,6 +76,27 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void ComputeWater_uses_top_floor_of_multi_floor_rooms()
+        {
+            var go = new GameObject("WaterHeightHost");
+            go.SetActive(true);
+            var build = go.AddComponent<BuildController>();
+            build.InitializeTower();
+            var sim = go.GetComponent<TowerSimulation>() ?? go.AddComponent<TowerSimulation>();
+            sim.InitializeSimulation();
+            var grid = build.Grid;
+
+            Assert.IsTrue(grid.TryPlaceLobby(LobbyType(), 0, 40, 0, out _));
+            Assert.IsTrue(grid.TryPlace(ElevatorType(), new Vector2Int(0, 0), out _));
+            Assert.IsTrue(
+                grid.TryPlace(EventHallTwoFloor(), new Vector2Int(9, 1), out _),
+                "Two-floor hall whose origin is below the roof should still count the top floor.");
+
+            sim.ComputeWater();
+            Assert.AreEqual(3, sim.Water.Height, "Height should include the hall's top floor, not its origin alone.");
+        }
+
+        [Test]
         public void Tower_water_pressure_tracks_pump_power_and_upper_fill_multiplier()
         {
             var (sim, pump) = CreateFifteenFloorUpperTower();
@@ -214,5 +235,16 @@ namespace BuildATower.Tests
             so.size = new Vector2Int(6, 1);
             return so;
         }
+
+        static RoomTypeSO EventHallTwoFloor()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = ConferenceSystem.EventHallId;
+            so.category = RoomCategory.Service;
+            so.size = new Vector2Int(12, 2);
+            so.allowAboveGround = true;
+            return so;
+        }
+
     }
 }

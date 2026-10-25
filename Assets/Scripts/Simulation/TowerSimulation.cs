@@ -243,11 +243,11 @@ namespace BuildATower
             if (GameSession.PendingLoad != null)
             {
                 SyncMetroStationsFromGrid();
+                Power();
                 RebuildRoutingAndAgents();
                 BeginDailyDemand();
                 if (build != null)
                     build.RepaintAllRooms();
-                Power();
                 GameSession.CompleteLoad();
                 return;
             }
@@ -456,11 +456,11 @@ namespace BuildATower
         void OnGridChanged()
         {
             SyncMetroStationsFromGrid();
+            Power();
             RebuildRoutingAndAgents();
             if (build == null || build.Grid == null || _agents == null) return;
             _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
             DrainStarCelebrationsAndSyncArt();
-            Power();
         }
 
         /// <summary>Recomputes plant pool assignment for every drawing room.</summary>
@@ -544,9 +544,9 @@ namespace BuildATower
             {
                 if (room?.Type == null) continue;
 
-                var floor = room.Origin.y;
-                if (floor >= lobbyFloor && floor > highest)
-                    highest = floor;
+                var topFloor = room.Origin.y + room.Size.y - 1;
+                if (topFloor >= lobbyFloor && topFloor > highest)
+                    highest = topFloor;
 
                 if (room.Type.id == "service_pump" && !room.IsBroken && room.Powered)
                     supply += WaterSystem.PumpSupply(room.UtilityLevel);
@@ -664,6 +664,13 @@ namespace BuildATower
             }
 
             return changed;
+        }
+
+        static void ApplyStartOfDayCondition(TowerGrid grid)
+        {
+            if (grid?.Rooms == null) return;
+            foreach (var room in grid.Rooms)
+                RoomConditionRules.ApplyMidnightDecay(room);
         }
 
         static bool DrawsPowerWhenHealthy(RoomInstance room) =>
@@ -863,6 +870,10 @@ namespace BuildATower
             for (var day = _lastDayIndex + 1; day <= _clock.DayIndex; day++)
             {
                 _shopDemand.ArchiveAndApplyStress(_agents.Agents);
+
+                ApplyStartOfDayCondition(build.Grid);
+                if (SyncPowerBrokenTransitions())
+                    Power();
 
                 // Event schedule first so pending lump / daily credits land in OnNewDay.
                 _conference?.TickDay(

@@ -67,9 +67,6 @@ namespace BuildATower
             var difficulty = GameSession.Difficulty;
 
             foreach (var room in grid.Rooms)
-                RoomConditionRules.ApplyMidnightDecay(room);
-
-            foreach (var room in grid.Rooms)
             {
                 if (room.Type.isElevatorShaft)
                 {
@@ -96,7 +93,7 @@ namespace BuildATower
                     room.RecordLifetimeExpense(ParkingStalls.RampDailyUpkeep);
                 }
 
-                var incomeBlocked = RoomConditionRules.IncomePaused(room) || room.IsBroken;
+                var incomeBlocked = RoomConditionRules.IncomePaused(room) || room.IsBroken || !room.Powered;
                 var pulse = PulseFor(room.Type, livingPulseMult, commercialPulseMult);
                 var floorFit = FloorFitFor(room, currentStars);
 
@@ -186,16 +183,19 @@ namespace BuildATower
                 var eventAmount = conference.TakePendingEventIncome(out var eventHallId);
                 if (eventAmount > 0)
                 {
-                    eventAmount = BuildEconomy.ApplyIncome(eventAmount);
-                    LastIncome += eventAmount;
                     var eventHall = FindRoomByInstanceId(grid, eventHallId);
-                    if (eventHall != null)
+                    if (eventHall == null || eventHall.Powered)
                     {
-                        if (_lastIncomeByRoom.TryGetValue(eventHall.InstanceId, out var existingEvent))
-                            _lastIncomeByRoom[eventHall.InstanceId] = existingEvent + eventAmount;
-                        else
-                            _lastIncomeByRoom[eventHall.InstanceId] = eventAmount;
-                        eventHall.RecordLifetimeIncome(eventAmount);
+                        eventAmount = BuildEconomy.ApplyIncome(eventAmount);
+                        LastIncome += eventAmount;
+                        if (eventHall != null)
+                        {
+                            if (_lastIncomeByRoom.TryGetValue(eventHall.InstanceId, out var existingEvent))
+                                _lastIncomeByRoom[eventHall.InstanceId] = existingEvent + eventAmount;
+                            else
+                                _lastIncomeByRoom[eventHall.InstanceId] = eventAmount;
+                            eventHall.RecordLifetimeIncome(eventAmount);
+                        }
                     }
                 }
             }

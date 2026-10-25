@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using System.Linq;
 using BuildATower;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace BuildATower.Tests
 {
@@ -63,6 +65,105 @@ namespace BuildATower.Tests
             Assert.AreEqual(
                 PowerSystem.FreeCapacity,
                 PowerSystem.Capacity(new[] { plant.UtilityLevel }, new[] { true }));
+        }
+
+        [Test]
+        public void Dark_sold_condo_stays_unsold_after_power_then_sync_homes()
+        {
+            var (sim, grid, _, _) = CreateTowerWithElevatorAndHotel();
+            Assert.IsTrue(grid.TryPlace(CondoType(), new Vector2Int(8, 1), out var condo));
+            sim.Router.Rebuild(grid);
+            condo.CondoSold = true;
+            condo.Powered = false;
+
+            sim.Agents.SyncHomes(grid, currentStars: 5, averageCrime: 0f);
+
+            Assert.IsFalse(condo.CondoSold, "Dark sold condo should be unsold after the agent sync pass.");
+            Assert.AreEqual(
+                0,
+                sim.Agents.Agents.Count(a => ReferenceEquals(a.HomeRoom, condo)),
+                "Dark sold condo must not receive a resident.");
+        }
+
+        [Test]
+        public void Dark_conference_earns_nothing_on_new_day()
+        {
+            var go = new GameObject("DarkIncomeHost");
+            var build = go.AddComponent<BuildController>();
+            build.InitializeTower();
+            var sim = go.GetComponent<TowerSimulation>() ?? go.AddComponent<TowerSimulation>();
+            sim.InitializeSimulation();
+            var grid = build.Grid;
+            var economy = sim.Economy;
+            var conference = sim.Conference;
+
+            Assert.IsTrue(grid.TryPlaceLobby(LobbyType(), 0, 40, 0, out _));
+            Assert.IsTrue(grid.TryPlace(ElevatorType(), new Vector2Int(0, 0), out _));
+            Assert.IsTrue(grid.TryPlace(ConferenceType(), new Vector2Int(4, 1), out var hall));
+            Assert.IsTrue(grid.TryPlace(OfficeType(), new Vector2Int(12, 1), out var office));
+            sim.Router.Rebuild(grid);
+            sim.Power();
+            hall.Powered = true;
+            office.Powered = true;
+            sim.Agents.SyncHomes(grid, currentStars: 5, averageCrime: 0f);
+            var agents = new List<Agent>(sim.Agents.Agents);
+
+            economy.OnNewDay(
+                grid,
+                agents,
+                build.Wallet,
+                currentStars: 5,
+                conference: conference);
+            Assert.Greater(economy.GetLastRoomIncome(hall), 0, "Powered conference should earn meeting income.");
+
+            hall.Powered = false;
+            economy.OnNewDay(
+                grid,
+                agents,
+                build.Wallet,
+                currentStars: 5,
+                conference: conference);
+            Assert.AreEqual(0, economy.GetLastRoomIncome(hall), "Dark conference must not credit meetings.");
+        }
+
+        [Test]
+        public void Broken_plant_before_day_roll_clears_powered_income()
+        {
+            var go = new GameObject("BreakBeforeIncomeHost");
+            var build = go.AddComponent<BuildController>();
+            build.InitializeTower();
+            var sim = go.GetComponent<TowerSimulation>() ?? go.AddComponent<TowerSimulation>();
+            sim.InitializeSimulation();
+            var grid = build.Grid;
+
+            Assert.IsTrue(grid.TryPlaceLobby(LobbyType(), 0, 40, 0, out _));
+            Assert.IsTrue(grid.TryPlace(ElevatorType(), new Vector2Int(0, 0), out _));
+            Assert.IsTrue(grid.TryPlace(ConferenceType(), new Vector2Int(20, 1), out var hall));
+            Assert.IsTrue(grid.TryPlace(OfficeType(), new Vector2Int(28, 1), out var office));
+            for (var x = 0; x < 8; x++)
+                Assert.IsTrue(grid.TryPlaceScaffold(new Vector2Int(x, -1), out _));
+            Assert.IsTrue(grid.TryPlace(PlantType(), new Vector2Int(0, -1), out var plant));
+            for (var i = 0; i < 18; i++)
+                Assert.IsTrue(grid.TryPlace(FillerType(), FillerCell(i), out _));
+            sim.Router.Rebuild(grid);
+            sim.Power();
+            Assert.IsTrue(hall.Powered);
+            sim.Agents.SyncHomes(grid, currentStars: 5, averageCrime: 0f);
+            sim.Economy.OnNewDay(
+                grid,
+                new List<Agent>(sim.Agents.Agents),
+                build.Wallet,
+                currentStars: 5,
+                conference: sim.Conference);
+            Assert.Greater(sim.Economy.GetLastRoomIncome(hall), 0);
+
+            plant.Condition = 0;
+            var minutesToMidnight = (24 * 60) - sim.Clock.MinuteOfDay;
+            LogAssert.Expect(LogType.Error, "Destroy may not be called from edit mode! Use DestroyImmediate instead.\nDestroying an object in edit mode destroys it permanently.");
+            sim.Clock.Tick(minutesToMidnight + 1f);
+
+            Assert.IsFalse(hall.Powered, "Day roll must re-run power before income when the plant breaks.");
+            Assert.AreEqual(0, sim.Economy.GetLastRoomIncome(hall));
         }
 
         [Test]
@@ -214,6 +315,43 @@ namespace BuildATower.Tests
             so.size = Vector2Int.one;
             so.maxOccupants = 1;
             so.allowAboveGround = true;
+            return so;
+        }
+
+        static RoomTypeSO CondoType()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "condo_base";
+            so.category = RoomCategory.Condo;
+            so.luxuryBand = LuxuryBand.Base;
+            so.size = new Vector2Int(3, 1);
+            so.maxOccupants = 2;
+            so.allowAboveGround = true;
+            return so;
+        }
+
+        static RoomTypeSO ConferenceType()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = ConferenceSystem.ConferenceId;
+            so.category = RoomCategory.Service;
+            so.size = new Vector2Int(8, 1);
+            so.allowAboveGround = true;
+            so.eventCapacity = 40;
+            return so;
+        }
+
+        static RoomTypeSO OfficeType()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "office_filler";
+            so.category = RoomCategory.Office;
+            so.luxuryBand = LuxuryBand.Base;
+            so.size = new Vector2Int(4, 1);
+            so.maxOccupants = 4;
+            so.allowAboveGround = true;
+            so.incomeModel = IncomeModel.QuarterlyRent;
+            so.baseIncome = 1000;
             return so;
         }
 

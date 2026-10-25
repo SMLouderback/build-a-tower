@@ -412,7 +412,7 @@ namespace BuildATower
                 return false;
             if (room.Type.id != EventHallId)
                 return false;
-            if (room.IsBroken)
+            if (room.IsBroken || !room.Powered)
                 return false;
             // Post-event cleanup must finish before the hall can host again.
             if (room.Dirty || room.CleanWorkRemaining > 0f || room.RepairJobsRemaining > 0)
@@ -428,7 +428,7 @@ namespace BuildATower
                 return false;
             if (room.Type.id != ConferenceId)
                 return false;
-            if (room.IsBroken)
+            if (room.IsBroken || !room.Powered)
                 return false;
             if (IsHallBooked(room))
                 return false;

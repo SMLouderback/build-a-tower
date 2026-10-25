@@ -284,7 +284,12 @@ namespace BuildATower
             foreach (var room in livingRooms)
             {
                 var role = RoleFor(room.Type.category);
-                if (room.IsBroken) continue;
+                if (room.IsBroken || !room.Powered)
+                {
+                    if (role == AgentRole.CondoResident && room.CondoSold)
+                        room.CondoSold = false;
+                    continue;
+                }
                 // Hotels fill via wealth roll + acceptance (FillHotelVacancies).
                 if (role == AgentRole.HotelGuest) continue;
 
