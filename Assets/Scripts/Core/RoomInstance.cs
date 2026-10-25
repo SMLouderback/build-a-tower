@@ -18,6 +18,15 @@ namespace BuildATower
         public bool IsBroken => Condition <= 0;
         public bool Dirty { get; private set; }
         public bool Sick { get; private set; }
+        /// <summary>Plant or pump level. Other room types ignore it.</summary>
+        public int UtilityLevel { get; set; }
+        /// <summary>Game minutes left on a plant or pump upgrade clock.</summary>
+        public float UpgradeMinutesRemaining { get; set; }
+        public bool UpgradeRunning { get; set; }
+        /// <summary>Elevator shaft player maintenance flag.</summary>
+        public bool PlayerMaintenance { get; set; }
+        /// <summary>Runtime power assignment; not persisted in snapshots.</summary>
+        public bool Powered { get; set; }
         /// <summary>
         /// Total maid-minutes of cleaning still owed (shared pool). Multiple maids chip away
         /// in short shifts instead of locking exclusive multi-hour jobs.
@@ -243,7 +252,11 @@ namespace BuildATower
                 shopRevenueYesterday = ShopRevenueYesterday,
                 shopUpkeepYesterday = ShopUpkeepYesterday,
                 visitHistory = _visitHistory.CaptureValues(),
-                sick = Sick
+                sick = Sick,
+                utilityLevel = UtilityLevel,
+                upgradeMinutesRemaining = UpgradeMinutesRemaining,
+                upgradeRunning = UpgradeRunning,
+                playerMaintenance = PlayerMaintenance
             };
         }
 
@@ -293,6 +306,10 @@ namespace BuildATower
             ShopUpkeepYesterday = Mathf.Max(0, snapshot.shopUpkeepYesterday);
             _visitHistory.RestoreValues(snapshot.visitHistory);
             Sick = snapshot.sick;
+            UtilityLevel = snapshot.utilityLevel;
+            UpgradeMinutesRemaining = snapshot.upgradeMinutesRemaining;
+            UpgradeRunning = snapshot.upgradeRunning;
+            PlayerMaintenance = snapshot.playerMaintenance;
         }
     }
 }

@@ -167,6 +167,10 @@ namespace BuildATower
         public int shopUpkeepYesterday;
         public int[] visitHistory;
         public bool sick;
+        public int utilityLevel;
+        public float upgradeMinutesRemaining;
+        public bool upgradeRunning;
+        public bool playerMaintenance;
     }
 
     public enum GridRestoreError
