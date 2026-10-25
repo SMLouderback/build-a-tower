@@ -1296,6 +1296,8 @@ namespace BuildATower
             if (economyUnlocked && economy != null)
             {
                 DrawChip($"Save ${build.Wallet.Balance:N0}", 118f);
+                DrawChip(FormatPowerBarText(), 92f);
+                DrawChip(PowerHudFormat.FormatWater(0f), 72f);
                 DrawChip($"+${economy.LastIncome:N0}", 88f);
                 DrawChip($"-${economy.LastExpense:N0}", 88f);
                 DrawChip($"Avg ${economy.AverageDailyProfit:N0}/d", 110f);
@@ -1303,6 +1305,8 @@ namespace BuildATower
             else
             {
                 DrawChip($"Save ${build.Wallet.Balance:N0}", 118f);
+                DrawChip(FormatPowerBarText(), 92f);
+                DrawChip(PowerHudFormat.FormatWater(0f), 72f);
             }
 
             x = DrawStarTrack(x, y, lineH, stars != null ? stars.CurrentStars : 0);
@@ -2735,6 +2739,8 @@ namespace BuildATower
                 cy += row;
             }
 
+            cy = DrawPowerSelectionLines(cx, cy, inner, btnH, row, label);
+
             if (PricePricing.IsPricedRoom(build.SelectedRoom?.Type))
                 cy = DrawPriceTierButtons(cx, cy, inner, btnH, row, label, stars);
 
@@ -3467,6 +3473,133 @@ namespace BuildATower
             return HealthHudFormat.FormatBar(health.AverageIllness, share, health.Quarantined);
         }
 
+        string FormatPowerBarText()
+        {
+            QueryPowerTotals(out var use, out var capacity);
+            return PowerHudFormat.FormatPower(use, capacity);
+        }
+
+        void QueryPowerTotals(out int use, out int capacity)
+        {
+            use = 0;
+            capacity = PowerSystem.FreeCapacity;
+            var grid = build?.Grid;
+            if (grid == null)
+                return;
+
+            var plantLevels = new List<int>();
+            var plantBroken = new List<bool>();
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null)
+                    continue;
+                if (room.Type.id == "service_power")
+                {
+                    plantLevels.Add(room.UtilityLevel);
+                    plantBroken.Add(room.IsBroken);
+                    continue;
+                }
+
+                if (room.IsBroken)
+                    continue;
+                var cost = PowerSystem.Cost(room.Type);
+                if (cost <= 0)
+                    continue;
+                use += cost;
+            }
+
+            capacity = PowerSystem.Capacity(plantLevels.ToArray(), plantBroken.ToArray());
+        }
+
+        float DrawPowerSelectionLines(
+            float cx,
+            float cy,
+            float inner,
+            float btnH,
+            float row,
+            GUIStyle label)
+        {
+            var room = build.SelectedRoom;
+            if (room?.Type == null)
+                return cy;
+
+            var typeId = room.Type.id;
+            if (typeId == "service_power")
+            {
+                GUI.Label(
+                    new Rect(cx, cy, inner, row),
+                    PowerHudFormat.FormatPlant(room.UtilityLevel, PowerSystem.PlantOutput(room.UtilityLevel)),
+                    label);
+                cy += row;
+                return DrawPlantUpgradeButton(cx, cy, inner, btnH, room);
+            }
+
+            if (typeId == "service_pump")
+            {
+                var level = Mathf.Clamp(room.UtilityLevel, 0, 3);
+                var supply = PumpDisplaySupply(level);
+                GUI.Label(new Rect(cx, cy, inner, row), PowerHudFormat.FormatPump(level, supply), label);
+                cy += row;
+                return cy;
+            }
+
+            var cost = PowerSystem.Cost(room.Type);
+            if (cost > 0)
+            {
+                GUI.Label(new Rect(cx, cy, inner, row), PowerHudFormat.FormatRoomCost(cost), label);
+                cy += row;
+            }
+
+            return cy;
+        }
+
+        static int PumpDisplaySupply(int level)
+        {
+            switch (level)
+            {
+                case 0: return 80;
+                case 1: return 120;
+                case 2: return 180;
+                case 3: return 260;
+                default: return 80;
+            }
+        }
+
+        float DrawPlantUpgradeButton(float cx, float cy, float inner, float btnH, RoomInstance room)
+        {
+            const int maxLevel = 6;
+            if (room.UtilityLevel >= maxLevel)
+                return cy;
+
+            var nextLevel = room.UtilityLevel + 1;
+            var fee = PowerSystem.PlantUpgradeFee(nextLevel);
+            var days = PowerSystem.PlantUpgradeMinutes(nextLevel) / 1440;
+            var text = PowerHudFormat.FormatUpgrade(nextLevel, days, fee);
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), text))
+            {
+                var level = room.UtilityLevel;
+                var minutes = room.UpgradeMinutesRemaining;
+                var running = room.UpgradeRunning;
+                var wallet = build.Wallet.Balance;
+                if (PowerSystem.TryBeginUpgrade(
+                        ref level,
+                        ref minutes,
+                        ref running,
+                        maxLevel,
+                        fee,
+                        wallet,
+                        out var walletAfter))
+                {
+                    room.UpgradeMinutesRemaining = minutes;
+                    room.UpgradeRunning = running;
+                    build.Wallet.RestoreBalance(walletAfter);
+                }
+            }
+
+            cy += btnH + 4f;
+            return cy;
+        }
+
         void DrawTimeSpeedButtons(float x, float y, float width, float height)
         {
             if (simulation?.Clock == null) return;
@@ -3515,6 +3648,10 @@ namespace BuildATower
 
             lines.Add(RoomEconomyFormat.CostLine(type));
             lines.Add(RoomEconomyFormat.IncomeLine(type));
+
+            var powerCost = PowerSystem.Cost(type);
+            if (powerCost > 0)
+                lines.Add(PowerHudFormat.FormatRoomCost(powerCost));
 
             var upkeep = RoomEconomyFormat.UpkeepLine(type);
             if (upkeep != null)
