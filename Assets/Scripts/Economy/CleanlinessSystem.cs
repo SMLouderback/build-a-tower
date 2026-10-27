@@ -34,6 +34,11 @@ namespace BuildATower
         public static int TreatmentUpgradeMinutes(int nextLevel) =>
             nextLevel < 1 || nextLevel > 3 ? 0 : Minutes[nextLevel - 1];
 
-        public static bool IsAbsent(CleanlinessSnapshotV1 snapshot) => snapshot == null;
+        /// <summary>
+        /// True for older saves with no cleanliness block. <c>JsonUtility</c> materializes a missing
+        /// serializable class as an all-default object, so <c>present == false</c> counts as absent too.
+        /// </summary>
+        public static bool IsAbsent(CleanlinessSnapshotV1 snapshot) =>
+            snapshot == null || !snapshot.present;
     }
 }

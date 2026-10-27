@@ -77,8 +77,42 @@ namespace BuildATower.Tests
         public void Absent_snapshot_means_clean_and_a_saved_zero_stays_zero()
         {
             Assert.IsTrue(CleanlinessSystem.IsAbsent(null));
-            Assert.IsFalse(CleanlinessSystem.IsAbsent(new CleanlinessSnapshotV1 { percent = 0f }));
-            Assert.AreEqual(0f, new CleanlinessSnapshotV1 { percent = 0f }.percent);
+            Assert.IsTrue(CleanlinessSystem.IsAbsent(new CleanlinessSnapshotV1 { percent = 0f }));
+            Assert.IsFalse(CleanlinessSystem.IsAbsent(new CleanlinessSnapshotV1 { present = true, percent = 0f }));
+            Assert.AreEqual(0f, new CleanlinessSnapshotV1 { present = true, percent = 0f }.percent);
+        }
+
+        [Test]
+        public void Legacy_json_without_cleanliness_block_is_absent_and_restores_clean()
+        {
+            var legacy = JsonUtility.FromJson<TowerSnapshotV1>("{\"schemaVersion\":1}");
+            Assert.IsNotNull(legacy.cleanliness);
+            Assert.IsTrue(CleanlinessSystem.IsAbsent(legacy.cleanliness));
+
+            var build = CreateBuild(out var simulation);
+            simulation.RestoreCleanliness(legacy.cleanliness);
+            Assert.AreEqual(100f, simulation.Cleanliness);
+        }
+
+        [Test]
+        public void JsonUtility_round_trip_saved_zero_cleanliness_stays_zero()
+        {
+            var build = CreateBuild(out var simulation);
+            simulation.RestoreCleanliness(new CleanlinessSnapshotV1 { present = true, percent = 0f });
+            var captured = TowerSnapshotMapper.Capture(
+                "save_clean",
+                "Tower",
+                build,
+                simulation,
+                DateTime.UtcNow);
+
+            var json = JsonUtility.ToJson(captured);
+            var roundTripped = JsonUtility.FromJson<TowerSnapshotV1>(json);
+            Assert.IsFalse(CleanlinessSystem.IsAbsent(roundTripped.cleanliness));
+
+            simulation.RestoreCleanliness(null);
+            simulation.RestoreCleanliness(roundTripped.cleanliness);
+            Assert.AreEqual(0f, simulation.Cleanliness);
         }
 
         [Test]
@@ -87,7 +121,7 @@ namespace BuildATower.Tests
             var build = CreateBuild(out var simulation);
             Assert.AreEqual(100f, simulation.Cleanliness);
 
-            simulation.RestoreCleanliness(new CleanlinessSnapshotV1 { percent = 0f });
+            simulation.RestoreCleanliness(new CleanlinessSnapshotV1 { present = true, percent = 0f });
             var captured = TowerSnapshotMapper.Capture(
                 "save_clean",
                 "Tower",
@@ -95,12 +129,13 @@ namespace BuildATower.Tests
                 simulation,
                 DateTime.UtcNow);
             Assert.IsNotNull(captured.cleanliness);
+            Assert.IsTrue(captured.cleanliness.present);
             Assert.AreEqual(0f, captured.cleanliness.percent);
 
             simulation.RestoreCleanliness(null);
             Assert.AreEqual(100f, simulation.Cleanliness);
 
-            simulation.RestoreCleanliness(new CleanlinessSnapshotV1 { percent = 0f });
+            simulation.RestoreCleanliness(new CleanlinessSnapshotV1 { present = true, percent = 0f });
             Assert.AreEqual(0f, simulation.Cleanliness);
         }
 

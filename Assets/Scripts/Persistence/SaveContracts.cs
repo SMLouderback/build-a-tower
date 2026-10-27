@@ -80,6 +80,7 @@ namespace BuildATower
     [Serializable]
     public sealed class CleanlinessSnapshotV1
     {
+        public bool present;
         public float percent;
     }
 
