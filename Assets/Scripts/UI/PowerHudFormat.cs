@@ -11,6 +11,9 @@ namespace BuildATower
         public static string FormatWater(float pressurePercent) =>
             $"Water {Mathf.RoundToInt(pressurePercent)}%";
 
+        public static string FormatClean(float stored) =>
+            $"Clean {Mathf.RoundToInt(stored)}%";
+
         public static string FormatRoomCost(int cost) => $"Power {cost}";
 
         public static string FormatPlant(int level, int output) =>
@@ -18,6 +21,9 @@ namespace BuildATower
 
         public static string FormatPump(int level, int supply) =>
             $"Pump {LevelLabel(level)} · {supply}";
+
+        public static string FormatTreatment(int level, int output) =>
+            $"Treatment {LevelLabel(level)} · {output}";
 
         public static string FormatUpgrade(int nextLevel, int days, int fee) =>
             $"Upgrade to {LevelLabel(nextLevel)} · {days} days · ${fee:N0}";

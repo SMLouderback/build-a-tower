@@ -1359,6 +1359,7 @@ namespace BuildATower
                 DrawChip($"Save ${build.Wallet.Balance:N0}", 118f);
                 DrawChip(FormatPowerBarText(), 92f);
                 DrawChip(FormatWaterBarText(), 72f);
+                DrawChip(FormatCleanBarText(), 80f);
                 DrawChip($"+${economy.LastIncome:N0}", 88f);
                 DrawChip($"-${economy.LastExpense:N0}", 88f);
                 DrawChip($"Avg ${economy.AverageDailyProfit:N0}/d", 110f);
@@ -1368,6 +1369,7 @@ namespace BuildATower
                 DrawChip($"Save ${build.Wallet.Balance:N0}", 118f);
                 DrawChip(FormatPowerBarText(), 92f);
                 DrawChip(FormatWaterBarText(), 72f);
+                DrawChip(FormatCleanBarText(), 80f);
             }
 
             x = DrawStarTrack(x, y, lineH, stars != null ? stars.CurrentStars : 0);
@@ -3928,6 +3930,9 @@ namespace BuildATower
         string FormatWaterBarText() =>
             PowerHudFormat.FormatWater(simulation?.Water.PressurePercent ?? 0f);
 
+        string FormatCleanBarText() =>
+            PowerHudFormat.FormatClean(simulation?.Cleanliness ?? 100f);
+
         void QueryPowerTotals(out int use, out int capacity)
         {
             use = 0;
@@ -3992,6 +3997,15 @@ namespace BuildATower
                 return DrawPumpUpgradeButton(cx, cy, inner, btnH, room);
             }
 
+            if (typeId == "service_treatment")
+            {
+                var level = Mathf.Clamp(room.UtilityLevel, 0, 3);
+                var output = CleanlinessSystem.TreatmentSupply(level);
+                GUI.Label(new Rect(cx, cy, inner, row), PowerHudFormat.FormatTreatment(level, output), label);
+                cy += row;
+                return DrawTreatmentUpgradeButton(cx, cy, inner, btnH, room);
+            }
+
             var cost = PowerSystem.Cost(room.Type);
             if (cost > 0)
             {
@@ -4028,6 +4042,43 @@ namespace BuildATower
                         out var walletAfter))
                 {
                     minutes = WaterSystem.PumpUpgradeMinutes(nextLevel);
+                    room.UtilityLevel = level;
+                    room.UpgradeMinutesRemaining = minutes;
+                    room.UpgradeRunning = running;
+                    build.Wallet.RestoreBalance(walletAfter);
+                }
+            }
+
+            cy += btnH + 4f;
+            return cy;
+        }
+
+        float DrawTreatmentUpgradeButton(float cx, float cy, float inner, float btnH, RoomInstance room)
+        {
+            const int maxLevel = 3;
+            if (room.UtilityLevel >= maxLevel)
+                return cy;
+
+            var nextLevel = room.UtilityLevel + 1;
+            var fee = CleanlinessSystem.TreatmentUpgradeFee(nextLevel);
+            var days = CleanlinessSystem.TreatmentUpgradeMinutes(nextLevel) / 1440;
+            var text = PowerHudFormat.FormatUpgrade(nextLevel, days, fee);
+            if (GUI.Button(new Rect(cx, cy, inner, btnH), text))
+            {
+                var level = room.UtilityLevel;
+                var minutes = room.UpgradeMinutesRemaining;
+                var running = room.UpgradeRunning;
+                var wallet = build.Wallet.Balance;
+                if (PowerSystem.TryBeginUpgrade(
+                        ref level,
+                        ref minutes,
+                        ref running,
+                        maxLevel,
+                        fee,
+                        wallet,
+                        out var walletAfter))
+                {
+                    minutes = CleanlinessSystem.TreatmentUpgradeMinutes(nextLevel);
                     room.UtilityLevel = level;
                     room.UpgradeMinutesRemaining = minutes;
                     room.UpgradeRunning = running;
