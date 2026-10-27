@@ -221,6 +221,44 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Food_street_visit_weight_scales_with_cleanliness_retail_does_not()
+        {
+            var foodType = TrafficFoodType(streetVisitWeight: 2f);
+            var retailType = TrafficRetailType(streetVisitWeight: 2f);
+
+            Assert.AreEqual(1.2f, ShopVisitRules.StreetVisitWeight(foodType, 0f), 0.001f);
+            Assert.AreEqual(2f, ShopVisitRules.StreetVisitWeight(foodType, 100f), 0.001f);
+            Assert.AreEqual(2f, ShopVisitRules.StreetVisitWeight(retailType, 0f), 0.001f);
+        }
+
+        [Test]
+        public void Food_street_demand_weight_scales_with_cleanliness_and_keeps_restroom_bonus()
+        {
+            var foodType = TrafficFoodType(streetVisitWeight: 2f);
+            var shop = new RoomInstance(1, foodType, Vector2Int.zero, Vector2Int.one);
+
+            var cleanStreet = ShopVisitRules.DemandWeight(shop, streetOrigin: true, cleanlinessPercent: 100f);
+            var dirtyStreet = ShopVisitRules.DemandWeight(shop, streetOrigin: true, cleanlinessPercent: 0f);
+            Assert.AreEqual(0.6f, dirtyStreet / cleanStreet, 0.001f);
+
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(LobbyType(), 0, 40, 0, out _));
+            Assert.IsTrue(grid.TryPlace(PublicRestroomType(), new Vector2Int(0, 1), out var restroom));
+            restroom.Powered = true;
+            Assert.IsTrue(grid.TryPlace(foodType, new Vector2Int(3, 1), out var placedFood));
+
+            var cleanWithRestroom = ShopVisitRules.DemandWeight(
+                placedFood, streetOrigin: true, grid, quarantined: false, cleanlinessPercent: 100f);
+            var dirtyWithRestroom = ShopVisitRules.DemandWeight(
+                placedFood, streetOrigin: true, grid, quarantined: false, cleanlinessPercent: 0f);
+            Assert.AreEqual(0.6f, dirtyWithRestroom / cleanWithRestroom, 0.001f);
+            Assert.AreEqual(
+                cleanStreet * ShopVisitRules.PublicRestroomStreetMultiplier,
+                cleanWithRestroom,
+                0.001f);
+        }
+
+        [Test]
         public void Treatment_upgrade_clock_completes_and_changes_hourly_target()
         {
             var (sim, treatment) = CreateTowerWithTreatmentAndSewage(12);
@@ -355,6 +393,47 @@ namespace BuildATower.Tests
             so.category = RoomCategory.Commercial;
             so.buildFamily = BuildFamily.Shops;
             so.size = Vector2Int.one;
+            so.allowAboveGround = true;
+            return so;
+        }
+
+        static RoomTypeSO TrafficFoodType(float streetVisitWeight)
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "food_test";
+            so.category = RoomCategory.Commercial;
+            so.buildFamily = BuildFamily.Shops;
+            so.buildSubgroup = BuildSubgroup.Food;
+            so.incomeModel = IncomeModel.TrafficVariable;
+            so.streetVisitWeight = streetVisitWeight;
+            so.maxOccupants = 4;
+            so.size = Vector2Int.one;
+            so.allowAboveGround = true;
+            return so;
+        }
+
+        static RoomTypeSO TrafficRetailType(float streetVisitWeight)
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "retail_test";
+            so.category = RoomCategory.Commercial;
+            so.buildFamily = BuildFamily.Shops;
+            so.buildSubgroup = BuildSubgroup.Retail;
+            so.incomeModel = IncomeModel.TrafficVariable;
+            so.streetVisitWeight = streetVisitWeight;
+            so.maxOccupants = 4;
+            so.size = Vector2Int.one;
+            so.allowAboveGround = true;
+            return so;
+        }
+
+        static RoomTypeSO PublicRestroomType()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "service_public_restroom";
+            so.category = RoomCategory.Service;
+            so.size = new Vector2Int(3, 1);
+            so.maxOccupants = 0;
             so.allowAboveGround = true;
             return so;
         }

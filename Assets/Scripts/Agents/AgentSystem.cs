@@ -2108,7 +2108,7 @@ namespace BuildATower
             if (_shopDemand == null)
             {
                 return streetOrigin
-                    ? ShopVisitRules.PickWeightedShop(eligible, _rng)
+                    ? ShopVisitRules.PickWeightedShop(eligible, _rng, _cleanlinessPercent)
                     : eligible[_rng.Next(eligible.Count)];
             }
 
@@ -2165,7 +2165,8 @@ namespace BuildATower
             }
 
             if (candidates.Count == 0) return null;
-            return ShopVisitRules.PickDemandWeightedShop(candidates, _rng, streetOrigin, grid, Quarantined);
+            return ShopVisitRules.PickDemandWeightedShop(
+                candidates, _rng, streetOrigin, grid, Quarantined, _cleanlinessPercent);
         }
 
         bool CanReachShopFromLobby(TowerGrid grid, RoomInstance shop) =>

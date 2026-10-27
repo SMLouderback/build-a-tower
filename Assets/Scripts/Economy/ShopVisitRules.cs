@@ -49,7 +49,18 @@ namespace BuildATower
             return lo + rng.Next(0, hi - lo + 1);
         }
 
-        public static RoomInstance PickWeightedShop(IReadOnlyList<RoomInstance> shops, System.Random rng)
+        public static float StreetVisitWeight(RoomTypeSO type, float cleanlinessPercent = 100f)
+        {
+            var weight = type?.streetVisitWeight ?? 1f;
+            if (type != null && type.ResolvedBuildSubgroup() == BuildSubgroup.Food)
+                weight *= CleanlinessSystem.RestaurantWeightFactor(cleanlinessPercent);
+            return weight;
+        }
+
+        public static RoomInstance PickWeightedShop(
+            IReadOnlyList<RoomInstance> shops,
+            System.Random rng,
+            float cleanlinessPercent = 100f)
         {
             if (shops == null || shops.Count == 0) return null;
             if (shops.Count == 1) return shops[0];
@@ -57,7 +68,7 @@ namespace BuildATower
             var total = 0f;
             foreach (var shop in shops)
             {
-                var w = shop?.Type?.streetVisitWeight ?? 1f;
+                var w = StreetVisitWeight(shop?.Type, cleanlinessPercent);
                 if (w > 0f) total += w;
             }
 
@@ -67,7 +78,7 @@ namespace BuildATower
             var roll = (float)(rng.NextDouble() * total);
             foreach (var shop in shops)
             {
-                var w = shop?.Type?.streetVisitWeight ?? 1f;
+                var w = StreetVisitWeight(shop?.Type, cleanlinessPercent);
                 if (w <= 0f) continue;
                 roll -= w;
                 if (roll < 0f) return shop;
@@ -76,12 +87,17 @@ namespace BuildATower
             return shops[shops.Count - 1];
         }
 
-        public static float DemandWeight(RoomInstance shop, bool streetOrigin)
+        public static float DemandWeight(
+            RoomInstance shop,
+            bool streetOrigin,
+            float cleanlinessPercent = 100f)
         {
             if (shop?.Type == null) return 0f;
             var free = Mathf.Max(1, SlotCount(shop.Type) - shop.ConcurrentVisitors);
             var fairness = 1f + 1f / (1f + Mathf.Max(0, shop.VisitsToday));
-            var origin = streetOrigin ? Mathf.Max(0.1f, shop.Type.streetVisitWeight) : 1f;
+            var origin = streetOrigin
+                ? Mathf.Max(0.1f, StreetVisitWeight(shop.Type, cleanlinessPercent))
+                : 1f;
             return free * fairness * origin;
         }
 
@@ -92,14 +108,15 @@ namespace BuildATower
             RoomInstance shop,
             bool streetOrigin,
             TowerGrid grid,
-            bool quarantined = false)
+            bool quarantined = false,
+            float cleanlinessPercent = 100f)
         {
             if (streetOrigin && quarantined) return 0f;
 
             var dockBonus = IsShop(shop?.Type)
                 ? AmenitySystem.LoadingDockDemandBonus(grid, shop)
                 : 0f;
-            var weight = DemandWeight(shop, streetOrigin) * (1f + dockBonus);
+            var weight = DemandWeight(shop, streetOrigin, cleanlinessPercent) * (1f + dockBonus);
             if (streetOrigin && HasPublicRestroomStreetBonus(shop, grid))
                 weight *= PublicRestroomStreetMultiplier;
             return weight;
@@ -122,15 +139,17 @@ namespace BuildATower
         public static RoomInstance PickDemandWeightedShop(
             IReadOnlyList<RoomInstance> shops,
             System.Random rng,
-            bool streetOrigin) =>
-            PickDemandWeightedShop(shops, rng, streetOrigin, null);
+            bool streetOrigin,
+            float cleanlinessPercent = 100f) =>
+            PickDemandWeightedShop(shops, rng, streetOrigin, null, quarantined: false, cleanlinessPercent);
 
         public static RoomInstance PickDemandWeightedShop(
             IReadOnlyList<RoomInstance> shops,
             System.Random rng,
             bool streetOrigin,
             TowerGrid grid,
-            bool quarantined = false)
+            bool quarantined = false,
+            float cleanlinessPercent = 100f)
         {
             if (shops == null || shops.Count == 0) return null;
             if (streetOrigin && quarantined) return null;
@@ -138,7 +157,7 @@ namespace BuildATower
 
             var total = 0f;
             foreach (var shop in shops)
-                total += DemandWeight(shop, streetOrigin, grid, quarantined);
+                total += DemandWeight(shop, streetOrigin, grid, quarantined, cleanlinessPercent);
 
             if (total <= 0f)
                 return shops[rng.Next(shops.Count)];
@@ -146,7 +165,7 @@ namespace BuildATower
             var roll = (float)(rng.NextDouble() * total);
             foreach (var shop in shops)
             {
-                roll -= DemandWeight(shop, streetOrigin, grid, quarantined);
+                roll -= DemandWeight(shop, streetOrigin, grid, quarantined, cleanlinessPercent);
                 if (roll < 0f) return shop;
             }
 
