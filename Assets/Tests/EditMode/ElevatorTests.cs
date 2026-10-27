@@ -483,5 +483,75 @@ namespace BuildATower.Tests
             Assert.IsFalse(system.CanVacateFloors(shaft, 0, 1));
             Assert.IsTrue(system.CanVacateFloors(shaft, 0, 4));
         }
+
+        [Test]
+        public void RemoveFromQueues_also_ejects_car_passengers()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 3, out _));
+
+            var system = new ElevatorSystem();
+            system.SyncFromGrid(grid);
+            var shaft = system.Shafts[0];
+            shaft.Car.PassengerIds.Add(42);
+            system.SetPassengerDestination(42, 3);
+            Assert.IsTrue(system.TryEnqueue(42, 0, 0, ElevatorDirection.Up));
+
+            Assert.IsTrue(system.RemoveFromQueues(42));
+            Assert.IsFalse(shaft.Car.PassengerIds.Contains(42));
+            Assert.AreEqual(-1, system.GetQueueIndex(shaft, 0, ElevatorDirection.Up, 42));
+        }
+
+        [Test]
+        public void DoorsOpen_ejects_passengers_without_destination()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 2, out _));
+
+            var system = new ElevatorSystem();
+            system.SyncFromGrid(grid);
+            var shaft = system.Shafts[0];
+            shaft.Car.Floor = 0;
+            shaft.Car.PassengerIds.Add(7); // ghost — no destination recorded
+            Assert.IsTrue(system.TryEnqueue(8, 0, 0, ElevatorDirection.Up));
+            system.SetPassengerDestination(8, 2);
+
+            // Idle with a queue forces doors open / board cycle.
+            system.Tick(1f);
+
+            Assert.IsFalse(
+                shaft.Car.PassengerIds.Contains(7),
+                "Ghost passengers without a destination must be ejected on doors open.");
+            Assert.LessOrEqual(shaft.Car.Floor, shaft.MaxFloor);
+            Assert.GreaterOrEqual(shaft.Car.Floor, shaft.MinFloor);
+        }
+
+        [Test]
+        public void Moving_clamps_car_inside_shaft_bounds()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 2, out _));
+
+            var system = new ElevatorSystem();
+            system.SyncFromGrid(grid);
+            var shaft = system.Shafts[0];
+            shaft.Car.Floor = shaft.MaxFloor;
+            shaft.Car.Direction = ElevatorDirection.Up;
+            shaft.Car.State = ElevatorCarState.Moving;
+            shaft.Car.StateMinutes = 0f;
+            // Ghost passenger keeps PassengerIds non-empty so empty-queue stop logic won't fire.
+            shaft.Car.PassengerIds.Add(99);
+
+            system.Tick(ElevatorCar.MinutesPerFloor);
+
+            Assert.AreEqual(shaft.MaxFloor, shaft.Car.Floor);
+            Assert.LessOrEqual(shaft.Car.Floor, shaft.MaxFloor);
+        }
     }
 }

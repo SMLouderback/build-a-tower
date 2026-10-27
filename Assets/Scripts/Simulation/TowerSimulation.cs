@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BuildATower
@@ -7,9 +9,68 @@ namespace BuildATower
     /// </summary>
     public sealed class TowerSimulation : MonoBehaviour
     {
+        public const int OpsDirtyHotelThreshold = 5;
+        public const float OpsAvgCrimeThreshold = 35f;
+        public const float OpsAvgStressThreshold = 40f;
+        public const int QuirkEveryNDays = 2;
+
+        static readonly string[] QuirkLines =
+        {
+            "Someone held an elevator for a sandwich run on floor 3.",
+            "A lobby plant was renamed 'Steve' by anonymous vote.",
+            "Office workers debated the ethics of microwave fish.",
+            "A courier left a mysterious box labeled 'do not open until Friday'.",
+            "Security clocked a raccoon as a VIP visitor. Briefly.",
+            "The coffee machine on 7 declared war on oat milk. Again.",
+            "Lost-and-found now claims three left shoes and one right sock.",
+            "A meeting was postponed because nobody could find the clicker.",
+            "Night cleaning found a sticky note that just said 'trust the stairs'.",
+            "Two guests argued about which floor has the best window glare.",
+            "Facilities booked a ladder for a lightbulb that was already fine.",
+            "Someone rated the lobby scent 'aggressively citrus' in a survey.",
+            "An office pool started on which elevator arrives last.",
+            "A whiteboard still says 'synergy' from last quarter. Nobody erased it.",
+            "The gift shop sold out of tiny tower magnets before lunch.",
+            "A guest asked if the stairs count as cardio. Staff said yes.",
+            "Maintenance hummed an elevator jingle that does not exist.",
+            "A vendor delivered 40 chairs and one suspiciously heavy box of air.",
+            "Floor 2's vending machine dispensed two bags of chips for the price of one.",
+            "Anonymous tip: the best wifi is mysteriously near the janitor closet.",
+            "A tourist asked which floor has the 'main character energy'. Staff pointed at Lobby.",
+            "Someone laminated a meme and hung it in the copy room. It has tenure now.",
+            "The revolving door collected three umbrellas and one strongly worded note.",
+            "Break-room fridge trial continues: unlabeled soup enters day four. Nobody blinks.",
+            "A delivery drone buzzed the atrium. Security wrote 'sky raccoon?' on the log.",
+            "Floor directory stickers keep migrating overnight. Suspect: interns or ghosts."
+        };
+
+        static readonly string[] OpsDirtyHotelLines =
+        {
+            "Housekeeping backlog: dirty rooms may miss afternoon check-ins.",
+            "Housekeeping is swamped — turnovers are slipping into the evening.",
+            "Too many dirty hotel rooms; front desk is delaying some arrivals."
+        };
+
+        static readonly string[] OpsCrimeLines =
+        {
+            "Crime spike across the tower — tenants are on edge.",
+            "Security reports elevated incidents; guests are uneasy.",
+            "Average crime is high — patrol coverage may be thin."
+        };
+
+        static readonly string[] OpsStressLines =
+        {
+            "Elevator waits and crowding are stressing tenants.",
+            "Transit delays are wearing on the tower — stress is climbing.",
+            "Crowded lobbies and slow rides are fraying nerves."
+        };
+
+        int _lastQuirkIndex = -1;
+
         [SerializeField] BuildController build;
         [SerializeField] AgentView agentView;
         [SerializeField] ElevatorView elevatorView;
+        [SerializeField] StarCelebrationController celebration;
         [SerializeField] float minutesPerRealSecond = 1f;
         [SerializeField] int startMinuteOfDay = 6 * 60;
 
@@ -18,18 +79,65 @@ namespace BuildATower
         ElevatorSystem _elevators;
         TransitRouter _router;
         AgentSystem _agents;
+        ShopDemandSystem _shopDemand;
+        CrimeSystem _crime;
         EconomySystem _economy;
+        ResearchSystem _research;
+        ConferenceSystem _conference;
+        TowerNews _news;
         StarSystem _stars;
+        MarketClimate _climate;
+        MacroEconomicController _macro;
+        WeatherSystem _weather;
+        HealthSystem _health;
+        MetroSystem _metro;
+        TutorialDirector _tutorialDirector;
+        bool _tutorialBootAttempted;
+        readonly System.Random _climateRng = new();
+        readonly System.Random _conferenceRng = new();
+        readonly System.Random _newsRng = new();
+        readonly List<int> _patrolFloors = new();
+        readonly List<int> _criminalFloors = new();
         int _lastDayIndex;
         bool _subscribed;
 
         public GameClock Clock => _clock;
         public AgentSystem Agents => _agents;
+        public ShopDemandSystem ShopDemand => _shopDemand;
+        public CrimeSystem Crime => _crime;
         public EconomySystem Economy => _economy;
+        public ResearchSystem Research => _research;
+        public ConferenceSystem Conference => _conference;
+        public TowerNews News => _news;
         public StarSystem Stars => _stars;
+        public MarketClimate Climate => _climate;
+        public MacroEconomicController MacroEconomy => _macro;
+        public WeatherSystem Weather => _weather;
+        public HealthSystem Health => _health;
+        public MetroSystem Metro => _metro;
         public StairsPathfinder Pathfinder => _pathfinder;
         public ElevatorSystem Elevators => _elevators;
         public TransitRouter Router => _router;
+
+        /// <summary>Guided new-player coach. HUD (Task 5) reads this for coach UI.</summary>
+        public TutorialDirector TutorialDirector => _tutorialDirector;
+
+        const float AgentSampleIntervalGameMinutes = 2f;
+        float _agentSampleAccumulator;
+        TowerMapController _mapController;
+        readonly Dictionary<int, bool> _powerBrokenSnapshot = new();
+        float _cleanlinessTickRemainder;
+
+        public TowerWaterState Water { get; private set; }
+
+        public float Cleanliness { get; private set; } = 100f;
+
+        public void RestoreCleanliness(CleanlinessSnapshotV1 snapshot)
+        {
+            Cleanliness = CleanlinessSystem.IsAbsent(snapshot) ? 100f : snapshot.percent;
+            _cleanlinessTickRemainder = 0f;
+            _agents?.SetCleanliness(Cleanliness);
+        }
 
         public void SetSpeedPreset(float minutesPerRealSecond, bool paused)
         {
@@ -40,18 +148,59 @@ namespace BuildATower
 
         void Awake()
         {
-            if (build == null)
-                build = GetComponent<BuildController>() ?? FindAnyObjectByType<BuildController>();
+            InitializeSimulation();
+        }
 
-            _clock = new GameClock(minutesPerRealSecond, startMinuteOfDay);
-            _elevators = new ElevatorSystem();
-            _pathfinder = new StairsPathfinder();
-            _router = new TransitRouter(_pathfinder, _elevators);
-            _agents = new AgentSystem(_router);
-            _economy = new EconomySystem();
-            _stars = new StarSystem();
-            _lastDayIndex = _clock.DayIndex;
-            _clock.DayRolled += OnDayRolled;
+        public void InitializeSimulation()
+        {
+            if (build == null)
+                build = GetComponent<BuildController>();
+            if (build == null)
+                build = FindAnyObjectByType<BuildController>();
+
+            EnsureDayNightSkyController();
+            ParallaxBackdrop.EnsureInScene();
+            SkyCloudLayer.EnsureInScene();
+            WeatherFx.EnsureInScene();
+            MetroTunnelView.EnsureInScene();
+
+            if (_clock == null)
+            {
+                _clock = new GameClock(minutesPerRealSecond, startMinuteOfDay);
+                _elevators = new ElevatorSystem();
+                _pathfinder = new StairsPathfinder();
+                _router = new TransitRouter(_pathfinder, _elevators);
+                _shopDemand = new ShopDemandSystem();
+                _weather = new WeatherSystem();
+                _health = new HealthSystem();
+                _metro = new MetroSystem();
+                _agents = new AgentSystem(
+                    _router,
+                    shopDemand: _shopDemand,
+                    weather: _weather,
+                    metro: _metro);
+                _agents.SetHealth(_health);
+                _crime = new CrimeSystem();
+                _economy = new EconomySystem();
+                _research = new ResearchSystem();
+                _conference = new ConferenceSystem();
+                _news = new TowerNews();
+                _stars = new StarSystem();
+                _climate = new MarketClimate();
+                _macro = new MacroEconomicController();
+                RestorePendingClockAndStars();
+                _lastDayIndex = _clock.DayIndex;
+                _clock.DayRolled += OnDayRolled;
+                _clock.MonthRolled += OnMonthRolled;
+            }
+            else
+            {
+                _metro ??= new MetroSystem();
+                _agents?.SetMetro(_metro);
+                _agents?.SetHealth(_health);
+            }
+
+            SyncStructureArtToStars();
 
             if (agentView == null)
             {
@@ -67,14 +216,92 @@ namespace BuildATower
                 elevatorView = viewGo.AddComponent<ElevatorView>();
             }
             elevatorView.Bind(_elevators);
+            EnsureCelebrationController();
+            EnsureTutorialDirector();
+        }
+
+        void EnsureTutorialDirector()
+        {
+            _tutorialDirector ??= new TutorialDirector();
+            if (_tutorialBootAttempted)
+                return;
+            _tutorialBootAttempted = true;
+            TutorialBoot.TryStartFromSession(_tutorialDirector);
+        }
+
+        void TickTutorialDirector()
+        {
+            if (_tutorialDirector == null || build?.Grid == null)
+                return;
+            _tutorialDirector.Tick(
+                build.Grid,
+                _stars?.CurrentStars ?? 0,
+                TutorialBoot.IsLobbyToolSelected(build));
+        }
+
+        void RestorePendingClockAndStars()
+        {
+            var pending = GameSession.PendingLoad;
+            if (pending == null)
+                return;
+
+            try
+            {
+                _clock.RestoreSnapshot(pending.clock);
+                _stars.ForceStars(pending.stars);
+                if (pending.research != null)
+                    _research.RestoreSnapshot(pending.research);
+                _weather.RestoreSnapshot(pending.weather, _clock.DayIndex, _clock.MinuteOfDay);
+                _health.RestoreSnapshot(pending.health);
+                RestoreCleanliness(pending.cleanliness);
+                _metro.RestoreSnapshot(pending.metro);
+                _macro?.RestoreSnapshot(pending.marketPulse, _clock.DayIndex);
+            }
+            catch (ArgumentException)
+            {
+                GameSession.FailLoad(
+                    SessionLoadError.SimulationRestoreFailed,
+                    "The tower simulation could not be restored from the save.");
+                if (build != null)
+                    build.InitializeTower();
+            }
         }
 
         void OnEnable() => TrySubscribe();
 
         void Start()
         {
+            BeginPlay();
+        }
+
+        public void BeginPlay()
+        {
             TrySubscribe();
+            if (GameSession.PendingLoad != null)
+            {
+                SyncMetroStationsFromGrid();
+                Power();
+                RebuildRoutingAndAgents();
+                BeginDailyDemand();
+                if (build != null)
+                    build.RepaintAllRooms();
+                GameSession.CompleteLoad();
+                return;
+            }
+
             OnGridChanged();
+            BeginDailyDemand();
+        }
+
+        void BeginDailyDemand()
+        {
+            if (_shopDemand == null || _agents == null || _stars == null)
+                return;
+
+            _shopDemand.BeginDay(
+                _agents.Agents,
+                _stars.CurrentStars,
+                _climate?.SpendMultiplier ?? 1f);
         }
 
         void OnDisable()
@@ -89,18 +316,179 @@ namespace BuildATower
         void OnDestroy()
         {
             if (_clock != null)
+            {
                 _clock.DayRolled -= OnDayRolled;
+                _clock.MonthRolled -= OnMonthRolled;
+            }
         }
 
         void Update()
         {
             if (build?.Grid == null || _clock == null || _agents == null) return;
+            TickTutorialDirector();
             _clock.Tick(Time.deltaTime);
-            _elevators.Tick(_clock.LastTickGameMinutes);
-            _agents.Tick(_clock.LastTickGameMinutes, _clock, build.Grid);
+            _weather?.AdvanceTo(_clock.DayIndex, _clock.MinuteOfDay);
+            var research = _research;
+            _router?.SetWaitWeightScale(ResearchEffects.ElevatorRoutingWaitWeightScale(research));
+            _elevators.Tick(
+                _clock.LastTickGameMinutes,
+                ResearchEffects.ElevatorSpeedMultiplier(research));
+            _agents.Tick(
+                _clock.LastTickGameMinutes,
+                _clock,
+                build.Grid,
+                _stars?.CurrentStars ?? 0,
+                _climate,
+                _crime,
+                research,
+                _conference);
+            _agents.CollectFloorsForRole(AgentRole.Security, _patrolFloors);
+            _agents.CollectFloorsForRole(AgentRole.Criminal, _criminalFloors);
+            _crime.Tick(
+                _clock.LastTickGameMinutes,
+                CrimeFloorLoads.ShopLoadByFloor(build.Grid),
+                CrimeFloorLoads.HotelLoadByFloor(build.Grid, _agents.Agents),
+                CountStaffedSecurity(build.Grid),
+                _patrolFloors,
+                _criminalFloors,
+                ResearchEffects.CrimeSuppressionMultiplier(research),
+                CountFloorsWithRooms(build.Grid));
+            TickHealth(_clock.LastTickGameMinutes);
+            research?.TickProgress(
+                _clock.LastTickGameMinutes,
+                EconomySystem.CountResearcherPool(build.Grid));
+            SampleAgentsForMaps(_clock.LastTickGameMinutes);
             if (agentView != null)
-                agentView.Sync(_agents.Agents);
+                agentView.Sync(_agents.Agents, build?.Grid);
+            TickPowerSystems(_clock.LastTickGameMinutes);
+            TickCleanliness(_clock.LastTickGameMinutes);
         }
+
+        const int HealthNewsPriority = 9;
+        const int QuarantineNewsPriority = 10;
+        float _lastSickShare;
+        bool _sickShareKnown;
+
+        public void TickHealth(float deltaGameMinutes)
+        {
+            var grid = build?.Grid;
+            if (_health == null || grid == null || _agents == null || deltaGameMinutes <= 0f) return;
+
+            var rooms = grid.Rooms;
+            var sewageFloors = new HashSet<int>();
+            var guestsByFloor = new Dictionary<int, int>();
+            var guestHotels = new HashSet<RoomInstance>();
+            foreach (var agent in _agents.Agents)
+            {
+                if (agent == null || agent.Role != AgentRole.HotelGuest) continue;
+                if (agent.Phase == AgentPhase.Outside || agent.HomeRoom == null) continue;
+                var floor = agent.HomeRoom.Origin.y;
+                guestsByFloor.TryGetValue(floor, out var count);
+                guestsByFloor[floor] = count + 1;
+                guestHotels.Add(agent.HomeRoom);
+            }
+
+            var trashCovered = new Dictionary<int, bool>();
+            foreach (var hotel in guestHotels)
+            {
+                var floor = hotel.Origin.y;
+                var coveredSoFar = !trashCovered.TryGetValue(floor, out var prior) || prior;
+                trashCovered[floor] = coveredSoFar && HealthCoverage.TrashCovers(floor, hotel.Origin.x, rooms);
+            }
+
+            var sickRoomsByFloor = new Dictionary<int, int>();
+            var clinicFloors = new List<int>();
+            var tenantFloors = new HashSet<int>();
+            for (var i = 0; i < rooms.Count; i++)
+            {
+                var room = rooms[i];
+                if (room == null || ReferenceEquals(room.Type, null)) continue;
+                if (RoomAddsSewage(room))
+                    sewageFloors.Add(room.Origin.y);
+                if (HealthSystem.IsTenantRoom(room))
+                {
+                    tenantFloors.Add(room.Origin.y);
+                    if (room.Sick)
+                    {
+                        sickRoomsByFloor.TryGetValue(room.Origin.y, out var sick);
+                        sickRoomsByFloor[room.Origin.y] = sick + 1;
+                    }
+                }
+                else if (room.Type.id == AgentSystem.ClinicId && !room.IsBroken && room.Powered)
+                {
+                    clinicFloors.Add(room.Origin.y);
+                }
+            }
+
+            _health.Tick(
+                deltaGameMinutes,
+                guestsByFloor,
+                trashCovered,
+                sickRoomsByFloor,
+                clinicFloors,
+                CountFloorsWithRooms(grid),
+                sewageFloors,
+                CleanlinessSystem.IllnessPerMinute(Cleanliness));
+
+            foreach (var floor in tenantFloors)
+                _health.TryMarkSickRoom(floor, deltaGameMinutes, rooms);
+
+            var tenants = HealthSystem.CountTenants(rooms, out var sickTenants);
+            var newShare = HealthSystem.SickShare(sickTenants, tenants);
+            var previousShare = _sickShareKnown ? _lastSickShare : newShare;
+            var wasQuarantined = _health.Quarantined;
+            var quarantined = HealthSystem.EvaluateQuarantine(wasQuarantined, newShare);
+            _health.Quarantined = quarantined;
+            _lastSickShare = newShare;
+            _sickShareKnown = true;
+
+            if (_news == null) return;
+            var day = _clock.DayIndex;
+            var items = HealthNews.Collect(previousShare, newShare, wasQuarantined, quarantined);
+            for (var i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                item.Priority = item.Category == TowerNewsCategory.MajorEvent
+                    ? QuarantineNewsPriority
+                    : HealthNewsPriority;
+                item.CreatedDayIndex = day;
+                item.ExpireDayIndex = day + 5;
+                _news.Push(item);
+            }
+        }
+
+        void SampleAgentsForMaps(float gameMinutes)
+        {
+            if (gameMinutes <= 0f || _agents?.Agents == null) return;
+            _agentSampleAccumulator += gameMinutes;
+            if (_agentSampleAccumulator < AgentSampleIntervalGameMinutes) return;
+            _agentSampleAccumulator = 0f;
+
+            var maps = EnsureMapController();
+            if (maps == null) return;
+
+            foreach (var agent in _agents.Agents)
+            {
+                if (agent == null) continue;
+                if (agent.Phase == AgentPhase.Outside) continue;
+
+                if (agent.Phase == AgentPhase.WaitingAtElevator)
+                    maps.SampleAgentCell(agent.Cell, waiting: true);
+                else if (agent.Phase is AgentPhase.Moving or AgentPhase.Riding)
+                    maps.SampleAgentCell(agent.Cell, waiting: false);
+            }
+        }
+
+        TowerMapController EnsureMapController()
+        {
+            if (_mapController != null) return _mapController;
+            _mapController = GetComponent<TowerMapController>() ??
+                             FindAnyObjectByType<TowerMapController>();
+            return _mapController;
+        }
+
+        static float DemandProxyFromVacancy(TowerGrid grid, AgentSystem agents) =>
+            TowerMapController.ComputeTowerVacancyPressure(grid, agents);
 
         void TrySubscribe()
         {
@@ -111,13 +499,491 @@ namespace BuildATower
 
         void OnGridChanged()
         {
-            if (build?.Grid == null || _router == null || _agents == null) return;
+            SyncMetroStationsFromGrid();
+            Power();
+            RebuildRoutingAndAgents();
+            if (build == null || build.Grid == null || _agents == null) return;
+            _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
+            DrainStarCelebrationsAndSyncArt();
+        }
+
+        /// <summary>Recomputes plant pool assignment for every drawing room.</summary>
+        public void Power()
+        {
+            var grid = build?.Grid;
+            if (grid == null) return;
+
+            var plantLevels = new List<int>();
+            var plantBroken = new List<bool>();
+            var needs = new List<PowerNeed>();
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                if (room.Type.id == "service_power")
+                {
+                    plantLevels.Add(room.UtilityLevel);
+                    plantBroken.Add(room.IsBroken);
+                    continue;
+                }
+
+                if (room.IsBroken) continue;
+                var cost = PowerSystem.Cost(room.Type);
+                if (cost <= 0) continue;
+                needs.Add(new PowerNeed(room.InstanceId, cost, PowerBandFor(room, _agents)));
+            }
+
+            var capacity = PowerSystem.Capacity(plantLevels.ToArray(), plantBroken.ToArray());
+            var poweredIds = new HashSet<int>(PowerSystem.Assign(needs, capacity));
+            var wasPowered = new Dictionary<int, bool>();
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null || !DrawsPowerWhenHealthy(room)) continue;
+                wasPowered[room.InstanceId] = room.Powered;
+            }
+
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                var cost = PowerSystem.Cost(room.Type);
+                if (cost <= 0)
+                {
+                    room.Powered = true;
+                    continue;
+                }
+
+                room.Powered = !room.IsBroken && poweredIds.Contains(room.InstanceId);
+            }
+
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                if (!wasPowered.TryGetValue(room.InstanceId, out var hadPower) || !hadPower || room.Powered)
+                    continue;
+                _agents?.VacateRoomLostPower(room, grid);
+            }
+
+            _elevators?.SyncShaftMaintenanceFromGrid(grid);
+            CapturePowerBrokenSnapshot(grid);
+            ComputeWater();
+        }
+
+        /// <summary>Recomputes tower water pressure from powered pumps and upper-room demand.</summary>
+        public void ComputeWater()
+        {
+            var grid = build?.Grid;
+            if (grid == null)
+            {
+                Water = TowerWaterState.Empty;
+                _agents?.SetWaterPressure(0f);
+                return;
+            }
+
+            var lobbyFloor = TowerGrid.LobbyFloor;
+            var highest = lobbyFloor;
+            var upperHotels = 0;
+            var upperCondos = 0;
+            var supply = 0;
+
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+
+                var topFloor = room.Origin.y + room.Size.y - 1;
+                if (topFloor >= lobbyFloor && topFloor > highest)
+                    highest = topFloor;
+
+                if (room.Type.id == "service_pump" && !room.IsBroken && room.Powered)
+                    supply += WaterSystem.PumpSupply(room.UtilityLevel);
+
+                if (room.Type.category == RoomCategory.Hotel &&
+                    EffectiveLuxuryBand(room.Type) == LuxuryBand.Upper)
+                    upperHotels++;
+
+                if (room.Type.category == RoomCategory.Condo &&
+                    EffectiveLuxuryBand(room.Type) == LuxuryBand.Upper)
+                    upperCondos++;
+            }
+
+            var height = WaterSystem.Height(lobbyFloor, highest);
+            var demand = WaterSystem.Demand(height, upperHotels, upperCondos);
+            var pressure = WaterSystem.PressurePercent(supply, demand);
+            Water = new TowerWaterState(height, upperHotels, upperCondos, supply, demand, pressure);
+            _agents?.SetWaterPressure(pressure);
+        }
+
+        static LuxuryBand EffectiveLuxuryBand(RoomTypeSO type)
+        {
+            if (ReferenceEquals(type, null)) return LuxuryBand.None;
+            return type.luxuryBand == LuxuryBand.None ? LuxuryBand.Base : type.luxuryBand;
+        }
+
+        /// <summary>Advances plant upgrade clocks in game minutes (EditMode / simulation tick).</summary>
+        public void TickPowerClocks(float deltaGameMinutes)
+        {
+            if (deltaGameMinutes <= 0f) return;
+            if (TickPlantUpgrades(deltaGameMinutes) |
+                TickPumpUpgrades(deltaGameMinutes) |
+                TickTreatmentUpgrades(deltaGameMinutes))
+                Power();
+        }
+
+        void TickPowerSystems(float deltaGameMinutes)
+        {
+            if (deltaGameMinutes <= 0f) return;
+            var upgraded = TickPlantUpgrades(deltaGameMinutes);
+            upgraded |= TickPumpUpgrades(deltaGameMinutes);
+            upgraded |= TickTreatmentUpgrades(deltaGameMinutes);
+            if (upgraded || SyncPowerBrokenTransitions())
+                Power();
+        }
+
+        /// <summary>Advances cleanliness toward supply versus sewage once per whole game hour.</summary>
+        public void TickCleanliness(float deltaGameMinutes)
+        {
+            if (deltaGameMinutes <= 0f) return;
+
+            _cleanlinessTickRemainder += deltaGameMinutes;
+            while (_cleanlinessTickRemainder >= 60f)
+            {
+                _cleanlinessTickRemainder -= 60f;
+                CountCleanlinessSupplyAndSewage(out var supply, out var sewage);
+                var target = CleanlinessSystem.Target(supply, sewage);
+                Cleanliness = CleanlinessSystem.Step(Cleanliness, target);
+                _agents?.SetCleanliness(Cleanliness);
+            }
+        }
+
+        void CountCleanlinessSupplyAndSewage(out int supply, out int sewage)
+        {
+            supply = 0;
+            sewage = 0;
+            var grid = build?.Grid;
+            if (grid?.Rooms == null) return;
+
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+
+                if (room.Type.id == "service_treatment" && !room.IsBroken && room.Powered)
+                    supply += CleanlinessSystem.TreatmentSupply(room.UtilityLevel);
+
+                if (RoomAddsSewage(room))
+                    sewage++;
+            }
+        }
+
+        bool RoomAddsSewage(RoomInstance room)
+        {
+            if (room?.Type == null) return false;
+            if (room.CondoSold) return true;
+
+            var category = room.Type.category;
+            if (category == RoomCategory.Hotel && RoomHasHomeAgent(room, _agents, AgentRole.HotelGuest))
+                return true;
+            if (category == RoomCategory.Office && RoomHasHomeAgent(room, _agents, AgentRole.OfficeWorker))
+                return true;
+
+            return false;
+        }
+
+        static bool RoomHasHomeAgent(RoomInstance room, AgentSystem agents, AgentRole role)
+        {
+            if (room == null || agents?.Agents == null) return false;
+
+            foreach (var agent in agents.Agents)
+            {
+                if (agent != null && agent.Role == role && ReferenceEquals(agent.HomeRoom, room))
+                    return true;
+            }
+
+            return false;
+        }
+
+        bool TickPlantUpgrades(float deltaGameMinutes)
+        {
+            var grid = build?.Grid;
+            if (grid == null || deltaGameMinutes <= 0f) return false;
+
+            var anyCompleted = false;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null || room.Type.id != "service_power") continue;
+
+                var level = room.UtilityLevel;
+                var minutes = room.UpgradeMinutesRemaining;
+                var running = room.UpgradeRunning;
+                if (PowerSystem.TickUpgrade(ref level, ref minutes, ref running, deltaGameMinutes, room.IsBroken))
+                    anyCompleted = true;
+
+                room.UtilityLevel = level;
+                room.UpgradeMinutesRemaining = minutes;
+                room.UpgradeRunning = running;
+            }
+
+            return anyCompleted;
+        }
+
+        bool TickPumpUpgrades(float deltaGameMinutes)
+        {
+            var grid = build?.Grid;
+            if (grid == null || deltaGameMinutes <= 0f) return false;
+
+            var anyCompleted = false;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null || room.Type.id != "service_pump") continue;
+
+                var level = room.UtilityLevel;
+                var minutes = room.UpgradeMinutesRemaining;
+                var running = room.UpgradeRunning;
+                if (PowerSystem.TickUpgrade(ref level, ref minutes, ref running, deltaGameMinutes, room.IsBroken))
+                    anyCompleted = true;
+
+                room.UtilityLevel = level;
+                room.UpgradeMinutesRemaining = minutes;
+                room.UpgradeRunning = running;
+            }
+
+            return anyCompleted;
+        }
+
+        bool TickTreatmentUpgrades(float deltaGameMinutes)
+        {
+            var grid = build?.Grid;
+            if (grid == null || deltaGameMinutes <= 0f) return false;
+
+            var anyCompleted = false;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null || room.Type.id != "service_treatment") continue;
+
+                var level = room.UtilityLevel;
+                var minutes = room.UpgradeMinutesRemaining;
+                var running = room.UpgradeRunning;
+                if (PowerSystem.TickUpgrade(ref level, ref minutes, ref running, deltaGameMinutes, room.IsBroken))
+                    anyCompleted = true;
+
+                room.UtilityLevel = level;
+                room.UpgradeMinutesRemaining = minutes;
+                room.UpgradeRunning = running;
+            }
+
+            return anyCompleted;
+        }
+
+        void CapturePowerBrokenSnapshot(TowerGrid grid)
+        {
+            _powerBrokenSnapshot.Clear();
+            foreach (var room in grid.Rooms)
+            {
+                if (!DrawsPowerWhenHealthy(room)) continue;
+                _powerBrokenSnapshot[room.InstanceId] = room.IsBroken;
+            }
+        }
+
+        bool SyncPowerBrokenTransitions()
+        {
+            var grid = build?.Grid;
+            if (grid == null) return false;
+
+            var changed = false;
+            foreach (var room in grid.Rooms)
+            {
+                if (!DrawsPowerWhenHealthy(room)) continue;
+                var broken = room.IsBroken;
+                if (_powerBrokenSnapshot.TryGetValue(room.InstanceId, out var was) && was != broken)
+                    changed = true;
+                _powerBrokenSnapshot[room.InstanceId] = broken;
+            }
+
+            return changed;
+        }
+
+        static void ApplyStartOfDayCondition(TowerGrid grid)
+        {
+            if (grid?.Rooms == null) return;
+            foreach (var room in grid.Rooms)
+                RoomConditionRules.ApplyMidnightDecay(room);
+        }
+
+        static bool DrawsPowerWhenHealthy(RoomInstance room) =>
+            room?.Type != null &&
+            (room.Type.id == "service_power" || PowerSystem.Cost(room.Type) > 0);
+
+        static PowerBand PowerBandFor(RoomInstance room, AgentSystem agents)
+        {
+            var type = room.Type;
+            if (type.isElevatorShaft) return PowerBand.Elevator;
+            if (type.ResolvedBuildFamily() == BuildFamily.Leisure) return PowerBand.ShedFirst;
+            if (type.category == RoomCategory.Hotel && CountHomeOccupants(room, agents) == 0)
+                return PowerBand.ShedFirst;
+            if (IsOccupiedForPower(room, agents)) return PowerBand.Occupied;
+            return PowerBand.Other;
+        }
+
+        static bool IsOccupiedForPower(RoomInstance room, AgentSystem agents)
+        {
+            if (room?.Type == null) return false;
+            if (room.CondoSold) return true;
+
+            var category = room.Type.category;
+            if (category is RoomCategory.Hotel or RoomCategory.Office or RoomCategory.Condo)
+                return CountHomeOccupants(room, agents) > 0;
+
+            if (ShopVisitRules.IsShop(room.Type) && room.ConcurrentVisitors > 0)
+                return true;
+
+            if (ParkingStalls.IsParking(room) && HasParkingOccupant(room, agents))
+                return true;
+
+            if (category == RoomCategory.Service)
+            {
+                if (room.StaffedWorkers > 0) return true;
+                if (HasPersonInside(room, agents)) return true;
+            }
+
+            return false;
+        }
+
+        static int CountHomeOccupants(RoomInstance room, AgentSystem agents)
+        {
+            if (room == null || agents?.Agents == null) return 0;
+
+            var count = 0;
+            foreach (var agent in agents.Agents)
+            {
+                if (agent != null && ReferenceEquals(agent.HomeRoom, room))
+                    count++;
+            }
+
+            return count;
+        }
+
+        static bool HasParkingOccupant(RoomInstance room, AgentSystem agents)
+        {
+            if (room == null || agents?.Agents == null) return false;
+            foreach (var agent in agents.Agents)
+            {
+                if (agent != null && ReferenceEquals(agent.ParkingRoom, room))
+                    return true;
+            }
+
+            return false;
+        }
+
+        static bool HasPersonInside(RoomInstance room, AgentSystem agents)
+        {
+            if (room == null || agents?.Agents == null) return false;
+            foreach (var agent in agents.Agents)
+            {
+                if (agent == null) continue;
+                if (ReferenceEquals(agent.HomeRoom, room)) return true;
+                if (ReferenceEquals(agent.VisitTarget, room)) return true;
+                if (ReferenceEquals(agent.ParkingRoom, room)) return true;
+                if (ReferenceEquals(agent.ServiceTarget, room) && agent.Phase != AgentPhase.Outside)
+                    return true;
+            }
+
+            return false;
+        }
+
+        public void RegisterMetroStation(RoomInstance room)
+        {
+            if (!IsMetroStation(room)) return;
+            _metro ??= new MetroSystem();
+            _metro.RegisterStation(RoomFootprint(room));
+        }
+
+        public void UnregisterMetroStation(RoomInstance room)
+        {
+            if (!IsMetroStation(room) || _metro == null) return;
+            _metro.UnregisterStation(RoomFootprint(room));
+        }
+
+        void SyncMetroStationsFromGrid()
+        {
+            _metro ??= new MetroSystem();
+            _metro.Clear();
+            if (build?.Grid == null) return;
+
+            foreach (var room in build.Grid.Rooms)
+            {
+                if (!IsMetroStation(room)) continue;
+                _metro.RegisterStation(RoomFootprint(room));
+            }
+        }
+
+        static bool IsMetroStation(RoomInstance room) =>
+            room?.Type != null && room.Type.id == "metro_station";
+
+        static RectInt RoomFootprint(RoomInstance room) =>
+            new RectInt(room.Origin.x, room.Origin.y, room.Size.x, room.Size.y);
+
+        void RebuildRoutingAndAgents()
+        {
+            if (build == null || build.Grid == null || _router == null || _agents == null) return;
             _router.Rebuild(build.Grid);
+            elevatorView?.SyncFloorLabels(build.Grid);
             _agents.SyncHomes(
                 build.Grid,
-                room => _economy?.TrySellCondo(room, build.Wallet),
-                _stars?.CurrentStars ?? 0);
-            _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
+                GameSession.PendingLoad == null
+                    ? room => _economy?.TrySellCondo(
+                        room,
+                        build.Wallet,
+                        _climate?.SpendMultiplier ?? 1f,
+                        _macro?.LivingPulseMult ?? 1f,
+                        _stars?.CurrentStars ?? 0)
+                    : null,
+                _stars?.CurrentStars ?? 0,
+                _climate?.ComfortTierOffset ?? 0,
+                _crime?.AverageCrime ?? 0f);
+        }
+
+        void SyncStructureArtToStars()
+        {
+            var stars = _stars?.CurrentStars ?? 0;
+            var structureChanged = StructureCutawayArt.SetStarRating(stars);
+            elevatorView?.SetStarRating(stars);
+            if (structureChanged)
+                build?.RefreshStarStructureArt();
+        }
+
+        void DrainStarCelebrationsAndSyncArt()
+        {
+            EnsureCelebrationController();
+            if (_stars != null && _stars.PendingChanges.Count > 0 && celebration != null)
+            {
+                celebration.Enqueue(new List<StarChangeEvent>(_stars.PendingChanges));
+                _stars.ClearPendingChanges();
+            }
+
+            SyncStructureArtToStars();
+        }
+
+        void EnsureCelebrationController()
+        {
+            if (celebration == null)
+                celebration = GetComponent<StarCelebrationController>() ??
+                              FindAnyObjectByType<StarCelebrationController>();
+            if (celebration == null)
+                celebration = gameObject.AddComponent<StarCelebrationController>();
+
+            var hud = FindAnyObjectByType<TowerHudController>();
+            celebration.Bind(this, hud, build);
+            if (hud != null)
+            {
+                hud.BindCelebration(celebration);
+                if (build != null)
+                {
+                    hud.BindPauseSave(
+                        new SaveCoordinator(LocalSaveRepository.CreateDefault(), build, this));
+                }
+            }
+        }
+
+        void OnMonthRolled()
+        {
+            _climate?.OnMonthRolled(_climateRng);
         }
 
         void OnDayRolled()
@@ -125,17 +991,269 @@ namespace BuildATower
             if (build?.Grid == null || _agents == null || _economy == null || _stars == null)
                 return;
 
+            GameSession.MarkGameplaySaveDirty();
+
+            // Weekly pulse is independent of monthly climate; stack happens at balancer wire-up.
+            _macro?.Tick(_clock);
+
+            var climateOffset = _climate?.ComfortTierOffset ?? 0;
+            var climateSpendMult = _climate?.SpendMultiplier ?? 1f;
+            var livingPulse = _macro?.LivingPulseMult ?? 1f;
+            var commercialPulse = _macro?.CommercialPulseMult ?? 1f;
             for (var day = _lastDayIndex + 1; day <= _clock.DayIndex; day++)
             {
-                _economy.OnNewDay(build.Grid, _agents.Agents, build.Wallet, _stars.CurrentStars);
+                _shopDemand.ArchiveAndApplyStress(_agents.Agents);
+
+                ApplyStartOfDayCondition(build.Grid);
+                if (SyncPowerBrokenTransitions())
+                    Power();
+
+                // Event schedule first so pending lump / daily credits land in OnNewDay.
+                _conference?.TickDay(
+                    day,
+                    build.Grid,
+                    CountHotelGuests(_agents.Agents),
+                    _stars.CurrentStars,
+                    climateSpendMult,
+                    build.Wallet,
+                    _news,
+                    _conferenceRng);
+
+                _economy.OnNewDay(
+                    build.Grid,
+                    _agents.Agents,
+                    build.Wallet,
+                    _stars.CurrentStars,
+                    climateOffset,
+                    _research,
+                    climateSpendMult,
+                    _conference,
+                    livingPulse,
+                    commercialPulse);
+
+                _shopDemand.BeginDay(
+                    _agents.Agents,
+                    _stars.CurrentStars,
+                    climateSpendMult);
+
+                _elevators?.ArchiveDay();
+
+                _agents.SyncEventVisitors(_conference, build.Grid, _clock);
+
+                PushOpsAndQuirkNews(
+                    day,
+                    build.Grid,
+                    _agents.AverageStress,
+                    _crime?.AverageCrime ?? 0f);
+
+                // §7.3: decay all incomplete stored progress except active running unpaused.
+                _research?.TickDayDecay();
 
                 if (day > 0 && day % StarSystem.QuarterDays == 0)
                     _stars.EvaluateQuarterly(build.Grid, _agents.AverageStress, _agents.Population);
                 else
                     _stars.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
+                DrainStarCelebrationsAndSyncArt();
+
+                EnsureMapController()?.NotifyMidnight(
+                    day,
+                    _climate?.Step ?? MarketClimate.Normal,
+                    climateSpendMult,
+                    DemandProxyFromVacancy(build.Grid, _agents),
+                    _agents.Population,
+                    _economy.LastIncome,
+                    _economy.LastExpense,
+                    build.Wallet.Balance,
+                    _stars.CurrentStars);
             }
 
             _lastDayIndex = _clock.DayIndex;
         }
+
+        void PushOpsAndQuirkNews(int dayIndex, TowerGrid grid, float averageStress, float averageCrime)
+        {
+            if (_news == null) return;
+
+            var dirtyHotels = CountDirtyHotels(grid);
+            if (dirtyHotels >= OpsDirtyHotelThreshold)
+                PushOps(dayIndex, PickLine(OpsDirtyHotelLines), priority: 8);
+
+            if (averageCrime >= OpsAvgCrimeThreshold)
+                PushOps(dayIndex, PickLine(OpsCrimeLines), priority: 9);
+
+            if (averageStress >= OpsAvgStressThreshold)
+                PushOps(dayIndex, PickLine(OpsStressLines), priority: 7);
+
+            PushHolidayNews(dayIndex);
+
+            if (dayIndex > 0 && dayIndex % QuirkEveryNDays == 0 && QuirkLines.Length > 0)
+            {
+                var line = PickQuirkLine();
+                _news.Push(new TowerNewsItem
+                {
+                    Category = TowerNewsCategory.Quirk,
+                    Priority = 1,
+                    Text = line,
+                    CreatedDayIndex = dayIndex,
+                    ExpireDayIndex = dayIndex + 4
+                });
+            }
+        }
+
+        void PushHolidayNews(int dayIndex)
+        {
+            var date = GameClock.DateForDayIndex(dayIndex);
+            var matches = HolidayNewsCatalog.MatchesFor(date);
+            for (var i = 0; i < matches.Count; i++)
+            {
+                var match = matches[i];
+                if (match.Lines == null || match.Lines.Length == 0) continue;
+                var line = PickLine(match.Lines);
+                if (string.IsNullOrEmpty(line)) continue;
+                _news.Push(new TowerNewsItem
+                {
+                    Category = TowerNewsCategory.Quirk,
+                    Priority = 3,
+                    Text = line,
+                    CreatedDayIndex = dayIndex,
+                    ExpireDayIndex = dayIndex + 3
+                });
+            }
+        }
+
+        string PickLine(string[] lines)
+        {
+            if (lines == null || lines.Length == 0) return string.Empty;
+            return lines[_newsRng.Next(0, lines.Length)];
+        }
+
+        string PickQuirkLine()
+        {
+            if (QuirkLines.Length == 1)
+                return QuirkLines[0];
+
+            var index = _newsRng.Next(0, QuirkLines.Length);
+            // Avoid immediate repeat of the last quirk when the pool is larger than one.
+            if (index == _lastQuirkIndex)
+                index = (index + 1 + _newsRng.Next(0, QuirkLines.Length - 1)) % QuirkLines.Length;
+            _lastQuirkIndex = index;
+            return QuirkLines[index];
+        }
+
+        void PushOps(int dayIndex, string text, int priority)
+        {
+            _news.Push(new TowerNewsItem
+            {
+                Category = TowerNewsCategory.OpsSerious,
+                Priority = priority,
+                Text = text,
+                CreatedDayIndex = dayIndex,
+                ExpireDayIndex = dayIndex + 5
+            });
+        }
+
+        static int CountDirtyHotels(TowerGrid grid)
+        {
+            if (grid == null) return 0;
+
+            var total = 0;
+            foreach (var room in grid.Rooms)
+            {
+                if (room == null || ReferenceEquals(room.Type, null)) continue;
+                if (room.Type.category != RoomCategory.Hotel) continue;
+                if (room.Dirty)
+                    total++;
+            }
+
+            return total;
+        }
+
+        static int CountStaffedSecurity(TowerGrid grid)
+        {
+            if (grid == null) return 0;
+
+            var total = 0;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type?.id != "service_security") continue;
+                if (room.IsBroken) continue;
+                total += room.StaffedWorkers;
+            }
+
+            return total;
+        }
+
+        static int CountFloorsWithRooms(TowerGrid grid)
+        {
+            if (grid == null) return 0;
+            var floors = new HashSet<int>();
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                var minY = room.Origin.y;
+                var maxY = room.Origin.y + room.Size.y - 1;
+                for (var y = minY; y <= maxY; y++)
+                    floors.Add(y);
+            }
+
+            return floors.Count;
+        }
+
+        static int CountHotelGuests(IReadOnlyList<Agent> agents)
+        {
+            if (agents == null) return 0;
+
+            var total = 0;
+            for (var i = 0; i < agents.Count; i++)
+            {
+                var agent = agents[i];
+                // Match star Population: only guests currently staying in the tower.
+                if (agent != null &&
+                    agent.Role == AgentRole.HotelGuest &&
+                    agent.Phase != AgentPhase.Outside)
+                    total++;
+            }
+
+            return total;
+        }
+
+        /// <summary>
+        /// Scene wiring preferred; this covers play from scenes that omit the component.
+        /// </summary>
+        static void EnsureDayNightSkyController()
+        {
+            var cam = Camera.main;
+            if (cam == null) return;
+            if (cam.GetComponent<DayNightSkyController>() != null) return;
+            cam.gameObject.AddComponent<DayNightSkyController>();
+        }
+    }
+
+    public readonly struct TowerWaterState
+    {
+        public static TowerWaterState Empty => new(1, 0, 0, 0, 1, 0f);
+
+        public TowerWaterState(
+            int height,
+            int upperHotels,
+            int upperCondos,
+            int supply,
+            int demand,
+            float pressurePercent)
+        {
+            Height = height;
+            UpperHotels = upperHotels;
+            UpperCondos = upperCondos;
+            Supply = supply;
+            Demand = demand;
+            PressurePercent = pressurePercent;
+        }
+
+        public int Height { get; }
+        public int UpperHotels { get; }
+        public int UpperCondos { get; }
+        public int Supply { get; }
+        public int Demand { get; }
+        public float PressurePercent { get; }
     }
 }

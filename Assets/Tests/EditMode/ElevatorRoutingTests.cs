@@ -1,0 +1,580 @@
+using System.Collections.Generic;
+using System.Linq;
+using BuildATower;
+using NUnit.Framework;
+using UnityEngine;
+
+namespace BuildATower.Tests
+{
+    public class ElevatorRoutingTests
+    {
+        RoomTypeSO Lobby()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "lobby";
+            so.isLobby = true;
+            so.allowAboveGround = true;
+            so.size = Vector2Int.one;
+            return so;
+        }
+
+        RoomTypeSO Stairs()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "stairs";
+            so.category = RoomCategory.Transit;
+            so.isStairs = true;
+            so.size = new Vector2Int(2, 2);
+            so.allowAboveGround = true;
+            so.allowBasement = true;
+            return so;
+        }
+
+        RoomTypeSO Office()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "office";
+            so.category = RoomCategory.Office;
+            so.size = new Vector2Int(9, 1);
+            so.allowAboveGround = true;
+            return so;
+        }
+
+        RoomTypeSO Elevator()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "elevator_normal";
+            so.displayName = "Elevator";
+            so.category = RoomCategory.Transit;
+            so.size = new Vector2Int(1, 2);
+            so.buildCost = 20000;
+            so.isElevatorShaft = true;
+            so.allowAboveGround = true;
+            so.allowBasement = true;
+            return so;
+        }
+
+        ElevatorSystem DualShaftsServing0To4(
+            out ElevatorShaftRuntime first,
+            out ElevatorShaftRuntime second)
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var a));
+            Assert.IsTrue(grid.TryExtendElevator(a, 0, 4, out _));
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(5, 0), out var b));
+            Assert.IsTrue(grid.TryExtendElevator(b, 0, 4, out _));
+
+            var system = new ElevatorSystem();
+            system.SyncFromGrid(grid);
+            first = system.Shafts.Single(s => s.RoomInstanceId == a.InstanceId);
+            second = system.Shafts.Single(s => s.RoomInstanceId == b.InstanceId);
+            return system;
+        }
+
+        TowerGrid DualShaftTowerForRouting(
+            out ElevatorSystem elevators,
+            out ElevatorShaftRuntime crowded,
+            out ElevatorShaftRuntime empty)
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            for (var floor = 1; floor <= 4; floor++)
+            {
+                var office = Office();
+                office.maxOccupants = floor == 4 ? 1 : 0;
+                Assert.IsTrue(grid.TryPlace(office, new Vector2Int(0, floor), out _));
+            }
+
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var a));
+            Assert.IsTrue(grid.TryExtendElevator(a, 0, 4, out _));
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(5, 0), out var b));
+            Assert.IsTrue(grid.TryExtendElevator(b, 0, 4, out _));
+
+            elevators = new ElevatorSystem();
+            elevators.SyncFromGrid(grid);
+            crowded = elevators.Shafts.Single(s => s.RoomInstanceId == a.InstanceId);
+            empty = elevators.Shafts.Single(s => s.RoomInstanceId == b.InstanceId);
+            Assert.AreEqual(0, crowded.X);
+            Assert.AreEqual(5, empty.X);
+            return grid;
+        }
+
+        /// <summary>
+        /// Near shaft at X=0 reaches the floor-4 office; far shaft at X=20 serves 0–4 but
+        /// has no horizontal walk from its exit into the office band (gap on floor 4).
+        /// </summary>
+        TowerGrid DualShaftTowerWithUnreachableAlternate(
+            out ElevatorSystem elevators,
+            out ElevatorShaftRuntime near,
+            out ElevatorShaftRuntime far)
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            for (var floor = 1; floor <= 4; floor++)
+            {
+                var office = Office();
+                office.maxOccupants = floor == 4 ? 1 : 0;
+                Assert.IsTrue(grid.TryPlace(office, new Vector2Int(0, floor), out _));
+            }
+
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var a));
+            Assert.IsTrue(grid.TryExtendElevator(a, 0, 4, out _));
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(20, 0), out var b));
+            Assert.IsTrue(grid.TryExtendElevator(b, 0, 4, out _));
+
+            elevators = new ElevatorSystem();
+            elevators.SyncFromGrid(grid);
+            near = elevators.Shafts.Single(s => s.RoomInstanceId == a.InstanceId);
+            far = elevators.Shafts.Single(s => s.RoomInstanceId == b.InstanceId);
+            Assert.AreEqual(0, near.X);
+            Assert.AreEqual(20, far.X);
+            return grid;
+        }
+
+        [Test]
+        public void Capacity_is_ten()
+        {
+            Assert.AreEqual(10, ElevatorCar.Capacity);
+        }
+
+        [Test]
+        public void Score_penalizes_longer_queues()
+        {
+            Assert.Greater(
+                ElevatorRouting.Score(walkCost: 10, waitEstimate: 5f),
+                ElevatorRouting.Score(walkCost: 10, waitEstimate: 1f));
+        }
+
+        [Test]
+        public void Score_uses_wait_weight_constant()
+        {
+            Assert.AreEqual(3f, ElevatorRouting.WaitWeight);
+            Assert.AreEqual(
+                10f + ElevatorRouting.WaitWeight * 2f,
+                ElevatorRouting.Score(10, 2f));
+        }
+
+        [Test]
+        public void IsMeaningfullyBetter_requires_switch_improve_ratio()
+        {
+            Assert.AreEqual(0.25f, ElevatorRouting.SwitchImproveRatio);
+            Assert.IsFalse(ElevatorRouting.IsMeaningfullyBetter(100f, 90f));
+            Assert.IsTrue(ElevatorRouting.IsMeaningfullyBetter(100f, 75f));
+            Assert.IsFalse(ElevatorRouting.IsMeaningfullyBetter(50f, 50f));
+            Assert.IsFalse(ElevatorRouting.IsMeaningfullyBetter(40f, 50f));
+        }
+
+        [Test]
+        public void GetServingShafts_returns_all_overlapping_non_maintenance()
+        {
+            var system = DualShaftsServing0To4(out var first, out var second);
+
+            var serving = system.GetServingShafts(0, 4);
+            Assert.AreEqual(2, serving.Count);
+            CollectionAssert.Contains(serving.Select(s => s.RoomInstanceId).ToList(), first.RoomInstanceId);
+            CollectionAssert.Contains(serving.Select(s => s.RoomInstanceId).ToList(), second.RoomInstanceId);
+
+            Assert.IsTrue(system.TrySetMaintenance(first.RoomInstanceId, true));
+            serving = system.GetServingShafts(0, 4);
+            Assert.AreEqual(1, serving.Count);
+            Assert.AreEqual(second.RoomInstanceId, serving[0].RoomInstanceId);
+        }
+
+        [Test]
+        public void GetShaftsServingFloor_returns_shafts_covering_floor()
+        {
+            var system = DualShaftsServing0To4(out var first, out var second);
+
+            var serving = system.GetShaftsServingFloor(2);
+            Assert.AreEqual(2, serving.Count);
+            CollectionAssert.Contains(serving.Select(s => s.RoomInstanceId).ToList(), first.RoomInstanceId);
+            CollectionAssert.Contains(serving.Select(s => s.RoomInstanceId).ToList(), second.RoomInstanceId);
+
+            Assert.AreEqual(0, system.GetShaftsServingFloor(9).Count);
+
+            Assert.IsTrue(system.TrySetMaintenance(first.RoomInstanceId, true));
+            serving = system.GetShaftsServingFloor(2);
+            Assert.AreEqual(1, serving.Count);
+            Assert.AreEqual(second.RoomInstanceId, serving[0].RoomInstanceId);
+        }
+
+        [Test]
+        public void ClosestFloorOnShaft_clamps_to_min_max()
+        {
+            var shaft = new ElevatorShaftRuntime { MinFloor = 0, MaxFloor = 10 };
+            Assert.AreEqual(10, ElevatorSystem.ClosestFloorOnShaft(shaft, 11));
+            Assert.AreEqual(0, ElevatorSystem.ClosestFloorOnShaft(shaft, -1));
+            Assert.AreEqual(5, ElevatorSystem.ClosestFloorOnShaft(shaft, 5));
+        }
+
+        [Test]
+        public void QueueLength_counts_agents_at_floor_and_direction()
+        {
+            var system = DualShaftsServing0To4(out var shaft, out _);
+
+            Assert.AreEqual(0, system.QueueLength(shaft, 0, ElevatorDirection.Up));
+            Assert.IsTrue(system.TryEnqueue(1, shaft.X, 0, ElevatorDirection.Up));
+            Assert.IsTrue(system.TryEnqueue(2, shaft.X, 0, ElevatorDirection.Up));
+            Assert.IsTrue(system.TryEnqueue(3, shaft.X, 1, ElevatorDirection.Down));
+
+            Assert.AreEqual(2, system.QueueLength(shaft, 0, ElevatorDirection.Up));
+            Assert.AreEqual(0, system.QueueLength(shaft, 0, ElevatorDirection.Down));
+            Assert.AreEqual(1, system.QueueLength(shaft, 1, ElevatorDirection.Down));
+        }
+
+        [Test]
+        public void SameWayPassengerCount_counts_destinations_in_direction()
+        {
+            var system = DualShaftsServing0To4(out var shaft, out _);
+            shaft.Car.Floor = 1;
+            shaft.Car.PassengerIds.Add(10);
+            shaft.Car.PassengerIds.Add(11);
+            shaft.Car.PassengerIds.Add(12);
+            system.SetPassengerDestination(10, 4);
+            system.SetPassengerDestination(11, 3);
+            system.SetPassengerDestination(12, 0);
+
+            Assert.AreEqual(2, system.SameWayPassengerCount(shaft, ElevatorDirection.Up));
+            Assert.AreEqual(1, system.SameWayPassengerCount(shaft, ElevatorDirection.Down));
+        }
+
+        [Test]
+        public void EstimateWaitMinutes_grows_with_queue_and_busy_penalty()
+        {
+            var system = DualShaftsServing0To4(out var shaft, out _);
+            shaft.Car.Floor = 0;
+            shaft.Car.Direction = ElevatorDirection.None;
+            shaft.Car.State = ElevatorCarState.Idle;
+
+            var empty = system.EstimateWaitMinutes(shaft, 0, ElevatorDirection.Up);
+            Assert.AreEqual(0f, empty);
+
+            Assert.IsTrue(system.TryEnqueue(1, shaft.X, 0, ElevatorDirection.Up));
+            Assert.IsTrue(system.TryEnqueue(2, shaft.X, 0, ElevatorDirection.Up));
+            var withQueue = system.EstimateWaitMinutes(shaft, 0, ElevatorDirection.Up);
+            var expectedQueue =
+                2f / ElevatorCar.Capacity * ElevatorRouting.BoardCycleMinutes;
+            Assert.AreEqual(expectedQueue, withQueue, 0.0001f);
+
+            shaft.Car.Floor = 4;
+            shaft.Car.Direction = ElevatorDirection.Down;
+            var busy = system.EstimateWaitMinutes(shaft, 0, ElevatorDirection.Up);
+            Assert.AreEqual(
+                expectedQueue + ElevatorRouting.BusyPenaltyMinutes,
+                busy,
+                0.0001f);
+        }
+
+        [Test]
+        public void Routing_constants_match_brief()
+        {
+            Assert.AreEqual(3f, ElevatorRouting.WaitWeight);
+            Assert.AreEqual(2f, ElevatorRouting.BoardCycleMinutes);
+            Assert.AreEqual(1.5f, ElevatorRouting.BusyPenaltyMinutes);
+            Assert.AreEqual(0.25f, ElevatorRouting.SwitchImproveRatio);
+            Assert.AreEqual(10f, ElevatorRouting.RescoreIntervalGameMinutes);
+            Assert.AreEqual(30f, ElevatorRouting.SwitchCooldownGameMinutes);
+        }
+
+        [Test]
+        public void TryPlanTrip_picks_empty_shaft_over_crowded_first()
+        {
+            var grid = DualShaftTowerForRouting(out var elevators, out var crowded, out var empty);
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+
+            Assert.AreSame(crowded, elevators.FindServing(0, 4));
+            for (var id = 1; id <= ElevatorCar.Capacity; id++)
+                Assert.IsTrue(elevators.TryEnqueue(id, crowded.X, 0, ElevatorDirection.Up));
+
+            // Start/goal near shaft B (X=5); FindServing would still return crowded X=0.
+            Assert.IsTrue(router.TryPlanTrip(
+                new Vector2Int(7, 0),
+                new Vector2Int(7, 4),
+                out var legs));
+            Assert.AreEqual(
+                new[] { TransitLegKind.Walk, TransitLegKind.Elevator, TransitLegKind.Walk },
+                legs.Select(leg => leg.Kind));
+            Assert.AreEqual(empty.X, legs[1].ElevatorX);
+            Assert.AreNotEqual(crowded.X, legs[1].ElevatorX);
+        }
+
+        [Test]
+        public void TryPlanTrip_uses_stairs_when_span_le_3_even_with_elevators()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, 1), out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out _));
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(5, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 2, out _));
+
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+
+            Assert.IsTrue(router.TryPlanTrip(
+                new Vector2Int(8, 0),
+                new Vector2Int(8, 1),
+                out var legs));
+            Assert.AreEqual(1, legs.Count);
+            Assert.AreEqual(TransitLegKind.Stairs, legs[0].Kind);
+            Assert.IsFalse(legs.Any(leg => leg.Kind == TransitLegKind.Elevator));
+        }
+
+        /// <summary>
+        /// Lobby + offices 1–11; elevator x=0 spans 0–10; stairs connect 10↔11.
+        /// </summary>
+        TowerGrid HybridTowerElevatorTo10StairsTo11(out ElevatorSystem elevators)
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            for (var floor = 1; floor <= 11; floor++)
+                Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, floor), out _));
+
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 10, out _));
+            // 2×2 stairs beside the shaft: floors 10–11 at x=1..2 (no elevator overlap).
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(1, 10), out _));
+
+            elevators = new ElevatorSystem();
+            elevators.SyncFromGrid(grid);
+            return grid;
+        }
+
+        [Test]
+        public void TryPlanTrip_hybrid_elevator_then_stairs_above_shaft()
+        {
+            var grid = HybridTowerElevatorTo10StairsTo11(out var elevators);
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+
+            Assert.IsTrue(router.TryPlanTrip(
+                new Vector2Int(5, 0),
+                new Vector2Int(5, 11),
+                out var legs));
+            Assert.IsTrue(legs.Any(leg => leg.Kind == TransitLegKind.Elevator));
+            Assert.IsTrue(legs.Any(leg => leg.Kind == TransitLegKind.Stairs));
+            var elevator = legs.Single(leg => leg.Kind == TransitLegKind.Elevator);
+            Assert.AreEqual(0, elevator.ElevatorX);
+            Assert.AreEqual(0, elevator.EntryFloor);
+            Assert.AreEqual(10, elevator.ExitFloor);
+            var elevatorIndex = legs.FindIndex(leg => leg.Kind == TransitLegKind.Elevator);
+            var stairsIndex = legs.FindIndex(leg => leg.Kind == TransitLegKind.Stairs);
+            Assert.Greater(stairsIndex, elevatorIndex);
+        }
+
+        [Test]
+        public void TryPlanTrip_hybrid_stairs_then_elevator_below_start()
+        {
+            var grid = HybridTowerElevatorTo10StairsTo11(out var elevators);
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+
+            Assert.IsTrue(router.TryPlanTrip(
+                new Vector2Int(5, 11),
+                new Vector2Int(5, 0),
+                out var legs));
+            Assert.IsTrue(legs.Any(leg => leg.Kind == TransitLegKind.Stairs));
+            Assert.IsTrue(legs.Any(leg => leg.Kind == TransitLegKind.Elevator));
+            var elevator = legs.Single(leg => leg.Kind == TransitLegKind.Elevator);
+            Assert.AreEqual(0, elevator.ElevatorX);
+            Assert.AreEqual(10, elevator.EntryFloor);
+            Assert.AreEqual(0, elevator.ExitFloor);
+            var elevatorIndex = legs.FindIndex(leg => leg.Kind == TransitLegKind.Elevator);
+            var stairsIndex = legs.FindIndex(leg => leg.Kind == TransitLegKind.Stairs);
+            Assert.Less(stairsIndex, elevatorIndex);
+        }
+
+        [Test]
+        public void TryPlanTrip_prefers_full_elevator_over_overcap_stairs_when_both_exist()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            for (var floor = 1; floor <= 4; floor++)
+                Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, floor), out _));
+
+            Assert.IsTrue(grid.TryPlace(Elevator(), new Vector2Int(0, 0), out var elevator));
+            Assert.IsTrue(grid.TryExtendElevator(elevator, 0, 4, out _));
+            // Continuous stairs 0–4 beside offices (x=8..9), empty elevator queues.
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(8, 0), out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(8, 1), out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(8, 2), out _));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(8, 3), out _));
+
+            var elevators = new ElevatorSystem();
+            elevators.SyncFromGrid(grid);
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+
+            Assert.IsTrue(router.TryPlanTrip(
+                new Vector2Int(5, 0),
+                new Vector2Int(5, 4),
+                out var legs));
+            Assert.IsTrue(
+                legs.Any(leg => leg.Kind == TransitLegKind.Elevator),
+                "Under normal waits, full elevator must beat over-cap pure stairs.");
+            Assert.IsFalse(
+                legs.Count == 1 && legs[0].Kind == TransitLegKind.Stairs,
+                "Must not take over-cap stairs-only when a full elevator serves both floors.");
+        }
+
+        [Test]
+        public void TryRescoreElevatorWait_switches_when_alternate_much_better()
+        {
+            var grid = DualShaftTowerForRouting(out var elevators, out var crowded, out var empty);
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router);
+            agents.SyncHomes(grid);
+            var agent = agents.Agents.Single(a => a.HomeRoom.Origin.y == 4);
+            var goal = new Vector2Int(7, 4);
+
+            for (var id = 1000; id < 1000 + 20; id++)
+                Assert.IsTrue(elevators.TryEnqueue(id, crowded.X, 0, ElevatorDirection.Up));
+
+            PutAgentWaitingOnShaft(agent, elevators, crowded, goal, AgentPhase.Working);
+
+            Assert.IsTrue(agents.TryRescoreElevatorWait(agent, totalMinutes: 100f));
+            Assert.AreEqual(
+                -1,
+                elevators.GetQueueIndex(crowded, 0, ElevatorDirection.Up, agent.Id),
+                "Agent must leave the crowded shaft queue after a meaningful switch.");
+            Assert.IsNotNull(agent.TripLegs);
+            var elevatorLeg = agent.TripLegs.Single(leg => leg.Kind == TransitLegKind.Elevator);
+            Assert.AreEqual(empty.X, elevatorLeg.ElevatorX);
+            Assert.AreEqual(100f, agent.LastElevatorSwitchTotalMinutes);
+        }
+
+        [Test]
+        public void TryRescoreElevatorWait_skips_tiny_improvement_and_cooldown()
+        {
+            var grid = DualShaftTowerForRouting(out var elevators, out var crowded, out var empty);
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router);
+            agents.SyncHomes(grid);
+            var agent = agents.Agents.Single(a => a.HomeRoom.Origin.y == 4);
+            var goal = new Vector2Int(7, 4);
+
+            Assert.IsTrue(elevators.TryEnqueue(1000, crowded.X, 0, ElevatorDirection.Up));
+            PutAgentWaitingOnShaft(agent, elevators, crowded, goal, AgentPhase.Working);
+
+            Assert.IsFalse(
+                agents.TryRescoreElevatorWait(agent, totalMinutes: 100f),
+                "One person ahead is not a meaningful improvement over walking to the other shaft.");
+            Assert.GreaterOrEqual(
+                elevators.GetQueueIndex(crowded, 0, ElevatorDirection.Up, agent.Id),
+                0);
+
+            // Make alternate clearly better, but still inside switch cooldown.
+            for (var id = 1001; id < 1001 + 20; id++)
+                Assert.IsTrue(elevators.TryEnqueue(id, crowded.X, 0, ElevatorDirection.Up));
+            agent.NextElevatorRescoreTotalMinutes = 0f;
+            agent.LastElevatorSwitchTotalMinutes = 90f;
+
+            Assert.IsFalse(
+                agents.TryRescoreElevatorWait(agent, totalMinutes: 100f),
+                "Cooldown must block another shaft switch.");
+            Assert.GreaterOrEqual(
+                elevators.GetQueueIndex(crowded, 0, ElevatorDirection.Up, agent.Id),
+                0);
+            Assert.AreNotEqual(empty.RoomInstanceId, agent.ElevatorShaftId);
+        }
+
+        [Test]
+        public void TryShaftWalkPaths_uses_path_cell_counts_and_fails_when_exit_unreachable()
+        {
+            var grid = DualShaftTowerWithUnreachableAlternate(
+                out var elevators,
+                out var near,
+                out var far);
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+
+            var start = new Vector2Int(near.X, 0);
+            var goal = new Vector2Int(7, 4);
+
+            Assert.IsTrue(router.TryShaftWalkPaths(start, goal, near, out var toNear, out var fromNear));
+            var walkCost = toNear.Count + fromNear.Count;
+            var manhattan = Mathf.Abs(near.X - start.x) + Mathf.Abs(near.X - goal.x);
+            Assert.AreEqual(1, toNear.Count, "Agent already at entry → single-cell path.");
+            Assert.AreEqual(8, fromNear.Count, "Office walk (0,4)→(7,4) is 8 cells.");
+            Assert.AreEqual(9, walkCost);
+            Assert.AreNotEqual(
+                manhattan,
+                walkCost,
+                "Wait/plan scoring must use path cell counts, not Manhattan-on-X.");
+
+            // Manhattan-on-X would still score the far shaft; pathfinder must reject it.
+            Assert.IsFalse(
+                router.TryShaftWalkPaths(start, goal, far, out _, out _),
+                "Exit→goal must fail when the far shaft is cut off on the destination floor.");
+        }
+
+        [Test]
+        public void TryRescoreElevatorWait_skips_alternate_without_walk_path()
+        {
+            var grid = DualShaftTowerWithUnreachableAlternate(
+                out var elevators,
+                out var crowded,
+                out var unreachableEmpty);
+            var router = new TransitRouter(new StairsPathfinder(), elevators);
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router);
+            agents.SyncHomes(grid);
+            var agent = agents.Agents.Single(a => a.HomeRoom.Origin.y == 4);
+            var goal = new Vector2Int(7, 4);
+
+            // Empty unreachable shaft would win on Manhattan + wait; pathfinder must skip it.
+            for (var id = 1000; id < 1000 + 20; id++)
+                Assert.IsTrue(elevators.TryEnqueue(id, crowded.X, 0, ElevatorDirection.Up));
+
+            PutAgentWaitingOnShaft(agent, elevators, crowded, goal, AgentPhase.Working);
+
+            Assert.IsFalse(
+                agents.TryRescoreElevatorWait(agent, totalMinutes: 100f),
+                "Must not switch to a shaft with no StairsPathfinder exit→goal walk.");
+            Assert.GreaterOrEqual(
+                elevators.GetQueueIndex(crowded, 0, ElevatorDirection.Up, agent.Id),
+                0);
+            Assert.AreEqual(crowded.RoomInstanceId, agent.ElevatorShaftId);
+            Assert.AreNotEqual(unreachableEmpty.RoomInstanceId, agent.ElevatorShaftId);
+        }
+
+        static void PutAgentWaitingOnShaft(
+            Agent agent,
+            ElevatorSystem elevators,
+            ElevatorShaftRuntime shaft,
+            Vector2Int goal,
+            AgentPhase after)
+        {
+            agent.GoalCell = goal;
+            agent.PhaseAfterMove = after;
+            agent.Cell = new Vector2Int(shaft.X, 0);
+            agent.WorldPosition = new Vector2(shaft.X + 0.5f, 0.5f);
+            agent.Visible = true;
+            agent.ElevatorEntryFloor = 0;
+            agent.ElevatorDestFloor = goal.y;
+            agent.ElevatorShaftId = shaft.RoomInstanceId;
+            agent.ElevatorQueueSide = 1;
+            agent.ElevatorWaitMinutes = 0f;
+            agent.TripLegs = new List<TransitLeg>
+            {
+                new TransitLeg
+                {
+                    Kind = TransitLegKind.Elevator,
+                    ElevatorX = shaft.X,
+                    EntryFloor = 0,
+                    ExitFloor = goal.y
+                }
+            };
+            agent.TripLegIndex = 0;
+            Assert.IsTrue(elevators.TryEnqueue(agent.Id, shaft.X, 0, ElevatorDirection.Up));
+            elevators.SetPassengerDestination(agent.Id, goal.y);
+            agent.Phase = AgentPhase.WaitingAtElevator;
+            agent.NextElevatorRescoreTotalMinutes = 0f;
+            agent.LastElevatorSwitchTotalMinutes = float.NegativeInfinity;
+        }
+    }
+}

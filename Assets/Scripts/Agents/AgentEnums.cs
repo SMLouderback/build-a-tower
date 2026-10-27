@@ -1,10 +1,23 @@
 namespace BuildATower
 {
+    public enum AgentGender
+    {
+        Male,
+        Female
+    }
+
     public enum AgentRole
     {
         OfficeWorker,
         HotelGuest,
-        CondoResident
+        CondoResident,
+        StreetVisitor,
+        EventVisitor,
+        Maid,
+        Handyman,
+        Security,
+        Criminal,
+        Doctor
     }
 
     public enum AgentPhase
@@ -15,6 +28,22 @@ namespace BuildATower
         Working,
         Staying,
         WaitingAtElevator,
-        Riding
+        Riding,
+        VisitingShop
+    }
+
+    public enum CondoJobKind
+    {
+        None,
+        InTower,
+        Outside
+    }
+
+    public enum CondoOutsidePhase
+    {
+        None,
+        ToWorkCommute,
+        Working,
+        ReturnCommute
     }
 }

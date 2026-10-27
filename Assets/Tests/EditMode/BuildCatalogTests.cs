@@ -77,5 +77,107 @@ namespace BuildATower.Tests
             var food = Make("shop_food_fast", "Counter", RoomCategory.Commercial);
             Assert.AreEqual(BuildSubgroup.Food, food.ResolvedBuildSubgroup());
         }
+
+        [Test]
+        public void Group_nests_three_shops_under_food_and_retail()
+        {
+            var rooms = new List<RoomTypeSO>
+            {
+                Make("shop_food_fast", "Fast Food", RoomCategory.Commercial),
+                Make("shop_food_restaurant", "Restaurant", RoomCategory.Commercial),
+                Make("shop_retail", "Retail", RoomCategory.Commercial)
+            };
+
+            var groups = BuildCatalog.Group(rooms);
+
+            Assert.AreEqual(1, groups.Count);
+            Assert.AreEqual(BuildFamily.Shops, groups[0].Family);
+            Assert.AreEqual(2, groups[0].Subgroups.Count);
+            Assert.AreEqual(BuildSubgroup.Food, groups[0].Subgroups[0].Subgroup);
+            Assert.AreEqual(2, groups[0].Subgroups[0].Rooms.Count);
+            Assert.AreEqual("shop_food_fast", groups[0].Subgroups[0].Rooms[0].id);
+            Assert.AreEqual("shop_food_restaurant", groups[0].Subgroups[0].Rooms[1].id);
+            Assert.AreEqual(BuildSubgroup.Retail, groups[0].Subgroups[1].Subgroup);
+            Assert.AreEqual(1, groups[0].Subgroups[1].Rooms.Count);
+            Assert.AreEqual("shop_retail", groups[0].Subgroups[1].Rooms[0].id);
+        }
+
+        [Test]
+        public void Group_includes_utility_service_rooms_and_fine_dining_food()
+        {
+            var rooms = new List<RoomTypeSO>
+            {
+                Make("service_housekeeping", "Housekeeping", RoomCategory.Service, family: BuildFamily.Utility),
+                Make("service_maintenance", "Maintenance", RoomCategory.Service, family: BuildFamily.Utility),
+                Make("service_security", "Security Post", RoomCategory.Service, family: BuildFamily.Utility),
+                Make("shop_food_fine", "Fine Dining", RoomCategory.Commercial,
+                    family: BuildFamily.Shops, subgroup: BuildSubgroup.Food)
+            };
+
+            var groups = BuildCatalog.Group(rooms);
+
+            Assert.AreEqual(2, groups.Count);
+            Assert.AreEqual(BuildFamily.Shops, groups[0].Family);
+            Assert.AreEqual(1, groups[0].Subgroups.Count);
+            Assert.AreEqual(BuildSubgroup.Food, groups[0].Subgroups[0].Subgroup);
+            Assert.AreEqual("shop_food_fine", groups[0].Subgroups[0].Rooms[0].id);
+            Assert.AreEqual(BuildFamily.Utility, groups[1].Family);
+            Assert.AreEqual(3, groups[1].Rooms.Count);
+        }
+
+        [Test]
+        public void ApplyAutoHireOnPlace_sets_staffed_workers_for_housekeeping_and_maintenance()
+        {
+            var hk = Make("service_housekeeping", "Housekeeping", RoomCategory.Service, family: BuildFamily.Utility);
+            var maint = Make("service_maintenance", "Maintenance", RoomCategory.Service, family: BuildFamily.Utility);
+            var security = Make("service_security", "Security Post", RoomCategory.Service, family: BuildFamily.Utility);
+            var research = Make("service_research", "Research Lab", RoomCategory.Service, family: BuildFamily.Utility);
+
+            var hkRoom = new RoomInstance(1, hk, Vector2Int.zero, hk.size);
+            var maintRoom = new RoomInstance(2, maint, Vector2Int.zero, maint.size);
+            var securityRoom = new RoomInstance(3, security, Vector2Int.zero, security.size);
+            var researchRoom = new RoomInstance(4, research, Vector2Int.zero, research.size);
+
+            BuildController.ApplyAutoHireOnPlace(hkRoom);
+            BuildController.ApplyAutoHireOnPlace(maintRoom);
+            BuildController.ApplyAutoHireOnPlace(securityRoom);
+            BuildController.ApplyAutoHireOnPlace(researchRoom);
+
+            Assert.AreEqual(1, hkRoom.StaffedWorkers);
+            Assert.AreEqual(1, maintRoom.StaffedWorkers);
+            Assert.AreEqual(1, securityRoom.StaffedWorkers);
+            Assert.AreEqual(1, researchRoom.StaffedWorkers);
+            Assert.IsTrue(BuildController.IsStaffedServiceRoom(research));
+        }
+
+        [Test]
+        public void Group_shop_subgroups_include_expanded_food_and_retail_counts()
+        {
+            var rooms = new List<RoomTypeSO>
+            {
+                Resources.Load<RoomTypeSO>("Rooms/ShopFastFood"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopTacoCounter"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopChickenShack"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopRestaurant"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopMexicanRestaurant"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopFineDining"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopRetail"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopGagGifts"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopShoeStore"),
+                Resources.Load<RoomTypeSO>("Rooms/ShopDepartmentStore"),
+            };
+
+            var groups = BuildCatalog.Group(rooms);
+            var shops = groups.Find(g => g.Family == BuildFamily.Shops);
+            Assert.IsNotNull(shops);
+            Assert.AreEqual(2, shops.Subgroups.Count);
+
+            var food = shops.Subgroups.Find(s => s.Subgroup == BuildSubgroup.Food);
+            var retail = shops.Subgroups.Find(s => s.Subgroup == BuildSubgroup.Retail);
+            Assert.IsNotNull(food);
+            Assert.IsNotNull(retail);
+            Assert.GreaterOrEqual(food.Rooms.Count, 6);
+            Assert.GreaterOrEqual(retail.Rooms.Count, 4);
+        }
     }
 }

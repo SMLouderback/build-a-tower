@@ -8,7 +8,8 @@ namespace BuildATower
         Condo,
         Shops,
         Utility,
-        Transit
+        Transit,
+        Leisure
     }
 
     public enum BuildSubgroup

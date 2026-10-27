@@ -1,0 +1,322 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace BuildATower
+{
+    public static class ShopVisitRules
+    {
+        public static bool IsTrafficVenue(RoomTypeSO type) =>
+            type != null && type.incomeModel == IncomeModel.TrafficVariable;
+
+        public static bool IsShop(RoomTypeSO type) =>
+            IsTrafficVenue(type) && type.ResolvedBuildFamily() == BuildFamily.Shops;
+
+        public static bool IsOpen(RoomTypeSO type, int minuteOfDay)
+        {
+            if (!IsTrafficVenue(type)) return false;
+            if (!type.hasActiveHours) return true;
+            var m = ((minuteOfDay % (24 * 60)) + 24 * 60) % (24 * 60);
+            if (type.activeHoursStart <= type.activeHoursEnd)
+                return m >= type.activeHoursStart && m < type.activeHoursEnd;
+            return m >= type.activeHoursStart || m < type.activeHoursEnd;
+        }
+
+        public static int SlotCount(RoomTypeSO type) =>
+            type == null ? 0 : Mathf.Max(1, type.maxOccupants);
+
+        /// <summary>
+        /// Catalog list price per visit (fraction of VPSF period income; Normal difficulty, neutral mults).
+        /// Midnight still applies <see cref="BuildEconomy.ApplyIncome"/> for difficulty.
+        /// </summary>
+        public static int PayPerVisit(RoomTypeSO type)
+        {
+            if (type == null) return 0;
+            var period = EconomicBalancingManager.PeriodIncome(
+                type,
+                PricePricing.TierNormal,
+                GameDifficulty.Normal,
+                climateSpendMult: 1f,
+                pulseMult: 1f,
+                floorFit01: 1f);
+            if (period <= 0) return 0;
+            return Math.Max(1, (int)Math.Round(period * VpsfCatalog.VisitPriceOfPeriodIncome));
+        }
+
+        public static int PickDwellMinutes(RoomTypeSO type, System.Random rng)
+        {
+            var (lo, hi) = DwellRange(type);
+            return lo + rng.Next(0, hi - lo + 1);
+        }
+
+        public static float StreetVisitWeight(RoomTypeSO type, float cleanlinessPercent = 100f)
+        {
+            var weight = type?.streetVisitWeight ?? 1f;
+            if (type != null && type.ResolvedBuildSubgroup() == BuildSubgroup.Food)
+                weight *= CleanlinessSystem.RestaurantWeightFactor(cleanlinessPercent);
+            return weight;
+        }
+
+        public static RoomInstance PickWeightedShop(
+            IReadOnlyList<RoomInstance> shops,
+            System.Random rng,
+            float cleanlinessPercent = 100f)
+        {
+            if (shops == null || shops.Count == 0) return null;
+            if (shops.Count == 1) return shops[0];
+
+            var total = 0f;
+            foreach (var shop in shops)
+            {
+                var w = StreetVisitWeight(shop?.Type, cleanlinessPercent);
+                if (w > 0f) total += w;
+            }
+
+            if (total <= 0f)
+                return shops[rng.Next(shops.Count)];
+
+            var roll = (float)(rng.NextDouble() * total);
+            foreach (var shop in shops)
+            {
+                var w = StreetVisitWeight(shop?.Type, cleanlinessPercent);
+                if (w <= 0f) continue;
+                roll -= w;
+                if (roll < 0f) return shop;
+            }
+
+            return shops[shops.Count - 1];
+        }
+
+        public static float DemandWeight(
+            RoomInstance shop,
+            bool streetOrigin,
+            float cleanlinessPercent = 100f)
+        {
+            if (shop?.Type == null) return 0f;
+            var free = Mathf.Max(1, SlotCount(shop.Type) - shop.ConcurrentVisitors);
+            var fairness = 1f + 1f / (1f + Mathf.Max(0, shop.VisitsToday));
+            var origin = streetOrigin
+                ? Mathf.Max(0.1f, StreetVisitWeight(shop.Type, cleanlinessPercent))
+                : 1f;
+            return free * fairness * origin;
+        }
+
+        /// <summary>Street demand multiplier for a shop or restaurant with a public-restroom assignment.</summary>
+        public const float PublicRestroomStreetMultiplier = 1.05f;
+
+        public static float DemandWeight(
+            RoomInstance shop,
+            bool streetOrigin,
+            TowerGrid grid,
+            bool quarantined = false,
+            float cleanlinessPercent = 100f)
+        {
+            if (streetOrigin && quarantined) return 0f;
+
+            var dockBonus = IsShop(shop?.Type)
+                ? AmenitySystem.LoadingDockDemandBonus(grid, shop)
+                : 0f;
+            var weight = DemandWeight(shop, streetOrigin, cleanlinessPercent) * (1f + dockBonus);
+            if (streetOrigin && HasPublicRestroomStreetBonus(shop, grid))
+                weight *= PublicRestroomStreetMultiplier;
+            return weight;
+        }
+
+        static bool HasPublicRestroomStreetBonus(RoomInstance shop, TowerGrid grid)
+        {
+            if (shop == null || grid == null) return false;
+
+            var assignments = HealthCoverage.AssignPublicRestrooms(grid.Rooms);
+            for (var i = 0; i < assignments.Count; i++)
+            {
+                if (assignments[i].NeedInstanceId == shop.InstanceId && assignments[i].StreetBonus)
+                    return true;
+            }
+
+            return false;
+        }
+
+        public static RoomInstance PickDemandWeightedShop(
+            IReadOnlyList<RoomInstance> shops,
+            System.Random rng,
+            bool streetOrigin,
+            float cleanlinessPercent = 100f) =>
+            PickDemandWeightedShop(shops, rng, streetOrigin, null, quarantined: false, cleanlinessPercent);
+
+        public static RoomInstance PickDemandWeightedShop(
+            IReadOnlyList<RoomInstance> shops,
+            System.Random rng,
+            bool streetOrigin,
+            TowerGrid grid,
+            bool quarantined = false,
+            float cleanlinessPercent = 100f)
+        {
+            if (shops == null || shops.Count == 0) return null;
+            if (streetOrigin && quarantined) return null;
+            if (shops.Count == 1) return shops[0];
+
+            var total = 0f;
+            foreach (var shop in shops)
+                total += DemandWeight(shop, streetOrigin, grid, quarantined, cleanlinessPercent);
+
+            if (total <= 0f)
+                return shops[rng.Next(shops.Count)];
+
+            var roll = (float)(rng.NextDouble() * total);
+            foreach (var shop in shops)
+            {
+                roll -= DemandWeight(shop, streetOrigin, grid, quarantined, cleanlinessPercent);
+                if (roll < 0f) return shop;
+            }
+
+            return shops[shops.Count - 1];
+        }
+
+        public static (int lo, int hi) DwellRangeForId(string id)
+        {
+            if (TryIdSpecificDwellRange(id, out var range))
+                return range;
+            return (20, 40);
+        }
+
+        static (int lo, int hi) DwellRange(RoomTypeSO type)
+        {
+            if (type != null && TryIdSpecificDwellRange(type.id, out var range))
+                return range;
+
+            if (type != null)
+            {
+                var subgroup = type.ResolvedBuildSubgroup();
+                if (subgroup == BuildSubgroup.Food)
+                    return (15, 25);
+                if (subgroup == BuildSubgroup.Retail)
+                    return (20, 40);
+            }
+
+            return (20, 40);
+        }
+
+        static bool TryIdSpecificDwellRange(string id, out (int lo, int hi) range)
+        {
+            range = default;
+            if (string.IsNullOrEmpty(id))
+                return false;
+
+            if (id.IndexOf("food_fine", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (40, 60);
+                return true;
+            }
+
+            if (id.IndexOf("food_mexican", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (35, 50);
+                return true;
+            }
+
+            if (id.IndexOf("food_taco", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (12, 20);
+                return true;
+            }
+
+            if (id.IndexOf("food_chicken", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (15, 25);
+                return true;
+            }
+
+            if (id.IndexOf("food_fast", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (15, 25);
+                return true;
+            }
+
+            if (id.IndexOf("food_restaurant", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (40, 60);
+                return true;
+            }
+
+            if (id.IndexOf("retail_gifts", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (15, 30);
+                return true;
+            }
+
+            if (id.IndexOf("retail_department", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (30, 50);
+                return true;
+            }
+
+            if (id.IndexOf("retail_shoes", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (25, 40);
+                return true;
+            }
+
+            if (id.IndexOf("retail", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                range = (20, 40);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_gym", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (30, 50);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_spa", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (45, 75);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_pool", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (40, 70);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_bowling", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (50, 80);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_theater", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (90, 130);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_casino", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (40, 70);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_nightclub", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (50, 90);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_cathedral", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (80, 120);
+                return true;
+            }
+
+            if (id.StartsWith("leisure_chapel", StringComparison.OrdinalIgnoreCase))
+            {
+                range = (20, 40);
+                return true;
+            }
+
+            return false;
+        }
+    }
+}

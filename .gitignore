@@ -2,6 +2,8 @@
 [Ll]ibrary/
 [Tt]emp/
 [Oo]bj/
+# Pipeline visual-verify captures (also under Assets for authoring sandbox)
+/[Aa]ssets/[Tt]emp/
 # Builds (project output only — not Assets/Scripts/Build)
 /[Bb]uild/
 /[Bb]uilds/
@@ -30,8 +32,13 @@
 ExportedObj/
 .consulo/
 *.csproj
+!CloudSaveApi/**/*.csproj
+!PlaytestApi/**/*.csproj
 *.unityproj
 *.sln
+!CloudSaveApi/**/*.sln
+!PlaytestApi/**/*.sln
+Build/
 *.suo
 *.tmp
 *.user
@@ -71,3 +78,5 @@ crashlytics-build.properties
 # ETC
 .DS_Store
 Thumbs.db
+
+.worktrees/
