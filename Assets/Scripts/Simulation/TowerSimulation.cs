@@ -136,6 +136,7 @@ namespace BuildATower
         {
             Cleanliness = CleanlinessSystem.IsAbsent(snapshot) ? 100f : snapshot.percent;
             _cleanlinessTickRemainder = 0f;
+            _agents?.SetCleanliness(Cleanliness);
         }
 
         public void SetSpeedPreset(float minutesPerRealSecond, bool paused)
@@ -648,6 +649,7 @@ namespace BuildATower
                 CountCleanlinessSupplyAndSewage(out var supply, out var sewage);
                 var target = CleanlinessSystem.Target(supply, sewage);
                 Cleanliness = CleanlinessSystem.Step(Cleanliness, target);
+                _agents?.SetCleanliness(Cleanliness);
             }
         }
 

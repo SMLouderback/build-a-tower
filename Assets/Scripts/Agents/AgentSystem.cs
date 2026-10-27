@@ -104,6 +104,7 @@ namespace BuildATower
         int _eventVisitorsSpawnedToday;
         int _condoJobsAssignedDay = -1;
         float _waterPressurePercent = 100f;
+        float _cleanlinessPercent = 100f;
         readonly Dictionary<int, int> _upperWaterStressDay = new();
 
         public IReadOnlyList<Agent> Agents => _agents;
@@ -166,6 +167,8 @@ namespace BuildATower
         public void SetHealth(HealthSystem health) => _health = health;
 
         public void SetWaterPressure(float pressurePercent) => _waterPressurePercent = pressurePercent;
+
+        public void SetCleanliness(float cleanlinessPercent) => _cleanlinessPercent = cleanlinessPercent;
 
         /// <summary>Test hook: next maid clean illness roll; consumed once, then <see cref="_rng"/> again.</summary>
         public void SetNextCleanRoll(double roll) => _nextCleanRoll = roll;
@@ -460,6 +463,7 @@ namespace BuildATower
             var fill = LivingLuxury.CheckInFillMultiplier(EffectiveOfficeLuxuryBand(best.Type), climateStep);
             fill *= ClassClashFillMultiplier(grid, best);
             fill *= HealthFillMultiplier(grid, HealthSystem.OfficeFillThreshold);
+            fill *= CleanlinessSystem.FillMultiplier(EffectiveOfficeLuxuryBand(best.Type), _cleanlinessPercent);
             if (fill < 1f && rng.NextDouble() >= fill)
                 return false;
 
@@ -581,6 +585,7 @@ namespace BuildATower
                                   AtriumMarketing.HotelFillBonusFor(grid));
             fill *= ClassClashFillMultiplier(grid, best);
             fill *= HealthFillMultiplier(grid, HealthSystem.HotelFillThreshold);
+            fill *= CleanlinessSystem.FillMultiplier(EffectiveHotelLuxuryBand(best.Type), _cleanlinessPercent);
             if (EffectiveHotelLuxuryBand(best.Type) == LuxuryBand.Upper)
                 fill *= WaterSystem.UpperFillMultiplier(_waterPressurePercent);
             if (fill < 1f && rng.NextDouble() >= fill)
@@ -703,6 +708,7 @@ namespace BuildATower
             var fill = LivingLuxury.CheckInFillMultiplier(EffectiveCondoLuxuryBand(best.Type), climateStep);
             fill *= ClassClashFillMultiplier(grid, best);
             fill *= HealthFillMultiplier(grid, HealthSystem.CondoFillThreshold);
+            fill *= CleanlinessSystem.FillMultiplier(EffectiveCondoLuxuryBand(best.Type), _cleanlinessPercent);
             if (EffectiveCondoLuxuryBand(best.Type) == LuxuryBand.Upper)
                 fill *= WaterSystem.UpperFillMultiplier(_waterPressurePercent);
             if (fill < 1f && rng.NextDouble() >= fill)
