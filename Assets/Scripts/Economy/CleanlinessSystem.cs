@@ -33,5 +33,7 @@ namespace BuildATower
 
         public static int TreatmentUpgradeMinutes(int nextLevel) =>
             nextLevel < 1 || nextLevel > 3 ? 0 : Minutes[nextLevel - 1];
+
+        public static bool IsAbsent(CleanlinessSnapshotV1 snapshot) => snapshot == null;
     }
 }

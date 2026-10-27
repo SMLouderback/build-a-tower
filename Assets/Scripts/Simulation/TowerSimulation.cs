@@ -129,6 +129,13 @@ namespace BuildATower
 
         public TowerWaterState Water { get; private set; }
 
+        public float Cleanliness { get; private set; } = 100f;
+
+        public void RestoreCleanliness(CleanlinessSnapshotV1 snapshot)
+        {
+            Cleanliness = CleanlinessSystem.IsAbsent(snapshot) ? 100f : snapshot.percent;
+        }
+
         public void SetSpeedPreset(float minutesPerRealSecond, bool paused)
         {
             _clock.Paused = paused;
@@ -243,6 +250,7 @@ namespace BuildATower
                     _research.RestoreSnapshot(pending.research);
                 _weather.RestoreSnapshot(pending.weather, _clock.DayIndex, _clock.MinuteOfDay);
                 _health.RestoreSnapshot(pending.health);
+                RestoreCleanliness(pending.cleanliness);
                 _metro.RestoreSnapshot(pending.metro);
                 _macro?.RestoreSnapshot(pending.marketPulse, _clock.DayIndex);
             }

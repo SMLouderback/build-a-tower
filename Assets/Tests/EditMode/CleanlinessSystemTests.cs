@@ -1,11 +1,25 @@
+using System;
 using System.Linq;
+using System.Reflection;
 using BuildATower;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace BuildATower.Tests
 {
     public class CleanlinessSystemTests
     {
+        [TearDown]
+        public void TearDown()
+        {
+            foreach (var build in UnityEngine.Object.FindObjectsByType<BuildController>(
+                         FindObjectsInactive.Include,
+                         FindObjectsSortMode.None))
+                UnityEngine.Object.DestroyImmediate(build.gameObject);
+
+            GameSession.ResetForTests();
+        }
+
         [Test]
         public void Target_is_100_when_nobody_is_home()
         {
@@ -57,6 +71,61 @@ namespace BuildATower.Tests
             Assert.AreEqual(1440, CleanlinessSystem.TreatmentUpgradeMinutes(1));
             Assert.AreEqual(4320, CleanlinessSystem.TreatmentUpgradeMinutes(2));
             Assert.AreEqual(10080, CleanlinessSystem.TreatmentUpgradeMinutes(3));
+        }
+
+        [Test]
+        public void Absent_snapshot_means_clean_and_a_saved_zero_stays_zero()
+        {
+            Assert.IsTrue(CleanlinessSystem.IsAbsent(null));
+            Assert.IsFalse(CleanlinessSystem.IsAbsent(new CleanlinessSnapshotV1 { percent = 0f }));
+            Assert.AreEqual(0f, new CleanlinessSnapshotV1 { percent = 0f }.percent);
+        }
+
+        [Test]
+        public void Capture_and_restore_round_trip_cleanliness_percent()
+        {
+            var build = CreateBuild(out var simulation);
+            Assert.AreEqual(100f, simulation.Cleanliness);
+
+            simulation.RestoreCleanliness(new CleanlinessSnapshotV1 { percent = 0f });
+            var captured = TowerSnapshotMapper.Capture(
+                "save_clean",
+                "Tower",
+                build,
+                simulation,
+                DateTime.UtcNow);
+            Assert.IsNotNull(captured.cleanliness);
+            Assert.AreEqual(0f, captured.cleanliness.percent);
+
+            simulation.RestoreCleanliness(null);
+            Assert.AreEqual(100f, simulation.Cleanliness);
+
+            simulation.RestoreCleanliness(new CleanlinessSnapshotV1 { percent = 0f });
+            Assert.AreEqual(0f, simulation.Cleanliness);
+        }
+
+        static BuildController CreateBuild(out TowerSimulation simulation)
+        {
+            var gameObject = new GameObject("Cleanliness Test Tower");
+            var build = gameObject.AddComponent<BuildController>();
+            SetAutoProperty(build, "Grid", new TowerGrid());
+            SetAutoProperty(build, "Wallet", new FundsWallet(100));
+            simulation = gameObject.AddComponent<TowerSimulation>();
+            SetField(simulation, "_clock", new GameClock());
+            SetField(simulation, "_stars", new StarSystem());
+            return build;
+        }
+
+        static void SetAutoProperty(object target, string propertyName, object value)
+        {
+            SetField(target, $"<{propertyName}>k__BackingField", value);
+        }
+
+        static void SetField(object target, string fieldName, object value)
+        {
+            var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, $"Missing test setup field {fieldName}.");
+            field.SetValue(target, value);
         }
     }
 }

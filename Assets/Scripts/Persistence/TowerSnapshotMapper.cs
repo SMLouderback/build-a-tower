@@ -65,6 +65,7 @@ namespace BuildATower
                 metro = simulation.Metro?.CaptureSnapshot(),
                 marketPulse = simulation.MacroEconomy?.CaptureSnapshot(),
                 health = simulation.Health?.CaptureSnapshot(),
+                cleanliness = new CleanlinessSnapshotV1 { percent = simulation.Cleanliness },
                 rooms = build.Grid.CaptureRooms(Time.realtimeSinceStartup).ToArray()
             };
         }

@@ -54,6 +54,8 @@ namespace BuildATower
         public MarketPulseSnapshotV1 marketPulse;
         /// <summary>Optional: null or absent (older saves) restores healthy floors, CleanMode.Normal, and quarantine off.</summary>
         public HealthSnapshotV1 health;
+        /// <summary>Optional: null or absent (older saves) restores 100% cleanliness. A saved 0 stays 0.</summary>
+        public CleanlinessSnapshotV1 cleanliness;
         public RoomSnapshotV1[] rooms;
     }
 
@@ -73,6 +75,12 @@ namespace BuildATower
         /// <summary><see cref="CleanMode"/> enum name.</summary>
         public string cleanMode;
         public bool quarantined;
+    }
+
+    [Serializable]
+    public sealed class CleanlinessSnapshotV1
+    {
+        public float percent;
     }
 
     [Serializable]
