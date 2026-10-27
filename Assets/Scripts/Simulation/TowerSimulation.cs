@@ -368,12 +368,13 @@ namespace BuildATower
         float _lastSickShare;
         bool _sickShareKnown;
 
-        void TickHealth(float deltaGameMinutes)
+        public void TickHealth(float deltaGameMinutes)
         {
             var grid = build?.Grid;
             if (_health == null || grid == null || _agents == null || deltaGameMinutes <= 0f) return;
 
             var rooms = grid.Rooms;
+            var sewageFloors = new HashSet<int>();
             var guestsByFloor = new Dictionary<int, int>();
             var guestHotels = new HashSet<RoomInstance>();
             foreach (var agent in _agents.Agents)
@@ -401,6 +402,8 @@ namespace BuildATower
             {
                 var room = rooms[i];
                 if (room == null || ReferenceEquals(room.Type, null)) continue;
+                if (RoomAddsSewage(room))
+                    sewageFloors.Add(room.Origin.y);
                 if (HealthSystem.IsTenantRoom(room))
                 {
                     tenantFloors.Add(room.Origin.y);
@@ -422,7 +425,9 @@ namespace BuildATower
                 trashCovered,
                 sickRoomsByFloor,
                 clinicFloors,
-                CountFloorsWithRooms(grid));
+                CountFloorsWithRooms(grid),
+                sewageFloors,
+                CleanlinessSystem.IllnessPerMinute(Cleanliness));
 
             foreach (var floor in tenantFloors)
                 _health.TryMarkSickRoom(floor, deltaGameMinutes, rooms);

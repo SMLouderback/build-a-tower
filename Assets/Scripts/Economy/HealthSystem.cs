@@ -55,7 +55,9 @@ namespace BuildATower
             IReadOnlyDictionary<int, bool> trashCoveredByFloor,
             IReadOnlyDictionary<int, int> sickRoomsByFloor,
             IReadOnlyList<int> workingClinicFloors,
-            int towerFloorCount)
+            int towerFloorCount,
+            IReadOnlyCollection<int> sewageFloors = null,
+            float waterIllnessPerMinute = 0f)
         {
             if (deltaGameMinutes <= 0f)
                 return;
@@ -82,6 +84,13 @@ namespace BuildATower
                         continue;
                     Add(kv.Key, SickRoomRaisePerMinute * kv.Value * deltaGameMinutes);
                 }
+            }
+
+            if (waterIllnessPerMinute > 0f && sewageFloors != null)
+            {
+                var waterDelta = waterIllnessPerMinute * deltaGameMinutes;
+                foreach (var floor in sewageFloors)
+                    Add(floor, waterDelta);
             }
 
             foreach (var floor in decayingFloors)

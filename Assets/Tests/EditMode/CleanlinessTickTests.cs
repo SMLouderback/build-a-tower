@@ -71,6 +71,65 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Dirty_water_at_stored_zero_raises_sewage_floor_illness_by_0_08_per_minute()
+        {
+            var sim = CreateTowerWithSoldCondoOnFloor(1);
+            sim.RestoreCleanliness(new CleanlinessSnapshotV1 { percent = 0f });
+            Assert.AreEqual(0f, sim.Health.GetIllness(1));
+
+            sim.TickHealth(1f);
+
+            Assert.AreEqual(0.08f, sim.Health.GetIllness(1), 0.0001f);
+        }
+
+        [Test]
+        public void Dirty_water_at_stored_fifty_raises_sewage_floor_illness_by_0_04_per_minute()
+        {
+            var sim = CreateTowerWithSoldCondoOnFloor(1);
+            sim.RestoreCleanliness(new CleanlinessSnapshotV1 { percent = 50f });
+            Assert.AreEqual(0f, sim.Health.GetIllness(1));
+
+            sim.TickHealth(1f);
+
+            Assert.AreEqual(0.04f, sim.Health.GetIllness(1), 0.0001f);
+        }
+
+        [Test]
+        public void Shop_only_floor_gains_no_water_illness()
+        {
+            var sim = CreateTowerWithShopOnFloor(1);
+            sim.RestoreCleanliness(new CleanlinessSnapshotV1 { percent = 0f });
+
+            sim.TickHealth(1f);
+
+            Assert.AreEqual(0f, sim.Health.GetIllness(1), 0.0001f);
+        }
+
+        [Test]
+        public void Water_illness_does_not_change_decay_when_cleanliness_is_full()
+        {
+            var sim = CreateTowerWithSoldCondoOnFloor(1);
+            sim.RestoreCleanliness(new CleanlinessSnapshotV1 { percent = 100f });
+            sim.Health.SetIllness(1, 10f);
+
+            sim.TickHealth(1f);
+
+            Assert.AreEqual(9.95f, sim.Health.GetIllness(1), 0.0001f);
+        }
+
+        [Test]
+        public void Water_illness_stacks_with_existing_decay_on_sewage_floors()
+        {
+            var sim = CreateTowerWithSoldCondoOnFloor(1);
+            sim.RestoreCleanliness(new CleanlinessSnapshotV1 { percent = 0f });
+            sim.Health.SetIllness(1, 10f);
+
+            sim.TickHealth(1f);
+
+            Assert.AreEqual(10.03f, sim.Health.GetIllness(1), 0.0001f);
+        }
+
+        [Test]
         public void Treatment_upgrade_clock_completes_and_changes_hourly_target()
         {
             var (sim, treatment) = CreateTowerWithTreatmentAndSewage(12);
@@ -87,6 +146,41 @@ namespace BuildATower.Tests
             sim.TickCleanliness(60f);
             var target = CleanlinessSystem.Target(20, 12);
             Assert.AreEqual(CleanlinessSystem.Step(55f, target), sim.Cleanliness, 0.001f);
+        }
+
+        static TowerSimulation CreateTowerWithSoldCondoOnFloor(int floorY)
+        {
+            var go = new GameObject("CleanlinessCondoSingleHost");
+            go.SetActive(false);
+            var build = go.AddComponent<BuildController>();
+            build.InitializeTower();
+            var sim = go.GetComponent<TowerSimulation>() ?? go.AddComponent<TowerSimulation>();
+            sim.InitializeSimulation();
+            var grid = build.Grid;
+
+            Assert.IsTrue(grid.TryPlaceLobby(LobbyType(), 0, 40, 0, out _));
+            Assert.IsTrue(grid.TryPlace(ElevatorType(), new Vector2Int(0, 0), out _));
+            Assert.IsTrue(grid.TryPlace(CondoType(), new Vector2Int(4, floorY), out var condo));
+            condo.CondoSold = true;
+            sim.Router.Rebuild(grid);
+            return sim;
+        }
+
+        static TowerSimulation CreateTowerWithShopOnFloor(int floorY)
+        {
+            var go = new GameObject("CleanlinessShopHost");
+            go.SetActive(false);
+            var build = go.AddComponent<BuildController>();
+            build.InitializeTower();
+            var sim = go.GetComponent<TowerSimulation>() ?? go.AddComponent<TowerSimulation>();
+            sim.InitializeSimulation();
+            var grid = build.Grid;
+
+            Assert.IsTrue(grid.TryPlaceLobby(LobbyType(), 0, 40, 0, out _));
+            Assert.IsTrue(grid.TryPlace(ElevatorType(), new Vector2Int(0, 0), out _));
+            Assert.IsTrue(grid.TryPlace(ShopType(), new Vector2Int(4, floorY), out _));
+            sim.Router.Rebuild(grid);
+            return sim;
         }
 
         static TowerSimulation CreateTowerWithTwoSoldCondos()
@@ -160,6 +254,17 @@ namespace BuildATower.Tests
             so.isElevatorShaft = true;
             so.allowAboveGround = true;
             so.size = new Vector2Int(1, 2);
+            return so;
+        }
+
+        static RoomTypeSO ShopType()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "shop_retail";
+            so.category = RoomCategory.Commercial;
+            so.buildFamily = BuildFamily.Shops;
+            so.size = Vector2Int.one;
+            so.allowAboveGround = true;
             return so;
         }
 
