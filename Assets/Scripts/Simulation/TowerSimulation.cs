@@ -126,6 +126,7 @@ namespace BuildATower
         float _agentSampleAccumulator;
         TowerMapController _mapController;
         readonly Dictionary<int, bool> _powerBrokenSnapshot = new();
+        float _cleanlinessTickRemainder;
 
         public TowerWaterState Water { get; private set; }
 
@@ -134,6 +135,7 @@ namespace BuildATower
         public void RestoreCleanliness(CleanlinessSnapshotV1 snapshot)
         {
             Cleanliness = CleanlinessSystem.IsAbsent(snapshot) ? 100f : snapshot.percent;
+            _cleanlinessTickRemainder = 0f;
         }
 
         public void SetSpeedPreset(float minutesPerRealSecond, bool paused)
@@ -358,6 +360,7 @@ namespace BuildATower
             if (agentView != null)
                 agentView.Sync(_agents.Agents, build?.Grid);
             TickPowerSystems(_clock.LastTickGameMinutes);
+            TickCleanliness(_clock.LastTickGameMinutes);
         }
 
         const int HealthNewsPriority = 9;
@@ -612,7 +615,9 @@ namespace BuildATower
         public void TickPowerClocks(float deltaGameMinutes)
         {
             if (deltaGameMinutes <= 0f) return;
-            if (TickPlantUpgrades(deltaGameMinutes) | TickPumpUpgrades(deltaGameMinutes))
+            if (TickPlantUpgrades(deltaGameMinutes) |
+                TickPumpUpgrades(deltaGameMinutes) |
+                TickTreatmentUpgrades(deltaGameMinutes))
                 Power();
         }
 
@@ -621,8 +626,70 @@ namespace BuildATower
             if (deltaGameMinutes <= 0f) return;
             var upgraded = TickPlantUpgrades(deltaGameMinutes);
             upgraded |= TickPumpUpgrades(deltaGameMinutes);
+            upgraded |= TickTreatmentUpgrades(deltaGameMinutes);
             if (upgraded || SyncPowerBrokenTransitions())
                 Power();
+        }
+
+        /// <summary>Advances cleanliness toward supply versus sewage once per whole game hour.</summary>
+        public void TickCleanliness(float deltaGameMinutes)
+        {
+            if (deltaGameMinutes <= 0f) return;
+
+            _cleanlinessTickRemainder += deltaGameMinutes;
+            while (_cleanlinessTickRemainder >= 60f)
+            {
+                _cleanlinessTickRemainder -= 60f;
+                CountCleanlinessSupplyAndSewage(out var supply, out var sewage);
+                var target = CleanlinessSystem.Target(supply, sewage);
+                Cleanliness = CleanlinessSystem.Step(Cleanliness, target);
+            }
+        }
+
+        void CountCleanlinessSupplyAndSewage(out int supply, out int sewage)
+        {
+            supply = 0;
+            sewage = 0;
+            var grid = build?.Grid;
+            if (grid?.Rooms == null) return;
+
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+
+                if (room.Type.id == "service_treatment" && !room.IsBroken && room.Powered)
+                    supply += CleanlinessSystem.TreatmentSupply(room.UtilityLevel);
+
+                if (RoomAddsSewage(room))
+                    sewage++;
+            }
+        }
+
+        bool RoomAddsSewage(RoomInstance room)
+        {
+            if (room?.Type == null) return false;
+            if (room.CondoSold) return true;
+
+            var category = room.Type.category;
+            if (category == RoomCategory.Hotel && RoomHasHomeAgent(room, _agents, AgentRole.HotelGuest))
+                return true;
+            if (category == RoomCategory.Office && RoomHasHomeAgent(room, _agents, AgentRole.OfficeWorker))
+                return true;
+
+            return false;
+        }
+
+        static bool RoomHasHomeAgent(RoomInstance room, AgentSystem agents, AgentRole role)
+        {
+            if (room == null || agents?.Agents == null) return false;
+
+            foreach (var agent in agents.Agents)
+            {
+                if (agent != null && agent.Role == role && ReferenceEquals(agent.HomeRoom, room))
+                    return true;
+            }
+
+            return false;
         }
 
         bool TickPlantUpgrades(float deltaGameMinutes)
@@ -658,6 +725,30 @@ namespace BuildATower
             foreach (var room in grid.Rooms)
             {
                 if (room?.Type == null || room.Type.id != "service_pump") continue;
+
+                var level = room.UtilityLevel;
+                var minutes = room.UpgradeMinutesRemaining;
+                var running = room.UpgradeRunning;
+                if (PowerSystem.TickUpgrade(ref level, ref minutes, ref running, deltaGameMinutes, room.IsBroken))
+                    anyCompleted = true;
+
+                room.UtilityLevel = level;
+                room.UpgradeMinutesRemaining = minutes;
+                room.UpgradeRunning = running;
+            }
+
+            return anyCompleted;
+        }
+
+        bool TickTreatmentUpgrades(float deltaGameMinutes)
+        {
+            var grid = build?.Grid;
+            if (grid == null || deltaGameMinutes <= 0f) return false;
+
+            var anyCompleted = false;
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null || room.Type.id != "service_treatment") continue;
 
                 var level = room.UtilityLevel;
                 var minutes = room.UpgradeMinutesRemaining;
