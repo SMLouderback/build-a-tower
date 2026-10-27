@@ -1344,8 +1344,29 @@ namespace BuildATower
             var lineH = 24f;
             var right = gap + barWidth - pad;
 
+            // Speed stays pinned left of the menu cluster. Extra chips yield when the row is full.
+            var clusterW = 56f + 8f; // Menu
+            clusterW += 64f + 8f; // Maps
+            var researchLabs = build.Grid != null ? EconomySystem.CountResearchLabs(build.Grid) : 0;
+            if (researchLabs >= 1)
+                clusterW += 210f + 8f;
+            if (economyUnlocked) clusterW += 64f + 8f + 56f + 8f;
+            if (goalsUnlocked) clusterW += 64f + 8f + 72f;
+            else if (economyUnlocked) clusterW = Mathf.Max(56f + 8f + 64f + 8f, clusterW - 8f);
+
+            const float speedWidth = 320f;
+            const float speedGap = 12f;
+            var speedSlotRight = right - clusterW - speedGap;
+            var speedX = speedSlotRight - speedWidth;
+            if (speedX < x)
+                speedX = x;
+            var fittedSpeedWidth = Mathf.Max(160f, speedSlotRight - speedX);
+            var speedLimit = speedX - 6f;
+
             void DrawChip(string text, float width)
             {
+                if (x + width > speedLimit)
+                    return;
                 GUI.Label(new Rect(x, y, width, lineH), text, barLabel);
                 x += width + 10f;
             }
@@ -1372,7 +1393,9 @@ namespace BuildATower
                 DrawChip(FormatCleanBarText(), 80f);
             }
 
-            x = DrawStarTrack(x, y, lineH, stars != null ? stars.CurrentStars : 0);
+            var starTrackW = 16f * StarSystem.StarSlots;
+            if (x + starTrackW <= speedLimit)
+                x = DrawStarTrack(x, y, lineH, stars != null ? stars.CurrentStars : 0);
 
             var clockText = simulation?.Clock != null ? simulation.Clock.FormatHud() : "—";
             DrawChip(clockText, 150f);
@@ -1380,36 +1403,26 @@ namespace BuildATower
             // Season tile (icon only; no weather caption). Tooltip names the season.
             {
                 const float seasonTile = 34f; // fits the 36px bar with a 1px inset
-                var season = SeasonHudArt.Resolve(simulation);
-                var tileRect = new Rect(x, barTopY + (barH - seasonTile) * 0.5f, seasonTile, seasonTile);
-                if (SeasonHudArt.TryGetTexture(season, out var seasonTex) && seasonTex != null)
-                    GUI.DrawTexture(tileRect, seasonTex, ScaleMode.StretchToFill, true);
-                GUI.Label(tileRect, new GUIContent(string.Empty, SeasonHudArt.DisplayName(season)));
-                x += seasonTile + 10f;
+                if (x + seasonTile <= speedLimit)
+                {
+                    var season = SeasonHudArt.Resolve(simulation);
+                    var tileRect = new Rect(x, barTopY + (barH - seasonTile) * 0.5f, seasonTile, seasonTile);
+                    if (SeasonHudArt.TryGetTexture(season, out var seasonTex) && seasonTex != null)
+                        GUI.DrawTexture(tileRect, seasonTex, ScaleMode.StretchToFill, true);
+                    GUI.Label(tileRect, new GUIContent(string.Empty, SeasonHudArt.DisplayName(season)));
+                    x += seasonTile + 10f;
+                }
             }
 
             var climateName = simulation?.Climate?.Name ?? "—";
             DrawChip(climateName, 78f);
 
             DrawChip(GameSession.Difficulty.ToString(), 88f);
-            DrawChip(FormatHealthBarText(), 240f);
+            var healthText = FormatHealthBarText();
+            var healthW = Mathf.Min(240f, barLabel.CalcSize(new GUIContent(healthText)).x + 12f);
+            DrawChip(healthText, healthW);
 
-            // Reserve space for right-cluster Menu/Maps/Research/Info/Goals buttons.
-            var clusterW = 56f + 8f; // Menu
-            clusterW += 64f + 8f; // Maps
-            var researchLabs = build.Grid != null ? EconomySystem.CountResearchLabs(build.Grid) : 0;
-            if (researchLabs >= 1)
-                clusterW += 210f + 8f; // Research status caption (matches button max)
-            if (economyUnlocked) clusterW += 64f + 8f + 56f + 8f;
-            if (goalsUnlocked) clusterW += 64f + 8f + 72f;
-            else if (economyUnlocked) clusterW = Mathf.Max(56f + 8f + 64f + 8f, clusterW - 8f);
-
-            var speedWidth = 320f;
-            if (x + speedWidth < right - clusterW - 12f)
-            {
-                DrawTimeSpeedButtons(x, y, speedWidth, lineH);
-                x += speedWidth + 10f;
-            }
+            DrawTimeSpeedButtons(speedX, y, fittedSpeedWidth, lineH);
 
             DrawTopInfoButtons(
                 right,
