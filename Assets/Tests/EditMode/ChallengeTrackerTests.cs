@@ -7,6 +7,12 @@ namespace BuildATower.Tests
         static RewardsMetrics WithPopulation(int population) =>
             new RewardsMetrics { Population = population };
 
+        static RewardsMetrics WithHealth(int health, int day) =>
+            new RewardsMetrics { EffectiveHealth = health, DayIndex = day };
+
+        static RewardsMetrics WithDemolishLifetime(int demolishLifetime) =>
+            new RewardsMetrics { DemolishLifetime = demolishLifetime };
+
         [Test]
         public void Population_at_100_enqueues_pop_100()
         {
@@ -70,6 +76,53 @@ namespace BuildATower.Tests
 
             Assert.IsFalse(ledger.IsPending("pop_100"));
             Assert.IsTrue(ledger.IsClaimed("pop_100"));
+        }
+
+        [Test]
+        public void Duration_hold_enqueues_after_7_healthy_days()
+        {
+            var tracker = new ChallengeTracker();
+            var ledger = new ClaimLedger();
+
+            for (var day = 1; day <= 7; day++)
+                tracker.EvaluateDaily(WithHealth(90, day), ledger, ChallengeCatalog.All);
+
+            Assert.IsTrue(ledger.IsPending("health_hold_7"));
+        }
+
+        [Test]
+        public void Duration_hold_breach_on_day_3_resets_streak()
+        {
+            var tracker = new ChallengeTracker();
+            var ledger = new ClaimLedger();
+
+            tracker.EvaluateDaily(WithHealth(90, 1), ledger, ChallengeCatalog.All);
+            tracker.EvaluateDaily(WithHealth(90, 2), ledger, ChallengeCatalog.All);
+            tracker.EvaluateDaily(WithHealth(70, 3), ledger, ChallengeCatalog.All);
+            tracker.EvaluateDaily(WithHealth(90, 4), ledger, ChallengeCatalog.All);
+            tracker.EvaluateDaily(WithHealth(90, 5), ledger, ChallengeCatalog.All);
+            tracker.EvaluateDaily(WithHealth(90, 6), ledger, ChallengeCatalog.All);
+            tracker.EvaluateDaily(WithHealth(90, 7), ledger, ChallengeCatalog.All);
+
+            Assert.IsFalse(ledger.IsPending("health_hold_7"));
+
+            tracker.EvaluateDaily(WithHealth(90, 8), ledger, ChallengeCatalog.All);
+            tracker.EvaluateDaily(WithHealth(90, 9), ledger, ChallengeCatalog.All);
+            tracker.EvaluateDaily(WithHealth(90, 10), ledger, ChallengeCatalog.All);
+
+            Assert.IsTrue(ledger.IsPending("health_hold_7"));
+        }
+
+        [Test]
+        public void Demolish_lifetime_counter_enqueues_at_threshold()
+        {
+            var ledger = new ClaimLedger();
+
+            ChallengeTracker.EvaluateThresholds(WithDemolishLifetime(9), ledger, ChallengeCatalog.All);
+            Assert.IsFalse(ledger.IsPending("demolish_10"));
+
+            ChallengeTracker.EvaluateThresholds(WithDemolishLifetime(10), ledger, ChallengeCatalog.All);
+            Assert.IsTrue(ledger.IsPending("demolish_10"));
         }
     }
 }

@@ -6,6 +6,7 @@ namespace BuildATower
         public int Population;
         public int Stars;
         public int RoomCount;
+        public int BuildLifetime;
         public int DemolishLifetime;
         public int CondemnCount;
         public bool QuarantineEver;
@@ -21,6 +22,7 @@ namespace BuildATower
                 ChallengeMetric.Population => Population,
                 ChallengeMetric.Stars => Stars,
                 ChallengeMetric.RoomCount => RoomCount,
+                ChallengeMetric.BuildLifetime => BuildLifetime,
                 ChallengeMetric.DemolishLifetime => DemolishLifetime,
                 ChallengeMetric.CondemnCount => CondemnCount,
                 ChallengeMetric.QuarantineEver => QuarantineEver ? 1 : 0,

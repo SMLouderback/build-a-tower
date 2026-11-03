@@ -21,7 +21,25 @@ namespace BuildATower
                 metal: TrophyMetal.Bronze,
                 kind: ChallengeKind.Milestone,
                 condition: ChallengeCondition.Threshold(ChallengeMetric.Population, 100),
-                cash: 5000)
+                cash: 5000),
+            new ChallengeDef(
+                id: "health_hold_7",
+                title: "Clean Bill of Health",
+                description: "Keep tower health at 80 or better for 7 days.",
+                subject: ChallengeSubject.Operations,
+                metal: TrophyMetal.Bronze,
+                kind: ChallengeKind.Milestone,
+                condition: ChallengeCondition.DurationHold(ChallengeMetric.EffectiveHealth, 80, 100, 7),
+                cash: 3500),
+            new ChallengeDef(
+                id: "demolish_10",
+                title: "Measured Remodel",
+                description: "Demolish 10 rooms over the tower lifetime.",
+                subject: ChallengeSubject.Demolition,
+                metal: TrophyMetal.Bronze,
+                kind: ChallengeKind.Milestone,
+                condition: ChallengeCondition.Threshold(ChallengeMetric.DemolishLifetime, 10),
+                cash: 2500)
         };
 
         static Dictionary<string, ChallengeDef> BuildIndex()

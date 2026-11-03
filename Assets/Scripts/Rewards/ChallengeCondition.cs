@@ -15,6 +15,7 @@ namespace BuildATower
         Population,
         Stars,
         RoomCount,
+        BuildLifetime,
         DemolishLifetime,
         CondemnCount,
         QuarantineEver,
