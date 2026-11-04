@@ -66,8 +66,17 @@ namespace BuildATower
 
                 if (family == BuildFamily.Shops)
                 {
-                    AddShopSubgroup(entry, BuildSubgroup.Food, list);
-                    AddShopSubgroup(entry, BuildSubgroup.Retail, list);
+                    AddSubgroup(entry, BuildSubgroup.Food, list);
+                    AddSubgroup(entry, BuildSubgroup.Retail, list);
+                    if (entry.Subgroups.Count == 0)
+                        continue;
+                }
+                else if (family == BuildFamily.Utility)
+                {
+                    AddSubgroup(entry, BuildSubgroup.HealthSanitation, list);
+                    AddSubgroup(entry, BuildSubgroup.Power, list);
+                    AddSubgroup(entry, BuildSubgroup.Water, list);
+                    AddSubgroup(entry, BuildSubgroup.Services, list);
                     if (entry.Subgroups.Count == 0)
                         continue;
                 }
@@ -82,10 +91,10 @@ namespace BuildATower
             return result;
         }
 
-        static void AddShopSubgroup(BuildCatalogFamily entry, BuildSubgroup subgroup, List<RoomTypeSO> shops)
+        static void AddSubgroup(BuildCatalogFamily entry, BuildSubgroup subgroup, List<RoomTypeSO> familyRooms)
         {
             var rooms = new List<RoomTypeSO>();
-            foreach (var room in shops)
+            foreach (var room in familyRooms)
             {
                 if (room.ResolvedBuildSubgroup() == subgroup)
                     rooms.Add(room);
@@ -116,6 +125,10 @@ namespace BuildATower
         {
             BuildSubgroup.Food => "Food",
             BuildSubgroup.Retail => "Retail",
+            BuildSubgroup.HealthSanitation => "Health / Sanitation",
+            BuildSubgroup.Power => "Power",
+            BuildSubgroup.Water => "Water",
+            BuildSubgroup.Services => "Services",
             _ => "Other"
         };
     }

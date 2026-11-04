@@ -16,6 +16,10 @@ namespace BuildATower
     {
         None = 0,
         Food,
-        Retail
+        Retail,
+        HealthSanitation,
+        Power,
+        Water,
+        Services
     }
 }

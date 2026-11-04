@@ -99,16 +99,33 @@ namespace BuildATower
         public BuildSubgroup ResolvedBuildSubgroup()
         {
             if (buildSubgroup != BuildSubgroup.None) return buildSubgroup;
-            if (ResolvedBuildFamily() != BuildFamily.Shops) return BuildSubgroup.None;
-            if (!string.IsNullOrEmpty(id) && id.IndexOf("food", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                return BuildSubgroup.Food;
-            if (!string.IsNullOrEmpty(displayName) &&
-                displayName.IndexOf("restaurant", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                return BuildSubgroup.Food;
-            if (!string.IsNullOrEmpty(displayName) &&
-                displayName.IndexOf("food", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                return BuildSubgroup.Food;
-            return BuildSubgroup.Retail;
+            var family = ResolvedBuildFamily();
+            if (family == BuildFamily.Shops)
+            {
+                if (!string.IsNullOrEmpty(id) && id.IndexOf("food", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    return BuildSubgroup.Food;
+                if (!string.IsNullOrEmpty(displayName) &&
+                    displayName.IndexOf("restaurant", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    return BuildSubgroup.Food;
+                if (!string.IsNullOrEmpty(displayName) &&
+                    displayName.IndexOf("food", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    return BuildSubgroup.Food;
+                return BuildSubgroup.Retail;
+            }
+
+            if (family != BuildFamily.Utility || string.IsNullOrEmpty(id))
+                return BuildSubgroup.None;
+
+            return id switch
+            {
+                "service_clinic" or "service_public_restroom" or "service_office_restroom" or "service_trash"
+                    or "service_recycling" or "service_housekeeping" => BuildSubgroup.HealthSanitation,
+                "service_power" => BuildSubgroup.Power,
+                "service_pump" or "service_treatment" => BuildSubgroup.Water,
+                "service_security" or "service_mail" or "service_loading_dock" or "service_maintenance"
+                    or "service_research" or "service_trophy_room" => BuildSubgroup.Services,
+                _ => BuildSubgroup.None
+            };
         }
     }
 }
