@@ -38,7 +38,7 @@ ExportedObj/
 *.sln
 !CloudSaveApi/**/*.sln
 !PlaytestApi/**/*.sln
-Build/
+/Build/
 *.suo
 *.tmp
 *.user
