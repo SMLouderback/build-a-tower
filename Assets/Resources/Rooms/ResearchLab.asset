@@ -35,4 +35,4 @@ MonoBehaviour:
   requiredStars: 3
   maxOccupants: 0
   buildFamily: 5
-  buildSubgroup: 0
+  buildSubgroup: 6

@@ -80,6 +80,34 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Utility_resources_resolve_subgroup_from_asset_not_fallback()
+        {
+            AssertUtilitySubgroup("Rooms/ServiceClinic", BuildSubgroup.HealthSanitation);
+            AssertUtilitySubgroup("Rooms/ServicePublicRestroom", BuildSubgroup.HealthSanitation);
+            AssertUtilitySubgroup("Rooms/ServiceOfficeRestroom", BuildSubgroup.HealthSanitation);
+            AssertUtilitySubgroup("Rooms/ServiceTrash", BuildSubgroup.HealthSanitation);
+            AssertUtilitySubgroup("Rooms/ServiceRecycling", BuildSubgroup.HealthSanitation);
+            AssertUtilitySubgroup("Rooms/Housekeeping", BuildSubgroup.HealthSanitation);
+            AssertUtilitySubgroup("Rooms/ServicePower", BuildSubgroup.Power);
+            AssertUtilitySubgroup("Rooms/ServicePump", BuildSubgroup.Water);
+            AssertUtilitySubgroup("Rooms/ServiceTreatment", BuildSubgroup.Water);
+            AssertUtilitySubgroup("Rooms/SecurityPost", BuildSubgroup.Services);
+            AssertUtilitySubgroup("Rooms/ServiceMail", BuildSubgroup.Services);
+            AssertUtilitySubgroup("Rooms/ServiceLoadingDock", BuildSubgroup.Services);
+            AssertUtilitySubgroup("Rooms/Maintenance", BuildSubgroup.Services);
+            AssertUtilitySubgroup("Rooms/ResearchLab", BuildSubgroup.Services);
+            AssertUtilitySubgroup("Rooms/TrophyRoom", BuildSubgroup.Services);
+        }
+
+        static void AssertUtilitySubgroup(string path, BuildSubgroup expected)
+        {
+            var room = Resources.Load<RoomTypeSO>(path);
+            Assert.IsNotNull(room, $"{path} should load from Resources");
+            Assert.AreEqual(expected, room.buildSubgroup, $"{path} buildSubgroup");
+            Assert.AreEqual(expected, room.ResolvedBuildSubgroup(), $"{path} ResolvedBuildSubgroup");
+        }
+
+        [Test]
         public void Legacy_shop_resources_match_dollhouse_aspect_footprints()
         {
             AssertShop("Rooms/ShopFastFood", "shop_food_fast", 0, 25, 6, new Vector2Int(8, 1), 1f);
