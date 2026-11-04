@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace BuildATower
@@ -29,6 +30,8 @@ namespace BuildATower
         public ContractBoard Board { get; }
         public RewardExtras Extras { get; }
         public bool RewardTutorialSeen { get; set; }
+
+        public event Action<ChallengeSubject, TrophyMetal> OnTrophyUpgraded;
 
         public static bool IsAbsent(RewardsSnapshotV1 snapshot) =>
             snapshot == null || !snapshot.present;
@@ -118,6 +121,14 @@ namespace BuildATower
             }
 
             return newlyPending;
+        }
+
+        public ClaimResult TryClaim(string id, FundsWallet wallet, ChallengeDef def)
+        {
+            var result = Ledger.TryClaim(id, wallet, TrophyCase, Extras, def);
+            if (result.Ok && result.MetalRaised)
+                OnTrophyUpgraded?.Invoke(def.Subject, def.Metal);
+            return result;
         }
     }
 }

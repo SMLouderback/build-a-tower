@@ -77,12 +77,7 @@ namespace BuildATower
 
             for (var i = 0; i < ready.Count; i++)
             {
-                var result = rewards.Ledger.TryClaim(
-                    ready[i].Id,
-                    wallet,
-                    rewards.TrophyCase,
-                    extras,
-                    ready[i]);
+                var result = rewards.TryClaim(ready[i].Id, wallet, ready[i]);
                 if (!result.Ok)
                     continue;
 
@@ -100,7 +95,7 @@ namespace BuildATower
         {
             if (rewards == null || wallet == null)
                 return ClaimResult.Failed;
-            var result = rewards.Ledger.TryClaim(def.Id, wallet, rewards.TrophyCase, rewards.Extras, def);
+            var result = rewards.TryClaim(def.Id, wallet, def);
             if (!result.Ok)
                 return result;
             return new ClaimResult(

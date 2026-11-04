@@ -407,11 +407,13 @@ namespace BuildATower
             EnsureElevatorAndCatalog();
             GameSession.EnsureDefault();
             SubscribeGridDirty();
+            SubscribeTrophyUpgradeFx();
         }
 
         void OnEnable()
         {
             SubscribeGridDirty();
+            SubscribeTrophyUpgradeFx();
             _buildLayoutInitialized = false;
         }
 
@@ -422,8 +424,37 @@ namespace BuildATower
                 build.GridChanged -= OnGridChangedForSave;
                 _gridDirtyBound = false;
             }
+
+            UnsubscribeTrophyUpgradeFx();
             _dockDragging = false;
             _infoDragging = false;
+        }
+
+        bool _trophyUpgradeFxBound;
+
+        void SubscribeTrophyUpgradeFx()
+        {
+            if (_trophyUpgradeFxBound || simulation?.Rewards == null)
+                return;
+            simulation.Rewards.OnTrophyUpgraded += OnTrophyUpgraded;
+            _trophyUpgradeFxBound = true;
+        }
+
+        void UnsubscribeTrophyUpgradeFx()
+        {
+            if (!_trophyUpgradeFxBound || simulation?.Rewards == null)
+                return;
+            simulation.Rewards.OnTrophyUpgraded -= OnTrophyUpgraded;
+            _trophyUpgradeFxBound = false;
+        }
+
+        void OnTrophyUpgraded(ChallengeSubject subject, TrophyMetal metal)
+        {
+            var grid = build?.Grid;
+            var trophyCase = simulation?.Rewards?.TrophyCase;
+            if (grid != null && trophyCase != null)
+                TrophyRoomDisplay.SyncView(grid, trophyCase);
+            TrophyRoomBurstFx.HandleTrophyUpgrade(grid, Camera.main, subject, metal);
         }
 
         public void ResetBuildMenuLayout()
@@ -816,6 +847,8 @@ namespace BuildATower
 
             RewardClaimFx.Advance(Time.unscaledDeltaTime);
             DrawRewardClaimFx(barLabel);
+            TrophyRoomBurstFx.Advance(Time.unscaledDeltaTime);
+            DrawTrophyRoomBurstFx(barLabel);
 
             DrawTutorialCoach(title, label);
             DrawRewardTutorialModal(title, label);
@@ -1745,6 +1778,20 @@ namespace BuildATower
             };
             glyph.normal.textColor = new Color(0.45f, 1f, 0.55f);
             RewardClaimFx.Draw(glyph);
+        }
+
+        void DrawTrophyRoomBurstFx(GUIStyle barLabel)
+        {
+            if (!TrophyRoomBurstFx.IsPlaying)
+                return;
+            var glyph = new GUIStyle(barLabel)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = FontStyle.Bold,
+                fontSize = 15
+            };
+            glyph.normal.textColor = Color.white;
+            TrophyRoomBurstFx.Draw(glyph);
         }
 
         void OpenRewardTutorial()

@@ -36,5 +36,13 @@ namespace BuildATower.Tests
             Assert.AreEqual(TrophyMetal.Gold, commerce.Metal);
             Assert.AreEqual("trophy_commerce_gold", commerce.SpriteKey);
         }
+
+        [Test]
+        public void MetalSpriteResourcePath_uses_shared_Art_Trophies_folder()
+        {
+            Assert.AreEqual(
+                "Art/Trophies/trophy_population_bronze",
+                TrophyRoomDisplay.MetalSpriteResourcePath(ChallengeSubject.Population, TrophyMetal.Bronze));
+        }
     }
 }
