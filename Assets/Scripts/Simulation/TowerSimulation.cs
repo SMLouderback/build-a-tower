@@ -134,6 +134,9 @@ namespace BuildATower
 
         public float Cleanliness { get; private set; } = 100f;
 
+        /// <summary>HUD / metrics alias for stored cleanliness percent.</summary>
+        public float EffectiveCleanliness => Cleanliness;
+
         public void RestoreCleanliness(CleanlinessSnapshotV1 snapshot)
         {
             Cleanliness = CleanlinessSystem.IsAbsent(snapshot) ? 100f : snapshot.percent;
