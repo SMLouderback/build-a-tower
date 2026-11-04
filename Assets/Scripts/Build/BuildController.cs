@@ -1057,7 +1057,7 @@ namespace BuildATower
         bool IsLobbyToolActive() =>
             CurrentTool == BuildTool.PlaceRoom &&
             SelectedRoomType != null &&
-            SelectedRoomType.isLobby;
+            (SelectedRoomType.isLobby || SelectedRoomType.isSkyLobby);
 
         void HandleLobbyDrag(Vector2Int cell)
         {
@@ -1065,8 +1065,11 @@ namespace BuildATower
 
             // Initial place: always lobby tool (default at start) or explicit lobby selection.
             var placingNew = !Grid.HasLobby;
-            var extending = Grid.HasLobby && IsLobbyToolActive();
+            var extending = Grid.HasLobby && IsLobbyToolActive() && !LobbyPlacement.UsesSkyLobby(cell.y);
             if (!placingNew && !extending) return;
+            // While the merged Lobby tool is on an upper floor, sky-lobby drag owns the gesture.
+            if (placingNew == false && LobbyPlacement.UsesSkyLobby(cell.y) && IsLobbyToolActive())
+                return;
 
             if (Input.GetMouseButtonDown(0))
             {
@@ -1125,13 +1128,14 @@ namespace BuildATower
         }
 
         bool IsSkyLobbyToolActive() =>
-            CurrentTool == BuildTool.PlaceRoom &&
-            SelectedRoomType != null &&
-            SelectedRoomType.isSkyLobby;
+            IsLobbyToolActive() && LobbyPlacement.UsesSkyLobby(
+                _draggingSkyLobby ? _dragSkyFloor : (HoverCell?.y ?? TowerGrid.LobbyFloor));
 
         void HandleSkyLobbyDrag(Vector2Int cell)
         {
-            if (!IsSkyLobbyToolActive()) return;
+            // Merged Lobby tool: sky only when the cursor/drag is above ground lobby floor.
+            if (!IsLobbyToolActive()) return;
+            if (!_draggingSkyLobby && !LobbyPlacement.UsesSkyLobby(cell.y)) return;
             var type = ResolveSkyLobbyType();
             if (type == null || cell.y < TowerGrid.MinSkyLobbyHeight) return;
 
@@ -1456,22 +1460,16 @@ namespace BuildATower
                 return;
             }
 
-            if (IsSkyLobbyToolActive())
-            {
-                HelpText =
-                    "Sky Lobby: drag on an upper floor (≥15, ≥15 floors from any lobby) to place or extend a transfer floor.";
-                return;
-            }
-
             if (IsLobbyToolActive())
             {
-                HelpText = "Lobby tool: drag on Floor G past the lobby ends to extend it.";
+                HelpText =
+                    "Lobby: drag on Floor G to extend the ground lobby; drag on upper floors (≥15, spaced from other lobbies) for a sky lobby.";
                 return;
             }
 
             HelpText =
                 SelectedRoomType == null
-                    ? "Pick Selector / Scaffold / Bulldoze, or Lobby / Office / Condo / Hotel / Retail / Stairs / Elevator to build."
+                    ? "Pick Selector / Scaffold / Bulldoze, or Lobby / a build family (stairs and elevators under Transit)."
                     : SelectedRoomType.isStairs
                         ? "Stairs (2×2): BL→UR run. Stack next flight one floor up (share connecting floor). Roles 1+4 cannot overlap; 2+3 can."
                         : SelectedRoomType.isParkingRamp

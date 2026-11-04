@@ -3728,18 +3728,13 @@ namespace BuildATower
                     () => build.SelectTool(),
                     build.CurrentTool == BuildTool.Select,
                     new Color(0.55f, 0.55f, 0.6f)),
-                (BuildMenuTool.Lobby, "Lob", "Extend Lobby\nDrag to widen the lobby on floor G.",
+                (BuildMenuTool.Lobby, "Lob",
+                    "Lobby\nDrag on Floor G to extend the ground lobby.\nDrag on floors above for a sky lobby (≥15 up, spaced apart).",
                     () => build.SelectLobbyTool(),
                     build.CurrentTool == BuildTool.PlaceRoom &&
                     build.SelectedRoomType != null &&
-                    build.SelectedRoomType.isLobby,
+                    (build.SelectedRoomType.isLobby || build.SelectedRoomType.isSkyLobby),
                     new Color(0.75f, 0.65f, 0.35f)),
-                (BuildMenuTool.SkyLobby, "Sky", "Sky Lobby\nTransfer floor: ≥15 up, ≥15 apart from other lobbies.",
-                    () => build.SelectSkyLobbyTool(),
-                    build.CurrentTool == BuildTool.PlaceRoom &&
-                    build.SelectedRoomType != null &&
-                    build.SelectedRoomType.isSkyLobby,
-                    new Color(0.72f, 0.78f, 0.92f)),
                 (BuildMenuTool.Scaffold, "Sc", "Scaffold ($750)\nClick or drag to place walkable structural fill.",
                     () => build.SelectScaffoldTool(),
                     build.CurrentTool == BuildTool.Scaffold,
