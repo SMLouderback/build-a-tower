@@ -122,6 +122,7 @@ namespace BuildATower
         Rect _infoDropdownRect;
         Rect _mapsDropdownRect;
         Rect _researchDropdownRect;
+        Rect _rewardBookDropdownRect;
         Rect _mapsGraphRect;
         Rect _mapsLegendRect;
         readonly List<RoomTypeSO> _roomButtons = new();
@@ -139,6 +140,7 @@ namespace BuildATower
         bool _goalsOpen;
         bool _mapsOpen;
         bool _researchOpen;
+        bool _rewardBookOpen;
         BuildFamily? _expandedFamily;
         BuildSubgroup? _expandedShopSubgroup;
         bool _buildLayoutInitialized;
@@ -162,6 +164,7 @@ namespace BuildATower
 
         ResearchBranch _researchPickBranch = ResearchBranch.Marketing;
         int _researchPickLevel = 1;
+        RewardBookTab _rewardBookTab = RewardBookTab.Ready;
 
         Texture2D _whiteTex;
         string _hoverTooltip;
@@ -371,6 +374,7 @@ namespace BuildATower
             (_infoPanel != TopInfoPanel.None && _infoDropdownRect.Contains(guiPoint)) ||
             (_mapsOpen && _mapsDropdownRect.Contains(guiPoint)) ||
             (_researchOpen && _researchDropdownRect.Contains(guiPoint)) ||
+            (_rewardBookOpen && _rewardBookDropdownRect.Contains(guiPoint)) ||
             (_mapsGraphRect.width > 0f && _mapsGraphRect.Contains(guiPoint)) ||
             (_mapsLegendRect.width > 0f && _mapsLegendRect.Contains(guiPoint)) ||
             TutorialChromeContains(guiPoint) ||
@@ -1335,6 +1339,7 @@ namespace BuildATower
             _infoDropdownRect = Rect.zero;
             _mapsDropdownRect = Rect.zero;
             _researchDropdownRect = Rect.zero;
+            _rewardBookDropdownRect = Rect.zero;
             _mapsGraphRect = Rect.zero;
             _mapsLegendRect = Rect.zero;
             GUI.Box(_topBarRect, GUIContent.none);
@@ -1350,6 +1355,10 @@ namespace BuildATower
             var researchLabs = build.Grid != null ? EconomySystem.CountResearchLabs(build.Grid) : 0;
             if (researchLabs >= 1)
                 clusterW += 210f + 8f;
+            var rewardPending = simulation?.Rewards?.Ledger?.PendingCount ?? 0;
+            var rewardBookUnlocked = RewardBookHud.ShouldShowButton(build.Grid != null && build.Grid.HasLobby, rewardPending);
+            if (rewardBookUnlocked)
+                clusterW += 92f + 8f;
             if (economyUnlocked) clusterW += 64f + 8f + 56f + 8f;
             if (goalsUnlocked) clusterW += 64f + 8f + 72f;
             else if (economyUnlocked) clusterW = Mathf.Max(56f + 8f + 64f + 8f, clusterW - 8f);
@@ -1439,6 +1448,8 @@ namespace BuildATower
                 population,
                 averageStress,
                 goalsUnlocked,
+                rewardBookUnlocked,
+                rewardPending,
                 economyUnlocked);
 
             return barH;
@@ -1459,6 +1470,8 @@ namespace BuildATower
             int population,
             float averageStress,
             bool goalsUnlocked,
+            bool rewardBookUnlocked,
+            int rewardPending,
             bool economyUnlocked)
         {
             const float shopsW = 64f;
@@ -1480,6 +1493,31 @@ namespace BuildATower
             }
             cursor -= btnGap;
 
+            const float rewardsW = 92f;
+            if (rewardBookUnlocked)
+            {
+                cursor -= rewardsW;
+                var rewardsRect = new Rect(cursor, y, rewardsW, lineH);
+                var rewardsArrow = _rewardBookOpen ? "▼" : "▶";
+                if (GUI.Button(rewardsRect, $"{rewardsArrow} Rewards", barButton))
+                {
+                    _rewardBookOpen = !_rewardBookOpen;
+                    if (_rewardBookOpen)
+                    {
+                        _goalsOpen = false;
+                        _mapsOpen = false;
+                        _researchOpen = false;
+                        _infoPanel = TopInfoPanel.None;
+                    }
+                }
+                DrawRewardBadge(rewardsRect, rewardPending, barButton);
+                cursor -= btnGap;
+            }
+            else
+            {
+                _rewardBookOpen = false;
+            }
+
             if (goalsUnlocked)
             {
                 cursor -= goalsW;
@@ -1490,6 +1528,8 @@ namespace BuildATower
                     _goalsOpen = !_goalsOpen;
                     if (_goalsOpen)
                         _researchOpen = false;
+                    if (_goalsOpen)
+                        _rewardBookOpen = false;
                 }
                 cursor -= btnGap;
             }
@@ -1505,6 +1545,8 @@ namespace BuildATower
                     _infoPanel = towerOpen ? TopInfoPanel.None : TopInfoPanel.Tower;
                     if (_infoPanel != TopInfoPanel.None)
                         _researchOpen = false;
+                    if (_infoPanel != TopInfoPanel.None)
+                        _rewardBookOpen = false;
                 }
                 cursor -= btnGap;
             }
@@ -1520,6 +1562,8 @@ namespace BuildATower
                     _infoPanel = elevOpen ? TopInfoPanel.None : TopInfoPanel.Elev;
                     if (_infoPanel != TopInfoPanel.None)
                         _researchOpen = false;
+                    if (_infoPanel != TopInfoPanel.None)
+                        _rewardBookOpen = false;
                 }
                 cursor -= btnGap;
 
@@ -1532,6 +1576,8 @@ namespace BuildATower
                     _infoPanel = shopsOpen ? TopInfoPanel.None : TopInfoPanel.Shops;
                     if (_infoPanel != TopInfoPanel.None)
                         _researchOpen = false;
+                    if (_infoPanel != TopInfoPanel.None)
+                        _rewardBookOpen = false;
                 }
                 cursor -= btnGap;
             }
@@ -1543,7 +1589,10 @@ namespace BuildATower
             {
                 _mapsOpen = !_mapsOpen;
                 if (_mapsOpen)
+                {
                     _researchOpen = false;
+                    _rewardBookOpen = false;
+                }
             }
 
             var researchLabs = build.Grid != null ? EconomySystem.CountResearchLabs(build.Grid) : 0;
@@ -1568,6 +1617,7 @@ namespace BuildATower
                     {
                         _goalsOpen = false;
                         _mapsOpen = false;
+                        _rewardBookOpen = false;
                         _infoPanel = TopInfoPanel.None;
                     }
                 }
@@ -1585,6 +1635,9 @@ namespace BuildATower
                 DrawMapsDropdown(right, barTopY, barH, barWidth, barButton);
 
             DrawMapsOverlays(gap, barTopY, barH, barWidth, wrapLabel);
+
+            if (_rewardBookOpen && rewardBookUnlocked)
+                DrawRewardBookDropdown(right, barTopY, barH, barWidth, wrapLabel, barButton);
 
             if (_goalsOpen && goalsUnlocked)
             {
@@ -1614,6 +1667,50 @@ namespace BuildATower
 
             if (_researchOpen && researchLabs >= 1)
                 DrawResearchDropdown(right, barTopY, barH, barWidth, wrapLabel);
+        }
+
+        void DrawRewardBadge(Rect buttonRect, int pendingCount, GUIStyle label)
+        {
+            var text = RewardBookHud.BadgeText(pendingCount);
+            if (string.IsNullOrEmpty(text))
+                return;
+
+            EnsureWhiteTex();
+            var scale = RewardBookHud.BadgePulseScale(pendingCount, Time.unscaledTime);
+            var alpha = RewardBookHud.BadgePulseAlpha(pendingCount, Time.unscaledTime);
+            var size = Mathf.Clamp(17f * scale, 16f, 22f);
+            var rect = new Rect(buttonRect.xMax - size + 3f, buttonRect.y - 5f, size, size);
+            var oldColor = GUI.color;
+            GUI.color = new Color(1f, 0.48f, 0.16f, alpha);
+            GUI.DrawTexture(rect, _whiteTex, ScaleMode.StretchToFill);
+            GUI.color = Color.white;
+            GUI.Label(rect, text, label);
+            GUI.color = oldColor;
+        }
+
+        void DrawRewardBookDropdown(
+            float right,
+            float barTopY,
+            float barH,
+            float barWidth,
+            GUIStyle wrapLabel,
+            GUIStyle barButton)
+        {
+            var dropW = Mathf.Min(420f, barWidth);
+            var dropH = Mathf.Min(360f, Mathf.Max(140f, Screen.height - (barTopY + barH) - 8f));
+            var rewardRight = right - 56f - 8f;
+            _rewardBookDropdownRect = new Rect(
+                Mathf.Max(8f, rewardRight - dropW),
+                barTopY + barH,
+                dropW,
+                dropH);
+            RewardBookHud.Draw(
+                _rewardBookDropdownRect,
+                simulation?.Rewards,
+                build != null ? build.Wallet : null,
+                ref _rewardBookTab,
+                wrapLabel,
+                barButton);
         }
 
         void DrawResearchDropdown(
