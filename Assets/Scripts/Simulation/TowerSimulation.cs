@@ -337,6 +337,7 @@ namespace BuildATower
             _elevators.Tick(
                 _clock.LastTickGameMinutes,
                 ResearchEffects.ElevatorSpeedMultiplier(research));
+            var previousPopulation = _agents.Population;
             _agents.Tick(
                 _clock.LastTickGameMinutes,
                 _clock,
@@ -346,6 +347,8 @@ namespace BuildATower
                 _crime,
                 research,
                 _conference);
+            if (_agents.Population != previousPopulation)
+                EvaluateRewards();
             _agents.CollectFloorsForRole(AgentRole.Security, _patrolFloors);
             _agents.CollectFloorsForRole(AgentRole.Criminal, _criminalFloors);
             _crime.Tick(
@@ -509,8 +512,17 @@ namespace BuildATower
             if (build == null || build.Grid == null || _agents == null) return;
             _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
             DrainStarCelebrationsAndSyncArt();
-            _rewards?.Evaluate(CollectRewardsMetrics(_clock?.DayIndex ?? 0), _news);
+            EvaluateRewards();
         }
+
+        public int RecordBuildRewardProgress(int count = 1) =>
+            _rewards?.RecordBuild(CollectRewardsMetrics(_clock?.DayIndex ?? 0), _news, count) ?? 0;
+
+        public int RecordDemolishRewardProgress(int count = 1) =>
+            _rewards?.RecordDemolish(CollectRewardsMetrics(_clock?.DayIndex ?? 0), _news, count) ?? 0;
+
+        int EvaluateRewards() =>
+            _rewards?.Evaluate(CollectRewardsMetrics(_clock?.DayIndex ?? 0), _news) ?? 0;
 
         /// <summary>Recomputes plant pool assignment for every drawing room.</summary>
         public void Power()

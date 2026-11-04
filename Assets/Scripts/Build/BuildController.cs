@@ -329,6 +329,7 @@ namespace BuildATower
 
             if (view != null)
                 view.PaintRoom(room);
+            GetComponent<TowerSimulation>()?.RecordBuildRewardProgress();
             PlayBuildPlaceSfx();
             NotifyGridChanged();
             StateChanged?.Invoke();
@@ -525,6 +526,7 @@ namespace BuildATower
             ClearFloorOneHintIfNeeded();
             view.PaintRoom(room);
             SelectedRoomType = null;
+            GetComponent<TowerSimulation>()?.RecordBuildRewardProgress();
             PlayBuildPlaceSfx();
             RefreshHelpText();
             NotifyGridChanged();
@@ -560,6 +562,7 @@ namespace BuildATower
             if (oldLobby != null)
                 view.ClearRoom(oldLobby);
             view.PaintRoom(lobby);
+            GetComponent<TowerSimulation>()?.RecordBuildRewardProgress();
             RefreshHelpText();
             NotifyGridChanged();
             StateChanged?.Invoke();
@@ -598,6 +601,7 @@ namespace BuildATower
 
             view.PaintRoom(room);
             SelectedRoomType = null;
+            GetComponent<TowerSimulation>()?.RecordBuildRewardProgress();
             PlayBuildPlaceSfx();
             RefreshHelpText();
             NotifyGridChanged();
@@ -626,6 +630,7 @@ namespace BuildATower
 
             view.ClearRoom(oldSkyLobby);
             view.PaintRoom(skyLobby);
+            GetComponent<TowerSimulation>()?.RecordBuildRewardProgress();
             RefreshHelpText();
             NotifyGridChanged();
             StateChanged?.Invoke();
@@ -688,6 +693,7 @@ namespace BuildATower
             // Transit sits on the rooms layer; keep it visible over rooms built behind.
             PaintRoomKeepingTransitOnTop(room);
             simulation?.RegisterMetroStation(room);
+            simulation?.RecordBuildRewardProgress();
 
             PlayBuildPlaceSfx();
             RefreshHelpText();
@@ -730,6 +736,7 @@ namespace BuildATower
             if (SelectedRoom != null && SelectedRoom.InstanceId == instanceId)
                 ReselectById(instanceId);
 
+            simulation?.RecordBuildRewardProgress();
             PlayBuildPlaceSfx();
             RefreshHelpText();
             NotifyGridChanged();
@@ -798,6 +805,8 @@ namespace BuildATower
 
             RepaintAfterElevatorResize(shaft, instanceId);
             ReselectById(instanceId);
+            if (growing)
+                GetComponent<TowerSimulation>()?.RecordBuildRewardProgress();
             RefreshHelpText();
             NotifyGridChanged();
             StateChanged?.Invoke();
@@ -905,7 +914,9 @@ namespace BuildATower
         {
             if (!Grid.TryDemolishAt(cell, out var removed, out var scaffoldsPlaced, out _))
                 return false;
-            GetComponent<TowerSimulation>()?.UnregisterMetroStation(removed);
+            var simulation = GetComponent<TowerSimulation>();
+            simulation?.UnregisterMetroStation(removed);
+            simulation?.RecordDemolishRewardProgress();
 
             var refundDelta = BuildGraceRefund.WalletDelta(removed, Time.realtimeSinceStartup);
             if (refundDelta > 0) Wallet.Add(refundDelta);

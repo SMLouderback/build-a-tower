@@ -28,6 +28,18 @@ namespace BuildATower
         public int Evaluate(RewardsMetrics metrics, TowerNews news) =>
             EvaluateInternal(metrics, news, daily: false);
 
+        public int RecordBuild(RewardsMetrics metrics, TowerNews news, int count = 1)
+        {
+            Tracker.RecordBuild(count);
+            return Evaluate(metrics, news);
+        }
+
+        public int RecordDemolish(RewardsMetrics metrics, TowerNews news, int count = 1)
+        {
+            Tracker.RecordDemolish(count);
+            return Evaluate(metrics, news);
+        }
+
         public int OnDayRolled(RewardsMetrics metrics, TowerNews news) =>
             EvaluateInternal(metrics, news, daily: true);
 
