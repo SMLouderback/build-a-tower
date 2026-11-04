@@ -1,3 +1,20 @@
+### Task 6 Report: ContractBoard
+
+Implemented a typed `ContractBoard` for rotating contract offers and wired it into `RewardsSystem` in place of the empty board stub.
+
+Changes:
+- Added `ContractBoard` and `ActiveContract` with 3-slot refresh, expiry, success completion, progress tracking, and weekly refill.
+- Added four contract stub definitions to `ChallengeCatalog`.
+- Added contract expiry news via `RewardsNews.ContractExpired`.
+- Added `ContractBoardTests` covering slots, claimed filtering, success, expiry, weekly refresh, and RewardsSystem wiring.
+
+Verification:
+- RED: `ContractBoardTests` failed on missing `ContractBoard` / object board stub.
+- GREEN: `ContractBoardTests` passed, 6/6.
+- Regression: `ChallengeCatalogTests` 3/3, `ClaimLedgerTests` 8/8, `ChallengeTrackerTests` 8/8, `RewardsSystemTests` 3/3.
+
+Notes:
+- Unity batchmode tests ran successfully; no Unity lock block occurred.
 # Conference Task 6 Report: EventVisitor agents
 
 ## Status

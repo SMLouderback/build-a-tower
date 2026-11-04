@@ -5,24 +5,26 @@ namespace BuildATower
     public sealed class RewardsSystem
     {
         readonly IReadOnlyList<ChallengeDef> _catalog;
-        readonly object _board = new object();
 
         public RewardsSystem(
             ChallengeTracker tracker = null,
             ClaimLedger ledger = null,
             TrophyCase trophyCase = null,
+            ContractBoard board = null,
             IReadOnlyList<ChallengeDef> catalog = null)
         {
             Tracker = tracker ?? new ChallengeTracker();
             Ledger = ledger ?? new ClaimLedger();
             TrophyCase = trophyCase ?? new TrophyCase();
             _catalog = catalog ?? ChallengeCatalog.All;
+            Board = board ?? new ContractBoard();
+            Board.Refresh(0, _catalog, Ledger);
         }
 
         public ChallengeTracker Tracker { get; }
         public ClaimLedger Ledger { get; }
         public TrophyCase TrophyCase { get; }
-        public object Board => _board;
+        public ContractBoard Board { get; }
         public bool RewardTutorialSeen { get; set; }
 
         public int Evaluate(RewardsMetrics metrics, TowerNews news) =>
@@ -57,6 +59,11 @@ namespace BuildATower
                 Tracker.EvaluateDaily(metrics, Ledger, _catalog);
             else
                 ChallengeTracker.EvaluateThresholds(Tracker.WithLifetimeCounters(metrics), Ledger, _catalog);
+
+            if (daily)
+                Board.OnDayRolled(Tracker.WithLifetimeCounters(metrics), Ledger, _catalog, news);
+            else
+                Board.Evaluate(Tracker.WithLifetimeCounters(metrics), Ledger);
 
             var newlyPending = 0;
             for (var i = 0; i < _catalog.Count; i++)

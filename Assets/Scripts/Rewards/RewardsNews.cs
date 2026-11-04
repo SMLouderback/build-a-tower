@@ -10,5 +10,15 @@ namespace BuildATower
                 Text = $"Reward ready: {def.Title}. Claim ${def.Cash:n0} in the Reward Book.",
                 ExpireDayIndex = 5
             };
+
+        public static TowerNewsItem ContractExpired(ChallengeDef def, int dayIndex) =>
+            new TowerNewsItem
+            {
+                Category = TowerNewsCategory.Quirk,
+                Priority = 2,
+                Text = $"Contract expired: {def.Title}.",
+                CreatedDayIndex = dayIndex,
+                ExpireDayIndex = dayIndex + 5
+            };
     }
 }
