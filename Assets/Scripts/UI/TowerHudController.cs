@@ -118,6 +118,7 @@ namespace BuildATower
         Rect _infoRect;
         Rect _popoutRect;
         Rect _topBarRect;
+        Rect _saveMoneyChipRect;
         Rect _goalsDropdownRect;
         Rect _infoDropdownRect;
         Rect _mapsDropdownRect;
@@ -812,6 +813,9 @@ namespace BuildATower
             DrawFamilyPopout(iconStyle, title, label, stars);
             DrawBuildInfoPanel(title, label, stars, agents, row, btnH);
 
+            RewardClaimFx.Advance(Time.unscaledDeltaTime);
+            DrawRewardClaimFx(barLabel);
+
             DrawTutorialCoach(title, label);
             DrawRewardTutorialModal(title, label);
             DrawHoverTooltip(label);
@@ -1378,21 +1382,25 @@ namespace BuildATower
             var fittedSpeedWidth = Mathf.Max(160f, speedSlotRight - speedX);
             var speedLimit = speedX - 6f;
 
-            void DrawChip(string text, float width)
+            void DrawChip(string text, float width, bool trackSaveChip = false)
             {
                 if (x + width > speedLimit)
                     return;
-                GUI.Label(new Rect(x, y, width, lineH), text, barLabel);
+                var chip = new Rect(x, y, width, lineH);
+                GUI.Label(chip, text, barLabel);
+                if (trackSaveChip)
+                    _saveMoneyChipRect = chip;
                 x += width + 10f;
             }
 
             GUI.Label(new Rect(x, y, 100f, lineH), "Build-A-Tower", title);
             x += 108f;
+            _saveMoneyChipRect = Rect.zero;
 
             var economy = simulation?.Economy;
             if (economyUnlocked && economy != null)
             {
-                DrawChip($"Save ${build.Wallet.Balance:N0}", 118f);
+                DrawChip($"Save ${build.Wallet.Balance:N0}", 118f, trackSaveChip: true);
                 DrawChip(FormatPowerBarText(), 92f);
                 DrawChip(FormatWaterBarText(), 72f);
                 DrawChip(FormatCleanBarText(), 80f);
@@ -1402,7 +1410,7 @@ namespace BuildATower
             }
             else
             {
-                DrawChip($"Save ${build.Wallet.Balance:N0}", 118f);
+                DrawChip($"Save ${build.Wallet.Balance:N0}", 118f, trackSaveChip: true);
                 DrawChip(FormatPowerBarText(), 92f);
                 DrawChip(FormatWaterBarText(), 72f);
                 DrawChip(FormatCleanBarText(), 80f);
@@ -1717,7 +1725,25 @@ namespace BuildATower
                 ref _rewardBookTab,
                 wrapLabel,
                 barButton,
-                OpenRewardTutorial);
+                OpenRewardTutorial,
+                PlayRewardClaimFx);
+        }
+
+        void PlayRewardClaimFx(int cashPaid, int claimCount) =>
+            RewardClaimFx.Play(_saveMoneyChipRect, cashPaid, claimCount);
+
+        void DrawRewardClaimFx(GUIStyle barLabel)
+        {
+            if (!RewardClaimFx.IsPlaying)
+                return;
+            var glyph = new GUIStyle(barLabel)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = FontStyle.Bold,
+                fontSize = 16
+            };
+            glyph.normal.textColor = new Color(0.45f, 1f, 0.55f);
+            RewardClaimFx.Draw(glyph);
         }
 
         void OpenRewardTutorial()

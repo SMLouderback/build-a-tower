@@ -118,7 +118,8 @@ namespace BuildATower
             ref RewardBookTab tab,
             GUIStyle label,
             GUIStyle button,
-            Action onNeedsTutorial = null)
+            Action onNeedsTutorial = null,
+            Action<int, int> onClaimPaid = null)
         {
             GUI.Box(rect, GUIContent.none);
             var pad = 8f;
@@ -139,7 +140,7 @@ namespace BuildATower
             switch (tab)
             {
                 case RewardBookTab.Ready:
-                    DrawReady(x, y, inner, rect.height - (y - rect.y) - pad, rewards, wallet, label, button, onNeedsTutorial);
+                    DrawReady(x, y, inner, rect.height - (y - rect.y) - pad, rewards, wallet, label, button, onNeedsTutorial, onClaimPaid);
                     break;
                 case RewardBookTab.Catalog:
                     DrawCatalog(x, y, inner, rect.height - (y - rect.y) - pad, rewards, label);
@@ -162,7 +163,8 @@ namespace BuildATower
             FundsWallet wallet,
             GUIStyle label,
             GUIStyle button,
-            Action onNeedsTutorial)
+            Action onNeedsTutorial,
+            Action<int, int> onClaimPaid)
         {
             var ready = ReadyRewards(rewards);
             var row = 24f;
@@ -170,7 +172,10 @@ namespace BuildATower
             GUI.Label(new Rect(x, y, width - 94f, row), $"Ready to claim: {ready.Count}", label);
             if (ready.Count > 0 && GUI.Button(new Rect(x + width - 90f, y, 90f, row), "Claim All", button))
             {
+                var claimCount = ready.Count;
                 var result = ClaimAllReady(rewards, wallet);
+                if (result.TotalCashPaid > 0)
+                    onClaimPaid?.Invoke(result.TotalCashPaid, claimCount);
                 if (result.NeedsTutorial)
                     onNeedsTutorial?.Invoke();
             }
@@ -189,6 +194,8 @@ namespace BuildATower
                 if (GUI.Button(new Rect(x + width - 72f, y, 72f, row), "Claim", button))
                 {
                     var result = ClaimReady(rewards, wallet, def);
+                    if (result.Ok && result.CashPaid > 0)
+                        onClaimPaid?.Invoke(result.CashPaid, 1);
                     if (result.NeedsTutorial)
                         onNeedsTutorial?.Invoke();
                 }
