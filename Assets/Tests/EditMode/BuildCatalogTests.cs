@@ -122,7 +122,12 @@ namespace BuildATower.Tests
             Assert.AreEqual(BuildSubgroup.Food, groups[0].Subgroups[0].Subgroup);
             Assert.AreEqual("shop_food_fine", groups[0].Subgroups[0].Rooms[0].id);
             Assert.AreEqual(BuildFamily.Utility, groups[1].Family);
-            Assert.AreEqual(3, groups[1].Rooms.Count);
+            Assert.AreEqual(0, groups[1].Rooms.Count);
+            Assert.AreEqual(2, groups[1].Subgroups.Count);
+            Assert.AreEqual(BuildSubgroup.HealthSanitation, groups[1].Subgroups[0].Subgroup);
+            Assert.AreEqual("service_housekeeping", groups[1].Subgroups[0].Rooms[0].id);
+            Assert.AreEqual(BuildSubgroup.Services, groups[1].Subgroups[1].Subgroup);
+            Assert.AreEqual(2, groups[1].Subgroups[1].Rooms.Count);
         }
 
         [Test]
