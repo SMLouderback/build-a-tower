@@ -65,6 +65,7 @@ namespace BuildATower
             ["service_research"] = "research_lab_8x1",
             ["service_conference"] = "conference_8x1",
             ["service_event_hall"] = "event_hall_12x2",
+            [TrophyRoomDisplay.RoomTypeId] = TrophyRoomDisplay.ResourceLeaf,
             ["service_mail"] = "mail_4x1",
             ["service_recycling"] = "recycling_6x1",
             ["service_loading_dock"] = "loading_dock_8x1",
