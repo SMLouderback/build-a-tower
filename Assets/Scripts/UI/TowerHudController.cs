@@ -165,6 +165,7 @@ namespace BuildATower
         ResearchBranch _researchPickBranch = ResearchBranch.Marketing;
         int _researchPickLevel = 1;
         RewardBookTab _rewardBookTab = RewardBookTab.Ready;
+        readonly RewardTutorialGate _rewardTutorialGate = new();
 
         Texture2D _whiteTex;
         string _hoverTooltip;
@@ -348,6 +349,7 @@ namespace BuildATower
                 var celeb = ResolveCelebration();
                 return IsEscPauseOpen
                        || GameSession.HasRestoreFallbackNotice
+                       || _rewardTutorialGate.IsModalOpen
                        || (celeb != null && celeb.IsActive);
             }
         }
@@ -539,6 +541,8 @@ namespace BuildATower
             // pre-existing pause menu when celebrations are only queued and waiting.
             var celeb = ResolveCelebration();
             if (celeb != null && celeb.IsModalOpen)
+                return;
+            if (_rewardTutorialGate.IsModalOpen)
                 return;
 
             HandlePauseEscape();
@@ -809,6 +813,7 @@ namespace BuildATower
             DrawBuildInfoPanel(title, label, stars, agents, row, btnH);
 
             DrawTutorialCoach(title, label);
+            DrawRewardTutorialModal(title, label);
             DrawHoverTooltip(label);
             DrawRestoreFallbackOverlay(title, label);
             DrawPauseOverlay(title, label);
@@ -819,6 +824,7 @@ namespace BuildATower
             if (_pauseUi != PauseUiState.Playing) return;
             // Continue-only while celebration modal owns pause; skip Esc pause overlay.
             if (ResolveCelebration()?.IsModalOpen == true) return;
+            if (_rewardTutorialGate.IsModalOpen) return;
             if (simulation?.Clock != null)
             {
                 _speedBeforePause = simulation.Clock.MinutesPerRealSecond;
@@ -1710,7 +1716,54 @@ namespace BuildATower
                 build != null ? build.Wallet : null,
                 ref _rewardBookTab,
                 wrapLabel,
-                barButton);
+                barButton,
+                OpenRewardTutorial);
+        }
+
+        void OpenRewardTutorial()
+        {
+            _rewardTutorialGate.TryOpen(
+                simulation?.Rewards,
+                firstTrophyOnTower: true,
+                simulation?.Clock,
+                ApplyRewardTutorialSpeed);
+        }
+
+        void ApplyRewardTutorialSpeed(float minutesPerRealSecond, bool paused) =>
+            simulation?.SetSpeedPreset(minutesPerRealSecond, paused);
+
+        void DrawRewardTutorialModal(GUIStyle title, GUIStyle label)
+        {
+            if (!_rewardTutorialGate.IsModalOpen)
+                return;
+
+            GUI.Box(new Rect(0, 0, Screen.width, Screen.height), GUIContent.none);
+            const float panelW = 420f;
+            const float panelH = 216f;
+            var panel = new Rect(
+                (Screen.width - panelW) * 0.5f,
+                (Screen.height - panelH) * 0.5f,
+                panelW,
+                panelH);
+            GUI.Box(panel, GUIContent.none);
+
+            var cx = panel.x + 20f;
+            var cy = panel.y + 16f;
+            var inner = panelW - 40f;
+            GUI.Label(new Rect(cx, cy, inner, 28f), "First trophy earned", title);
+            cy += 36f;
+            GUI.Label(
+                new Rect(cx, cy, inner, 96f),
+                "Your Reward Book tracks ready payouts, contracts, and trophies. Trophy metals stay on this tower, and higher metals upgrade the same trophy slot.",
+                label);
+            cy += 112f;
+
+            if (GUI.Button(new Rect(cx, cy, inner, 32f), "Continue"))
+            {
+                _rewardBookOpen = true;
+                _rewardBookTab = RewardBookTab.Trophies;
+                _rewardTutorialGate.Dismiss(simulation?.Rewards, ApplyRewardTutorialSpeed);
+            }
         }
 
         void DrawResearchDropdown(
@@ -3145,6 +3198,7 @@ namespace BuildATower
 
             if (_pauseUi != PauseUiState.Playing) return;
             if (GameSession.HasRestoreFallbackNotice) return;
+            if (_rewardTutorialGate.IsModalOpen) return;
 
             var highlight = director.GetHighlight();
             var intro = director.AwaitingContinue;
@@ -4241,6 +4295,7 @@ namespace BuildATower
             if (_pauseUi != PauseUiState.Playing) return;
             // Celebration pause snapshot must stay intact until Continue.
             if (ResolveCelebration()?.IsModalOpen == true) return;
+            if (_rewardTutorialGate.IsModalOpen) return;
 
             // minutesPerRealSecond: 360x ≈ 6 game hours/sec; 1d = 1440 = one game day/sec.
             var labels = new[] { "||", "1x", "5x", "60x", "360x", "1d" };

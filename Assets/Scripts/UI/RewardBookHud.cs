@@ -90,7 +90,7 @@ namespace BuildATower
                 firstTrophy |= result.FirstTrophyOnTower;
             }
 
-            return new ClaimAllResult(totalCash, firstTrophy);
+            return new ClaimAllResult(totalCash, firstTrophy, NeedsTutorial(rewards, firstTrophy));
         }
 
         public static ClaimResult ClaimReady(
@@ -100,7 +100,15 @@ namespace BuildATower
         {
             if (rewards == null || wallet == null)
                 return ClaimResult.Failed;
-            return rewards.Ledger.TryClaim(def.Id, wallet, rewards.TrophyCase, rewards.Extras, def);
+            var result = rewards.Ledger.TryClaim(def.Id, wallet, rewards.TrophyCase, rewards.Extras, def);
+            if (!result.Ok)
+                return result;
+            return new ClaimResult(
+                result.Ok,
+                result.CashPaid,
+                result.MetalRaised,
+                result.FirstTrophyOnTower,
+                NeedsTutorial(rewards, result.FirstTrophyOnTower));
         }
 
         public static void Draw(
@@ -109,7 +117,8 @@ namespace BuildATower
             FundsWallet wallet,
             ref RewardBookTab tab,
             GUIStyle label,
-            GUIStyle button)
+            GUIStyle button,
+            Action onNeedsTutorial = null)
         {
             GUI.Box(rect, GUIContent.none);
             var pad = 8f;
@@ -130,7 +139,7 @@ namespace BuildATower
             switch (tab)
             {
                 case RewardBookTab.Ready:
-                    DrawReady(x, y, inner, rect.height - (y - rect.y) - pad, rewards, wallet, label, button);
+                    DrawReady(x, y, inner, rect.height - (y - rect.y) - pad, rewards, wallet, label, button, onNeedsTutorial);
                     break;
                 case RewardBookTab.Catalog:
                     DrawCatalog(x, y, inner, rect.height - (y - rect.y) - pad, rewards, label);
@@ -152,14 +161,19 @@ namespace BuildATower
             RewardsSystem rewards,
             FundsWallet wallet,
             GUIStyle label,
-            GUIStyle button)
+            GUIStyle button,
+            Action onNeedsTutorial)
         {
             var ready = ReadyRewards(rewards);
             var row = 24f;
             var bottom = y + height;
             GUI.Label(new Rect(x, y, width - 94f, row), $"Ready to claim: {ready.Count}", label);
             if (ready.Count > 0 && GUI.Button(new Rect(x + width - 90f, y, 90f, row), "Claim All", button))
-                ClaimAllReady(rewards, wallet);
+            {
+                var result = ClaimAllReady(rewards, wallet);
+                if (result.NeedsTutorial)
+                    onNeedsTutorial?.Invoke();
+            }
             y += row + 4f;
 
             if (ready.Count == 0)
@@ -173,10 +187,17 @@ namespace BuildATower
                 var def = ready[i];
                 GUI.Label(new Rect(x, y, width - 76f, row), $"{def.Title} · ${def.Cash:n0} · {def.Metal}", label);
                 if (GUI.Button(new Rect(x + width - 72f, y, 72f, row), "Claim", button))
-                    ClaimReady(rewards, wallet, def);
+                {
+                    var result = ClaimReady(rewards, wallet, def);
+                    if (result.NeedsTutorial)
+                        onNeedsTutorial?.Invoke();
+                }
                 y += row;
             }
         }
+
+        static bool NeedsTutorial(RewardsSystem rewards, bool firstTrophyOnTower) =>
+            firstTrophyOnTower && rewards != null && !rewards.RewardTutorialSeen;
 
         static void DrawCatalog(float x, float y, float width, float height, RewardsSystem rewards, GUIStyle label)
         {

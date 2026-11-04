@@ -24,13 +24,15 @@ namespace BuildATower
         public int CashPaid { get; }
         public bool MetalRaised { get; }
         public bool FirstTrophyOnTower { get; }
+        public bool NeedsTutorial { get; }
 
-        public ClaimResult(bool ok, int cashPaid, bool metalRaised, bool firstTrophyOnTower)
+        public ClaimResult(bool ok, int cashPaid, bool metalRaised, bool firstTrophyOnTower, bool needsTutorial = false)
         {
             Ok = ok;
             CashPaid = cashPaid;
             MetalRaised = metalRaised;
             FirstTrophyOnTower = firstTrophyOnTower;
+            NeedsTutorial = needsTutorial;
         }
 
         public static ClaimResult Failed => new ClaimResult(false, 0, false, false);
@@ -40,11 +42,13 @@ namespace BuildATower
     {
         public int TotalCashPaid { get; }
         public bool FirstTrophyOnTower { get; }
+        public bool NeedsTutorial { get; }
 
-        public ClaimAllResult(int totalCashPaid, bool firstTrophyOnTower)
+        public ClaimAllResult(int totalCashPaid, bool firstTrophyOnTower, bool needsTutorial = false)
         {
             TotalCashPaid = totalCashPaid;
             FirstTrophyOnTower = firstTrophyOnTower;
+            NeedsTutorial = needsTutorial;
         }
     }
 
