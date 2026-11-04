@@ -45,7 +45,7 @@ namespace BuildATower
                 extras = Extras.CaptureSnapshot()
             };
 
-        public void RestoreSnapshot(RewardsSnapshotV1 snapshot)
+        public void RestoreSnapshot(RewardsSnapshotV1 snapshot, int dayIndex = 0)
         {
             Ledger.RestoreSnapshot(null, null);
             TrophyCase.RestoreSnapshot(null);
@@ -54,7 +54,7 @@ namespace BuildATower
 
             if (IsAbsent(snapshot))
             {
-                Board.RestoreDefault(0, _catalog, Ledger);
+                Board.RestoreDefault(dayIndex < 0 ? 0 : dayIndex, _catalog, Ledger);
                 return;
             }
 

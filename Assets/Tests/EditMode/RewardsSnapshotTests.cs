@@ -89,6 +89,24 @@ namespace BuildATower.Tests
             Assert.GreaterOrEqual(rewards.Board.Active.Count, 3);
         }
 
+        [Test]
+        public void Absent_reward_snapshot_seeds_contracts_on_restored_day_not_day_zero()
+        {
+            const int restoredDay = 42;
+            var rewards = new RewardsSystem();
+
+            rewards.RestoreSnapshot(null, restoredDay);
+
+            Assert.IsFalse(rewards.RewardTutorialSeen);
+            Assert.GreaterOrEqual(rewards.Board.Active.Count, 3);
+            for (var i = 0; i < rewards.Board.Active.Count; i++)
+            {
+                var contract = rewards.Board.Active[i];
+                Assert.AreEqual(restoredDay, contract.StartedDayIndex, contract.Def.Id);
+                Assert.AreEqual(restoredDay + 7, contract.ExpiresDayIndex, contract.Def.Id);
+            }
+        }
+
         static int ContractProgress(RewardsSystem rewards, string id)
         {
             for (var i = 0; i < rewards.Board.Active.Count; i++)

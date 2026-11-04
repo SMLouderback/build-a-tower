@@ -259,7 +259,7 @@ namespace BuildATower
                 _health.RestoreSnapshot(pending.health);
                 RestoreCleanliness(pending.cleanliness);
                 _metro.RestoreSnapshot(pending.metro);
-                _rewards.RestoreSnapshot(pending.rewards);
+                _rewards.RestoreSnapshot(pending.rewards, _clock.DayIndex);
                 _macro?.RestoreSnapshot(pending.marketPulse, _clock.DayIndex);
             }
             catch (ArgumentException)
