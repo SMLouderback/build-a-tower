@@ -6,7 +6,7 @@ namespace BuildATower
 {
     public interface IRewardExtras
     {
-        void OnClaim(ChallengeDef def);
+        void OnClaim(ChallengeDef def, TrophyCase trophyCase);
     }
 
     public sealed class NoOpRewardExtras : IRewardExtras
@@ -15,7 +15,7 @@ namespace BuildATower
 
         NoOpRewardExtras() { }
 
-        public void OnClaim(ChallengeDef def) { }
+        public void OnClaim(ChallengeDef def, TrophyCase trophyCase) { }
     }
 
     public readonly struct ClaimResult
@@ -84,7 +84,7 @@ namespace BuildATower
             _claimed.Add(id);
 
             wallet.Add(def.Cash);
-            extras?.OnClaim(def);
+            extras?.OnClaim(def, trophyCase);
             var (metalRaised, firstTrophy) = trophyCase.ApplyClaimMetal(def.Subject, def.Metal);
 
             return new ClaimResult(true, def.Cash, metalRaised, firstTrophy);

@@ -3,6 +3,8 @@ namespace BuildATower
     public sealed class TrophyCase
     {
         readonly TrophyMetal[] _metalBySubject = new TrophyMetal[SubjectCount];
+        readonly string[] _titleBySubject = new string[SubjectCount];
+        readonly string[] _ribbonBySubject = new string[SubjectCount];
 
         static int SubjectCount => System.Enum.GetValues(typeof(ChallengeSubject)).Length;
 
@@ -13,6 +15,19 @@ namespace BuildATower
         }
 
         public TrophyMetal GetMetal(ChallengeSubject subject) => _metalBySubject[(int)subject];
+
+        public string GetTitle(ChallengeSubject subject) => _titleBySubject[(int)subject];
+
+        public string GetRibbon(ChallengeSubject subject) => _ribbonBySubject[(int)subject];
+
+        public void SetMetadata(ChallengeSubject subject, string title, string ribbon)
+        {
+            var index = (int)subject;
+            if (!string.IsNullOrWhiteSpace(title))
+                _titleBySubject[index] = title;
+            if (!string.IsNullOrWhiteSpace(ribbon))
+                _ribbonBySubject[index] = ribbon;
+        }
 
         public bool HasAnyTrophy
         {

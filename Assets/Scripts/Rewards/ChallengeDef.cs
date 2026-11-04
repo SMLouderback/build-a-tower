@@ -10,6 +10,7 @@ namespace BuildATower
         public ChallengeKind Kind { get; }
         public ChallengeCondition Condition { get; }
         public int Cash { get; }
+        public RewardExtrasGrant Extras { get; }
 
         public ChallengeDef(
             string id,
@@ -19,7 +20,8 @@ namespace BuildATower
             TrophyMetal metal,
             ChallengeKind kind,
             ChallengeCondition condition,
-            int cash)
+            int cash,
+            RewardExtrasGrant extras = default)
         {
             Id = id;
             Title = title;
@@ -29,6 +31,7 @@ namespace BuildATower
             Kind = kind;
             Condition = condition;
             Cash = cash;
+            Extras = extras;
         }
     }
 }
