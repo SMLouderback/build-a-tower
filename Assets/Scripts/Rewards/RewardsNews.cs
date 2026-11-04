@@ -16,7 +16,7 @@ namespace BuildATower
             {
                 Category = TowerNewsCategory.Quirk,
                 Priority = 2,
-                Text = $"Contract expired: {def.Title}.",
+                Text = $"Contract expired: {def.Title}. The tower missed the bonus window, but the board has fresh work lined up.",
                 CreatedDayIndex = dayIndex,
                 ExpireDayIndex = dayIndex + 5
             };

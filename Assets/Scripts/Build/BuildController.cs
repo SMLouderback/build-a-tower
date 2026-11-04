@@ -140,6 +140,17 @@ namespace BuildATower
             TowerAudio.Ensure().PlayBuildSfx();
         }
 
+        int ApplyRewardBuildCreditAfterPlacement(TowerSimulation simulation, int chargedCost)
+        {
+            var recordedCost = BuildEconomy.RecordedChargedSpend(chargedCost);
+            var discount = simulation?.Rewards?.Extras.ConsumeBuildCreditForSuccessfulPlacement(recordedCost) ?? 0;
+            if (discount <= 0)
+                return chargedCost;
+
+            Wallet?.Add(discount);
+            return Math.Max(0, chargedCost - discount);
+        }
+
         static void EnsureDayNightSkyOnMainCamera()
         {
             var cam = Camera.main;
@@ -329,7 +340,9 @@ namespace BuildATower
 
             if (view != null)
                 view.PaintRoom(room);
-            GetComponent<TowerSimulation>()?.RecordBuildRewardProgress();
+            var simulation = GetComponent<TowerSimulation>();
+            ApplyRewardBuildCreditAfterPlacement(simulation, scaffoldCost);
+            simulation?.RecordBuildRewardProgress();
             PlayBuildPlaceSfx();
             NotifyGridChanged();
             StateChanged?.Invoke();
@@ -526,7 +539,9 @@ namespace BuildATower
             ClearFloorOneHintIfNeeded();
             view.PaintRoom(room);
             SelectedRoomType = null;
-            GetComponent<TowerSimulation>()?.RecordBuildRewardProgress();
+            var simulation = GetComponent<TowerSimulation>();
+            ApplyRewardBuildCreditAfterPlacement(simulation, cost);
+            simulation?.RecordBuildRewardProgress();
             PlayBuildPlaceSfx();
             RefreshHelpText();
             NotifyGridChanged();
@@ -562,7 +577,9 @@ namespace BuildATower
             if (oldLobby != null)
                 view.ClearRoom(oldLobby);
             view.PaintRoom(lobby);
-            GetComponent<TowerSimulation>()?.RecordBuildRewardProgress();
+            var simulation = GetComponent<TowerSimulation>();
+            ApplyRewardBuildCreditAfterPlacement(simulation, cost);
+            simulation?.RecordBuildRewardProgress();
             RefreshHelpText();
             NotifyGridChanged();
             StateChanged?.Invoke();
@@ -601,7 +618,9 @@ namespace BuildATower
 
             view.PaintRoom(room);
             SelectedRoomType = null;
-            GetComponent<TowerSimulation>()?.RecordBuildRewardProgress();
+            var simulation = GetComponent<TowerSimulation>();
+            ApplyRewardBuildCreditAfterPlacement(simulation, cost);
+            simulation?.RecordBuildRewardProgress();
             PlayBuildPlaceSfx();
             RefreshHelpText();
             NotifyGridChanged();
@@ -630,7 +649,9 @@ namespace BuildATower
 
             view.ClearRoom(oldSkyLobby);
             view.PaintRoom(skyLobby);
-            GetComponent<TowerSimulation>()?.RecordBuildRewardProgress();
+            var simulation = GetComponent<TowerSimulation>();
+            ApplyRewardBuildCreditAfterPlacement(simulation, cost);
+            simulation?.RecordBuildRewardProgress();
             RefreshHelpText();
             NotifyGridChanged();
             StateChanged?.Invoke();
@@ -682,8 +703,9 @@ namespace BuildATower
                 return false;
             }
 
+            var chargedCost = ApplyRewardBuildCreditAfterPlacement(simulation, cost);
             room.RecordConstructionSpend(
-                BuildEconomy.RecordedChargedSpend(cost),
+                BuildEconomy.RecordedChargedSpend(chargedCost),
                 Time.realtimeSinceStartup,
                 isInitialPlace: true);
             ApplyAutoHireOnPlace(room);
@@ -725,9 +747,10 @@ namespace BuildATower
                 return false;
             }
 
+            var chargedCost = ApplyRewardBuildCreditAfterPlacement(simulation, cost);
             if (TryFindRoomById(instanceId, out var currentShaft))
                 currentShaft.RecordConstructionSpend(
-                    BuildEconomy.RecordedChargedSpend(cost),
+                    BuildEconomy.RecordedChargedSpend(chargedCost),
                     Time.realtimeSinceStartup,
                     isInitialPlace: false);
 
@@ -788,9 +811,10 @@ namespace BuildATower
 
             if (growing)
             {
+                var chargedCost = ApplyRewardBuildCreditAfterPlacement(GetComponent<TowerSimulation>(), growCost);
                 if (TryFindRoomById(instanceId, out var currentShaft))
                     currentShaft.RecordConstructionSpend(
-                        BuildEconomy.RecordedChargedSpend(growCost),
+                        BuildEconomy.RecordedChargedSpend(chargedCost),
                         Time.realtimeSinceStartup,
                         isInitialPlace: false);
                 BeginOrRefreshCorrectionWindow(instanceId, oldMin, oldMax);

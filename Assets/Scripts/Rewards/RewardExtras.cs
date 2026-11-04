@@ -105,6 +105,23 @@ namespace BuildATower
             }
         }
 
+        public void AdvanceDay(int dayIndex)
+        {
+            CurrentDayIndex = Math.Max(0, dayIndex);
+            if (DemandExpiresDayIndex >= 0 && CurrentDayIndex >= DemandExpiresDayIndex)
+            {
+                DemandMultiplier = 1f;
+                DemandExpiresDayIndex = -1;
+            }
+        }
+
+        public float ActiveDemandMultiplier(int dayIndex)
+        {
+            if (DemandMultiplier <= 1f || DemandExpiresDayIndex < 0)
+                return 1f;
+            return dayIndex < DemandExpiresDayIndex ? DemandMultiplier : 1f;
+        }
+
         public int ConsumeBuildCreditForSuccessfulPlacement(int roomCost)
         {
             if (roomCost <= 0 || PendingBuildCredit <= 0)

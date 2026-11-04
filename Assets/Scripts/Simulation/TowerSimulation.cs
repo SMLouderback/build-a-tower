@@ -309,8 +309,12 @@ namespace BuildATower
             _shopDemand.BeginDay(
                 _agents.Agents,
                 _stars.CurrentStars,
-                _climate?.SpendMultiplier ?? 1f);
+                EffectiveDemandSpendMultiplier(_clock?.DayIndex ?? 0));
         }
+
+        float EffectiveDemandSpendMultiplier(int dayIndex) =>
+            (_climate?.SpendMultiplier ?? 1f) *
+            (_rewards?.Extras.ActiveDemandMultiplier(dayIndex) ?? 1f);
 
         void OnDisable()
         {
@@ -1018,11 +1022,12 @@ namespace BuildATower
             _macro?.Tick(_clock);
 
             var climateOffset = _climate?.ComfortTierOffset ?? 0;
-            var climateSpendMult = _climate?.SpendMultiplier ?? 1f;
             var livingPulse = _macro?.LivingPulseMult ?? 1f;
             var commercialPulse = _macro?.CommercialPulseMult ?? 1f;
             for (var day = _lastDayIndex + 1; day <= _clock.DayIndex; day++)
             {
+                _rewards?.Extras.AdvanceDay(day);
+                var demandSpendMult = EffectiveDemandSpendMultiplier(day);
                 _shopDemand.ArchiveAndApplyStress(_agents.Agents);
 
                 ApplyStartOfDayCondition(build.Grid);
@@ -1035,7 +1040,7 @@ namespace BuildATower
                     build.Grid,
                     CountHotelGuests(_agents.Agents),
                     _stars.CurrentStars,
-                    climateSpendMult,
+                    demandSpendMult,
                     build.Wallet,
                     _news,
                     _conferenceRng);
@@ -1047,7 +1052,7 @@ namespace BuildATower
                     _stars.CurrentStars,
                     climateOffset,
                     _research,
-                    climateSpendMult,
+                    demandSpendMult,
                     _conference,
                     livingPulse,
                     commercialPulse);
@@ -1055,7 +1060,7 @@ namespace BuildATower
                 _shopDemand.BeginDay(
                     _agents.Agents,
                     _stars.CurrentStars,
-                    climateSpendMult);
+                    demandSpendMult);
 
                 _elevators?.ArchiveDay();
 
@@ -1080,7 +1085,7 @@ namespace BuildATower
                 EnsureMapController()?.NotifyMidnight(
                     day,
                     _climate?.Step ?? MarketClimate.Normal,
-                    climateSpendMult,
+                    demandSpendMult,
                     DemandProxyFromVacancy(build.Grid, _agents),
                     _agents.Population,
                     _economy.LastIncome,

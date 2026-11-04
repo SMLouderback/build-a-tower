@@ -77,7 +77,9 @@ namespace BuildATower
 
             for (var i = 0; i < ready.Count; i++)
             {
-                var result = rewards.TryClaim(ready[i].Id, wallet, ready[i]);
+                var result = extrasOverride == null
+                    ? rewards.TryClaim(ready[i].Id, wallet, ready[i])
+                    : rewards.Ledger.TryClaim(ready[i].Id, wallet, rewards.TrophyCase, extras, ready[i]);
                 if (!result.Ok)
                     continue;
 
