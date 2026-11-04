@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using NUnit.Framework;
 
 namespace BuildATower.Tests
@@ -30,6 +31,57 @@ namespace BuildATower.Tests
             Assert.AreEqual(ChallengeConditionKind.Threshold, def.Condition.Kind);
             Assert.AreEqual(ChallengeMetric.Population, def.Condition.Metric);
             Assert.AreEqual(100, def.Condition.ThresholdValue);
+        }
+
+        [Test]
+        public void Catalog_has_launch_volume_and_contract_pool()
+        {
+            var contractCount = 0;
+
+            foreach (var def in ChallengeCatalog.All)
+            {
+                if (def.Kind == ChallengeKind.Contract)
+                    contractCount++;
+            }
+
+            Assert.GreaterOrEqual(ChallengeCatalog.All.Count, 40);
+            Assert.LessOrEqual(ChallengeCatalog.All.Count, 60);
+            Assert.GreaterOrEqual(contractCount, 8);
+        }
+
+        [Test]
+        public void Catalog_ids_are_unique()
+        {
+            var ids = new HashSet<string>();
+
+            foreach (var def in ChallengeCatalog.All)
+                Assert.IsTrue(ids.Add(def.Id), $"Duplicate challenge id: {def.Id}");
+        }
+
+        [Test]
+        public void Catalog_covers_every_subject()
+        {
+            var subjects = new HashSet<ChallengeSubject>();
+            foreach (var def in ChallengeCatalog.All)
+                subjects.Add(def.Subject);
+
+            foreach (ChallengeSubject subject in System.Enum.GetValues(typeof(ChallengeSubject)))
+                Assert.IsTrue(subjects.Contains(subject), $"Missing challenge subject: {subject}");
+        }
+
+        [Test]
+        public void Catalog_uses_every_trophy_metal()
+        {
+            var metals = new HashSet<TrophyMetal>();
+            foreach (var def in ChallengeCatalog.All)
+                metals.Add(def.Metal);
+
+            foreach (TrophyMetal metal in System.Enum.GetValues(typeof(TrophyMetal)))
+            {
+                if (metal == TrophyMetal.None)
+                    continue;
+                Assert.IsTrue(metals.Contains(metal), $"Missing trophy metal: {metal}");
+            }
         }
     }
 }
