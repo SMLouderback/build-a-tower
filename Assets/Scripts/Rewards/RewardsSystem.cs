@@ -45,25 +45,35 @@ namespace BuildATower
                 trophies = TrophyCase.CaptureSnapshot(),
                 rewardTutorialSeen = RewardTutorialSeen,
                 contracts = Board.CaptureSnapshot(),
-                extras = Extras.CaptureSnapshot()
+                extras = Extras.CaptureSnapshot(),
+                durationStreaks = Tracker.CaptureDurationStreaks()
             };
 
-        public void RestoreSnapshot(RewardsSnapshotV1 snapshot, int dayIndex = 0)
+        public void RestoreSnapshot(
+            RewardsSnapshotV1 snapshot,
+            int dayIndex = 0,
+            RewardsMetrics seedMetrics = default)
         {
             Ledger.RestoreSnapshot(null, null);
             TrophyCase.RestoreSnapshot(null);
             Extras.RestoreSnapshot(null);
+            Tracker.RestoreDurationStreaks(null);
             RewardTutorialSeen = false;
 
             if (IsAbsent(snapshot))
             {
-                Board.RestoreDefault(dayIndex < 0 ? 0 : dayIndex, _catalog, Ledger);
+                Board.RestoreDefault(
+                    dayIndex < 0 ? 0 : dayIndex,
+                    _catalog,
+                    Ledger,
+                    Tracker.WithLifetimeCounters(seedMetrics));
                 return;
             }
 
             Ledger.RestoreSnapshot(snapshot.pendingIds, snapshot.claimedIds);
             TrophyCase.RestoreSnapshot(snapshot.trophies);
             Extras.RestoreSnapshot(snapshot.extras);
+            Tracker.RestoreDurationStreaks(snapshot.durationStreaks);
             RewardTutorialSeen = snapshot.rewardTutorialSeen;
             Board.RestoreSnapshot(snapshot.contracts, _catalog);
         }
@@ -101,10 +111,11 @@ namespace BuildATower
             else
                 ChallengeTracker.EvaluateThresholds(Tracker.WithLifetimeCounters(metrics), Ledger, _catalog);
 
+            var enrichedMetrics = Tracker.WithLifetimeCounters(metrics);
             if (daily)
-                Board.OnDayRolled(Tracker.WithLifetimeCounters(metrics), Ledger, _catalog, news);
+                Board.OnDayRolled(enrichedMetrics, Ledger, _catalog, news);
             else
-                Board.Evaluate(Tracker.WithLifetimeCounters(metrics), Ledger);
+                Board.Evaluate(enrichedMetrics, Ledger, catalog: _catalog);
 
             var newlyPending = 0;
             for (var i = 0; i < _catalog.Count; i++)

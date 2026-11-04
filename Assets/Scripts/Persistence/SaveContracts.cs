@@ -71,6 +71,16 @@ namespace BuildATower
         public bool rewardTutorialSeen;
         public ActiveContractSnapshotV1[] contracts;
         public RewardExtrasSnapshotV1 extras;
+        /// <summary>Optional: null or absent (older saves) restores empty duration-hold streak state.</summary>
+        public DurationStreakSnapshotV1[] durationStreaks;
+    }
+
+    [Serializable]
+    public sealed class DurationStreakSnapshotV1
+    {
+        public string challengeId;
+        public int streak;
+        public int lastDayIndex;
     }
 
     [Serializable]
@@ -91,6 +101,8 @@ namespace BuildATower
         public int startedDayIndex;
         public int expiresDayIndex;
         public int progressValue;
+        /// <summary>Optional: 0 when absent; metric baseline when a counter contract was offered.</summary>
+        public int counterBaseline;
     }
 
     [Serializable]

@@ -71,6 +71,33 @@ namespace BuildATower.Tests
         }
 
         [Test]
+        public void Duration_streak_progress_survives_rewards_snapshot_round_trip()
+        {
+            var rewards = new RewardsSystem();
+            var ledger = rewards.Ledger;
+
+            for (var day = 1; day <= 3; day++)
+                rewards.Tracker.EvaluateDaily(
+                    new RewardsMetrics { EffectiveHealth = 90, DayIndex = day },
+                    ledger,
+                    ChallengeCatalog.All);
+
+            var snapshot = rewards.CaptureSnapshot();
+            var json = JsonUtility.ToJson(snapshot);
+            var roundTripped = JsonUtility.FromJson<RewardsSnapshotV1>(json);
+            var restored = new RewardsSystem();
+            restored.RestoreSnapshot(roundTripped);
+
+            for (var day = 4; day <= 7; day++)
+                restored.Tracker.EvaluateDaily(
+                    new RewardsMetrics { EffectiveHealth = 90, DayIndex = day },
+                    restored.Ledger,
+                    ChallengeCatalog.All);
+
+            Assert.IsTrue(restored.Ledger.IsPending("health_hold_7"));
+        }
+
+        [Test]
         public void Null_or_absent_reward_snapshot_restores_defaults()
         {
             var legacy = JsonUtility.FromJson<TowerSnapshotV1>("{\"schemaVersion\":1}");

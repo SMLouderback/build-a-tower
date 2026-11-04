@@ -124,5 +124,27 @@ namespace BuildATower.Tests
             ChallengeTracker.EvaluateThresholds(WithDemolishLifetime(10), ledger, ChallengeCatalog.All);
             Assert.IsTrue(ledger.IsPending("demolish_10"));
         }
+
+        [Test]
+        public void Duration_streak_snapshot_round_trips_mid_hold_progress()
+        {
+            var tracker = new ChallengeTracker();
+            var ledger = new ClaimLedger();
+
+            for (var day = 1; day <= 3; day++)
+                tracker.EvaluateDaily(WithHealth(90, day), ledger, ChallengeCatalog.All);
+
+            var snapshot = tracker.CaptureDurationStreaks();
+            Assert.IsNotNull(snapshot);
+            Assert.GreaterOrEqual(snapshot.Length, 1);
+
+            var restored = new ChallengeTracker();
+            restored.RestoreDurationStreaks(snapshot);
+
+            for (var day = 4; day <= 7; day++)
+                restored.EvaluateDaily(WithHealth(90, day), ledger, ChallengeCatalog.All);
+
+            Assert.IsTrue(ledger.IsPending("health_hold_7"));
+        }
     }
 }

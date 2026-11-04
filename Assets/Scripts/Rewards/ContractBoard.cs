@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace BuildATower
@@ -8,17 +9,24 @@ namespace BuildATower
         public int StartedDayIndex { get; }
         public int ExpiresDayIndex { get; }
         public int ProgressValue { get; }
+        public int CounterBaseline { get; }
 
-        public ActiveContract(ChallengeDef def, int startedDayIndex, int expiresDayIndex, int progressValue = 0)
+        public ActiveContract(
+            ChallengeDef def,
+            int startedDayIndex,
+            int expiresDayIndex,
+            int progressValue = 0,
+            int counterBaseline = 0)
         {
             Def = def;
             StartedDayIndex = startedDayIndex;
             ExpiresDayIndex = expiresDayIndex;
             ProgressValue = progressValue;
+            CounterBaseline = counterBaseline;
         }
 
         public ActiveContract WithProgress(int progressValue) =>
-            new ActiveContract(Def, StartedDayIndex, ExpiresDayIndex, progressValue);
+            new ActiveContract(Def, StartedDayIndex, ExpiresDayIndex, progressValue, CounterBaseline);
     }
 
     public sealed class ContractBoard
@@ -52,17 +60,22 @@ namespace BuildATower
                     challengeId = contract.Def.Id,
                     startedDayIndex = contract.StartedDayIndex,
                     expiresDayIndex = contract.ExpiresDayIndex,
-                    progressValue = contract.ProgressValue
+                    progressValue = contract.ProgressValue,
+                    counterBaseline = contract.CounterBaseline
                 };
             }
 
             return snapshot;
         }
 
-        public void RestoreDefault(int dayIndex, IReadOnlyList<ChallengeDef> catalog, ClaimLedger ledger)
+        public void RestoreDefault(
+            int dayIndex,
+            IReadOnlyList<ChallengeDef> catalog,
+            ClaimLedger ledger,
+            RewardsMetrics metrics = default)
         {
             _active.Clear();
-            Refresh(dayIndex, catalog, ledger);
+            Refresh(dayIndex, catalog, ledger, metrics);
         }
 
         public void RestoreSnapshot(ActiveContractSnapshotV1[] contracts, IReadOnlyList<ChallengeDef> catalog)
@@ -83,7 +96,8 @@ namespace BuildATower
                     def,
                     snapshot.startedDayIndex,
                     snapshot.expiresDayIndex,
-                    snapshot.progressValue < 0 ? 0 : snapshot.progressValue));
+                    snapshot.progressValue < 0 ? 0 : snapshot.progressValue,
+                    snapshot.counterBaseline < 0 ? 0 : snapshot.counterBaseline));
             }
         }
 
@@ -98,7 +112,11 @@ namespace BuildATower
             return false;
         }
 
-        public int Refresh(int dayIndex, IReadOnlyList<ChallengeDef> catalog, ClaimLedger ledger)
+        public int Refresh(
+            int dayIndex,
+            IReadOnlyList<ChallengeDef> catalog,
+            ClaimLedger ledger,
+            RewardsMetrics metrics = default)
         {
             if (catalog == null || ledger == null)
                 return 0;
@@ -112,38 +130,49 @@ namespace BuildATower
                 if (Contains(def.Id) || ledger.IsPending(def.Id) || ledger.IsClaimed(def.Id))
                     continue;
 
-                _active.Add(new ActiveContract(def, dayIndex, dayIndex + _offerDays));
+                var baseline = CounterBaselineForOffer(def, metrics);
+                _active.Add(new ActiveContract(def, dayIndex, dayIndex + _offerDays, counterBaseline: baseline));
                 added++;
             }
 
             return added;
         }
 
-        public int Evaluate(RewardsMetrics metrics, ClaimLedger ledger, TowerNews news = null)
+        public int Evaluate(
+            RewardsMetrics metrics,
+            ClaimLedger ledger,
+            TowerNews news = null,
+            IReadOnlyList<ChallengeDef> catalog = null)
         {
             if (ledger == null)
                 return 0;
 
             var completed = 0;
+            var slotFreed = false;
             for (var i = _active.Count - 1; i >= 0; i--)
             {
                 var offer = _active[i];
                 if (metrics.DayIndex > offer.ExpiresDayIndex)
                 {
                     _active.RemoveAt(i);
+                    slotFreed = true;
                     news?.Push(RewardsNews.ContractExpired(offer.Def, metrics.DayIndex));
                     continue;
                 }
 
-                var progress = GetProgress(offer.Def.Condition, metrics);
+                var progress = GetProgress(offer.Def.Condition, metrics, offer.CounterBaseline);
                 _active[i] = offer.WithProgress(progress);
                 if (!IsComplete(offer.Def.Condition, progress))
                     continue;
 
                 ledger.EnqueuePending(offer.Def.Id);
                 _active.RemoveAt(i);
+                slotFreed = true;
                 completed++;
             }
+
+            if (slotFreed && catalog != null)
+                Refresh(metrics.DayIndex, catalog, ledger, metrics);
 
             return completed;
         }
@@ -154,16 +183,24 @@ namespace BuildATower
             IReadOnlyList<ChallengeDef> catalog,
             TowerNews news)
         {
-            var completed = Evaluate(metrics, ledger, news);
+            var completed = Evaluate(metrics, ledger, news, catalog);
             if (metrics.DayIndex > 0 && metrics.DayIndex % 7 == 0)
-                Refresh(metrics.DayIndex, catalog, ledger);
+                Refresh(metrics.DayIndex, catalog, ledger, metrics);
             return completed;
         }
 
-        static int GetProgress(ChallengeCondition condition, RewardsMetrics metrics) =>
+        static int CounterBaselineForOffer(ChallengeDef def, RewardsMetrics metrics)
+        {
+            if (def.Condition.Kind != ChallengeConditionKind.Counter)
+                return 0;
+
+            return metrics.GetMetric(def.Condition.Metric);
+        }
+
+        static int GetProgress(ChallengeCondition condition, RewardsMetrics metrics, int counterBaseline) =>
             condition.Kind switch
             {
-                ChallengeConditionKind.Counter => metrics.GetMetric(condition.Metric),
+                ChallengeConditionKind.Counter => Math.Max(0, metrics.GetMetric(condition.Metric) - counterBaseline),
                 _ => metrics.GetMetric(condition.Metric)
             };
 
