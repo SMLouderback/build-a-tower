@@ -80,6 +80,10 @@ namespace BuildATower
         {
             BuildSubgroup.Food => "subgroup_food",
             BuildSubgroup.Retail => "subgroup_retail",
+            BuildSubgroup.HealthSanitation => "subgroup_health",
+            BuildSubgroup.Power => "subgroup_power",
+            BuildSubgroup.Water => "subgroup_water",
+            BuildSubgroup.Services => "subgroup_services",
             _ => null
         };
 
@@ -118,6 +122,7 @@ namespace BuildATower
         Rect _infoRect;
         Rect _popoutRect;
         Rect _topBarRect;
+        Rect _statusBarRect;
         Rect _saveMoneyChipRect;
         Rect _goalsDropdownRect;
         Rect _infoDropdownRect;
@@ -370,6 +375,7 @@ namespace BuildATower
         public bool ContainsGuiPoint(Vector2 guiPoint) =>
             GameSession.HasRestoreFallbackNotice ||
             _topBarRect.Contains(guiPoint) ||
+            _statusBarRect.Contains(guiPoint) ||
             _dockRect.Contains(guiPoint) ||
             _infoRect.Contains(guiPoint) ||
             (_expandedFamily.HasValue && _popoutRect.Contains(guiPoint)) ||
@@ -844,6 +850,7 @@ namespace BuildATower
             DrawBuildDock(iconStyle, title, label);
             DrawFamilyPopout(iconStyle, title, label, stars);
             DrawBuildInfoPanel(title, label, stars, agents, row, btnH);
+            DrawBottomStatusBar(gap, barLabel, population, economyUnlocked);
 
             RewardClaimFx.Advance(Time.unscaledDeltaTime);
             DrawRewardClaimFx(barLabel);
@@ -1358,8 +1365,10 @@ namespace BuildATower
         }
 
         /// <summary>
-        /// Full-width status strip. Returns fixed bar height only — Info/Goals dropdowns overlay
-        /// below the bar and must not push the left build panel down.
+        /// Top command strip: title, difficulty, clock, market climate, weather, stars,
+        /// then the Research, Maps, Rewards, Shops, Elev, Tower, Goals, and Menu buttons.
+        /// Money, population, meters, and speed live in the bottom bar. Returns the command-bar height
+        /// only — dropdowns overlay below it and must not push the build panels down.
         /// </summary>
         float DrawTopInfoBar(
             float gap,
@@ -1388,98 +1397,66 @@ namespace BuildATower
             _mapsLegendRect = Rect.zero;
             GUI.Box(_topBarRect, GUIContent.none);
 
-            var x = gap + pad;
             var y = barTopY + 6f;
             var lineH = 24f;
             var right = gap + barWidth - pad;
-
-            // Speed stays pinned left of the menu cluster. Extra chips yield when the row is full.
-            var clusterW = 56f + 8f; // Menu
-            clusterW += 64f + 8f; // Maps
-            var researchLabs = build.Grid != null ? EconomySystem.CountResearchLabs(build.Grid) : 0;
-            if (researchLabs >= 1)
-                clusterW += 210f + 8f;
             var rewardPending = simulation?.Rewards?.Ledger?.PendingCount ?? 0;
-            var rewardBookUnlocked = RewardBookHud.ShouldShowButton(build.Grid != null && build.Grid.HasLobby, rewardPending);
-            if (rewardBookUnlocked)
-                clusterW += 92f + 8f;
-            if (economyUnlocked) clusterW += 64f + 8f + 56f + 8f;
-            if (goalsUnlocked) clusterW += 64f + 8f + 72f;
-            else if (economyUnlocked) clusterW = Mathf.Max(56f + 8f + 64f + 8f, clusterW - 8f);
+            var rewardBookUnlocked = RewardBookHud.ShouldShowButton(
+                build.Grid != null && build.Grid.HasLobby,
+                rewardPending);
+            var limit = right - CommandClusterWidth(goalsUnlocked, economyUnlocked, rewardBookUnlocked);
 
-            const float speedWidth = 320f;
-            const float speedGap = 12f;
-            var speedSlotRight = right - clusterW - speedGap;
-            var speedX = speedSlotRight - speedWidth;
-            if (speedX < x)
-                speedX = x;
-            var fittedSpeedWidth = Mathf.Max(160f, speedSlotRight - speedX);
-            var speedLimit = speedX - 6f;
+            var x = gap + pad;
+            var titleText = "Build-A-Tower";
+            var titleW = title.CalcSize(new GUIContent(titleText)).x + 8f;
+            GUI.Label(new Rect(x, y, titleW, lineH), titleText, title);
+            x += titleW + 8f;
 
-            void DrawChip(string text, float width, bool trackSaveChip = false)
+            var difficulty = GameSession.Difficulty.ToString();
+            var difficultyW = barLabel.CalcSize(new GUIContent(difficulty)).x + 8f;
+            if (x + difficultyW <= limit)
             {
-                if (x + width > speedLimit)
-                    return;
-                var chip = new Rect(x, y, width, lineH);
-                GUI.Label(chip, text, barLabel);
-                if (trackSaveChip)
-                    _saveMoneyChipRect = chip;
-                x += width + 10f;
+                GUI.Label(new Rect(x, y, difficultyW, lineH), difficulty, barLabel);
+                x += difficultyW + 10f;
             }
-
-            GUI.Label(new Rect(x, y, 100f, lineH), "Build-A-Tower", title);
-            x += 108f;
-            _saveMoneyChipRect = Rect.zero;
-
-            var economy = simulation?.Economy;
-            if (economyUnlocked && economy != null)
-            {
-                DrawChip($"Save ${build.Wallet.Balance:N0}", 118f, trackSaveChip: true);
-                DrawChip(FormatPowerBarText(), 92f);
-                DrawChip(FormatWaterBarText(), 72f);
-                DrawChip(FormatCleanBarText(), 80f);
-                DrawChip($"+${economy.LastIncome:N0}", 88f);
-                DrawChip($"-${economy.LastExpense:N0}", 88f);
-                DrawChip($"Avg ${economy.AverageDailyProfit:N0}/d", 110f);
-            }
-            else
-            {
-                DrawChip($"Save ${build.Wallet.Balance:N0}", 118f, trackSaveChip: true);
-                DrawChip(FormatPowerBarText(), 92f);
-                DrawChip(FormatWaterBarText(), 72f);
-                DrawChip(FormatCleanBarText(), 80f);
-            }
-
-            var starTrackW = 16f * StarSystem.StarSlots;
-            if (x + starTrackW <= speedLimit)
-                x = DrawStarTrack(x, y, lineH, stars != null ? stars.CurrentStars : 0);
 
             var clockText = simulation?.Clock != null ? simulation.Clock.FormatHud() : "—";
-            DrawChip(clockText, 150f);
-
-            // Season tile (icon only; no weather caption). Tooltip names the season.
+            var clockW = barLabel.CalcSize(new GUIContent(clockText)).x + 8f;
+            if (x + clockW <= limit)
             {
-                const float seasonTile = 34f; // fits the 36px bar with a 1px inset
-                if (x + seasonTile <= speedLimit)
-                {
-                    var season = SeasonHudArt.Resolve(simulation);
-                    var tileRect = new Rect(x, barTopY + (barH - seasonTile) * 0.5f, seasonTile, seasonTile);
-                    if (SeasonHudArt.TryGetTexture(season, out var seasonTex) && seasonTex != null)
-                        GUI.DrawTexture(tileRect, seasonTex, ScaleMode.StretchToFill, true);
-                    GUI.Label(tileRect, new GUIContent(string.Empty, SeasonHudArt.DisplayName(season)));
-                    x += seasonTile + 10f;
-                }
+                GUI.Label(new Rect(x, y, clockW, lineH), clockText, barLabel);
+                x += clockW + 10f;
             }
 
             var climateName = simulation?.Climate?.Name ?? "—";
-            DrawChip(climateName, 78f);
+            const float hudTile = 24f;
+            var climateW = barLabel.CalcSize(new GUIContent(climateName)).x + 4f;
+            if (x + hudTile + 4f + climateW <= limit)
+            {
+                var tileY = y + (lineH - hudTile) * 0.5f;
+                var marketRect = new Rect(x, tileY, hudTile, hudTile);
+                if (MarketHudArt.TryGetTexture(out var marketTex) && marketTex != null)
+                    GUI.DrawTexture(marketRect, marketTex, ScaleMode.ScaleToFit, true);
+                GUI.Label(marketRect, new GUIContent(string.Empty, "Financial climate"));
+                x += hudTile + 4f;
+                GUI.Label(new Rect(x, y, climateW, lineH), climateName, barLabel);
+                x += climateW + 10f;
+            }
 
-            DrawChip(GameSession.Difficulty.ToString(), 88f);
-            var healthText = FormatHealthBarText();
-            var healthW = Mathf.Min(240f, barLabel.CalcSize(new GUIContent(healthText)).x + 12f);
-            DrawChip(healthText, healthW);
+            if (x + hudTile <= limit)
+            {
+                var season = SeasonHudArt.Resolve(simulation);
+                var tileY = y + (lineH - hudTile) * 0.5f;
+                var seasonRect = new Rect(x, tileY, hudTile, hudTile);
+                if (SeasonHudArt.TryGetTexture(season, out var seasonTex) && seasonTex != null)
+                    GUI.DrawTexture(seasonRect, seasonTex, ScaleMode.ScaleToFit, true);
+                GUI.Label(seasonRect, new GUIContent(string.Empty, SeasonHudArt.DisplayName(season)));
+                x += hudTile + 10f;
+            }
 
-            DrawTimeSpeedButtons(speedX, y, fittedSpeedWidth, lineH);
+            var starTrackW = 16f * StarSystem.StarSlots;
+            if (x + starTrackW <= limit)
+                DrawStarTrack(x, y, lineH, stars != null ? stars.CurrentStars : 0);
 
             DrawTopInfoButtons(
                 right,
@@ -1501,6 +1478,82 @@ namespace BuildATower
                 economyUnlocked);
 
             return barH;
+        }
+
+        float CommandClusterWidth(bool goalsUnlocked, bool economyUnlocked, bool rewardBookUnlocked)
+        {
+            var width = 56f + 8f + 64f + 12f;
+            if (build != null && build.Grid != null && EconomySystem.CountResearchLabs(build.Grid) >= 1)
+                width += 210f + 8f;
+            if (rewardBookUnlocked)
+                width += 92f + 8f;
+            if (economyUnlocked)
+                width += 64f + 8f + 56f + 8f;
+            if (goalsUnlocked)
+                width += 64f + 8f + 72f;
+            return width;
+        }
+
+        /// <summary>
+        /// Money, population, power, water, cleanliness, health, and speed along the bottom edge.
+        /// </summary>
+        void DrawBottomStatusBar(
+            float gap,
+            GUIStyle barLabel,
+            int population,
+            bool economyUnlocked)
+        {
+            var economy = simulation?.Economy;
+            var showMoney = economyUnlocked && economy != null;
+            var barH = showMoney ? 62f : 36f;
+            const float pad = 8f;
+            const float lineH = 24f;
+            const float speedWidth = 320f;
+            var barWidth = Screen.width - gap * 2f;
+            var barTopY = Screen.height - gap - barH;
+            _statusBarRect = new Rect(gap, barTopY, barWidth, barH);
+            GUI.Box(_statusBarRect, GUIContent.none);
+
+            var speedX = _statusBarRect.xMax - pad - speedWidth;
+            if (speedX < _statusBarRect.x + pad)
+                speedX = _statusBarRect.x + pad;
+            var fittedSpeedWidth = Mathf.Max(160f, _statusBarRect.xMax - pad - speedX);
+            var limit = speedX - 8f;
+
+            void DrawChip(ref float x, float y, string text, float width, bool trackSaveChip = false)
+            {
+                if (x + width > limit)
+                    return;
+                var chip = new Rect(x, y, width, lineH);
+                GUI.Label(chip, text, barLabel);
+                if (trackSaveChip)
+                    _saveMoneyChipRect = chip;
+                x += width + 10f;
+            }
+
+            _saveMoneyChipRect = Rect.zero;
+            var row1 = barTopY + 6f;
+            var x = _statusBarRect.x + pad;
+
+            DrawChip(ref x, row1, $"Save ${build.Wallet.Balance:N0}", 118f, trackSaveChip: true);
+            DrawChip(ref x, row1, $"Pop {population:N0}", 78f);
+            DrawChip(ref x, row1, FormatPowerBarText(), 92f);
+            DrawChip(ref x, row1, FormatWaterBarText(), 72f);
+            DrawChip(ref x, row1, FormatCleanBarText(), 80f);
+            var healthText = FormatHealthBarText();
+            var healthW = Mathf.Min(220f, barLabel.CalcSize(new GUIContent(healthText)).x + 12f);
+            DrawChip(ref x, row1, healthText, healthW);
+
+            if (showMoney)
+            {
+                x = _statusBarRect.x + pad;
+                var row2 = row1 + lineH + 2f;
+                DrawChip(ref x, row2, $"+${economy.LastIncome:N0}", 88f);
+                DrawChip(ref x, row2, $"-${economy.LastExpense:N0}", 88f);
+                DrawChip(ref x, row2, $"Avg ${economy.AverageDailyProfit:N0}/d", 110f);
+            }
+
+            DrawTimeSpeedButtons(speedX, barTopY + (barH - lineH) * 0.5f, fittedSpeedWidth, lineH);
         }
 
         void DrawTopInfoButtons(
@@ -2873,7 +2926,7 @@ namespace BuildATower
                 return;
             }
 
-            if (active.Family == BuildFamily.Shops &&
+            if (FamilyUsesSubgroups(active.Family) &&
                 !_expandedShopSubgroup.HasValue &&
                 active.Subgroups.Count > 0)
                 _expandedShopSubgroup = active.Subgroups[0].Subgroup;
@@ -2892,7 +2945,7 @@ namespace BuildATower
             GUI.Label(new Rect(cx, cy, inner, 20f), active.Label, title);
             cy += 24f;
 
-            if (active.Family == BuildFamily.Shops)
+            if (FamilyUsesSubgroups(active.Family))
             {
                 cy = DrawIconRow(
                     cy,
@@ -2907,7 +2960,7 @@ namespace BuildATower
                                 MenuIconIdForSubgroup(subgroup.Subgroup),
                                 SubgroupGlyph(subgroup.Subgroup),
                                 $"{active.Label} -> {subgroup.Label}",
-                                FamilyColor(BuildFamily.Shops),
+                                FamilyColor(active.Family),
                                 selected,
                                 enabled: true,
                                 iconStyle))
@@ -2926,6 +2979,9 @@ namespace BuildATower
                 DrawRoomIconGrid(cx, cy, iconStyle, active.Rooms, stars);
             }
         }
+
+        static bool FamilyUsesSubgroups(BuildFamily family) =>
+            family == BuildFamily.Shops || family == BuildFamily.Utility;
 
         void DrawBuildInfoPanel(
             GUIStyle title,
@@ -3178,10 +3234,11 @@ namespace BuildATower
 
         static Vector2 PopoutSize(BuildCatalogFamily active)
         {
-            var count = active.Family == BuildFamily.Shops
+            var usesSubgroups = FamilyUsesSubgroups(active.Family);
+            var count = usesSubgroups
                 ? active.Subgroups.Count
                 : active.Rooms.Count;
-            if (active.Family == BuildFamily.Shops)
+            if (usesSubgroups)
             {
                 var maxRooms = 0;
                 foreach (var subgroup in active.Subgroups)
@@ -3499,7 +3556,10 @@ namespace BuildATower
                 wordWrap = true
             };
             style.normal.textColor = TutorialHudChrome.TitleText;
-            var rect = new Rect(Screen.width * 0.5f - 220f, Screen.height - 56f, 440f, 28f);
+            var hintAboveStatus = _statusBarRect.height > 1f
+                ? _statusBarRect.y - 36f
+                : Screen.height - 56f;
+            var rect = new Rect(Screen.width * 0.5f - 220f, hintAboveStatus, 440f, 28f);
             _tutorialWorldHintRect = rect;
             EnsureWhiteTex();
             GUI.DrawTexture(
@@ -3886,6 +3946,10 @@ namespace BuildATower
         {
             BuildSubgroup.Food => "Fd",
             BuildSubgroup.Retail => "Rt",
+            BuildSubgroup.HealthSanitation => "HS",
+            BuildSubgroup.Power => "Pw",
+            BuildSubgroup.Water => "Wa",
+            BuildSubgroup.Services => "Sv",
             _ => "?"
         };
 
