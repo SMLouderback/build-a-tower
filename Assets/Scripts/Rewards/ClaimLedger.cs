@@ -59,6 +59,28 @@ namespace BuildATower
 
         public bool IsClaimed(string id) => _claimed.Contains(id);
 
+        public string[] CapturePendingIds() => _pending.ToArray();
+
+        public string[] CaptureClaimedIds() => _claimed.ToArray();
+
+        public void RestoreSnapshot(string[] pendingIds, string[] claimedIds)
+        {
+            _pending.Clear();
+            _claimed.Clear();
+
+            AddAll(_claimed, claimedIds);
+            if (pendingIds == null)
+                return;
+
+            for (var i = 0; i < pendingIds.Length; i++)
+            {
+                var id = pendingIds[i];
+                if (string.IsNullOrEmpty(id) || _claimed.Contains(id))
+                    continue;
+                _pending.Add(id);
+            }
+        }
+
         public void EnqueuePending(string id)
         {
             if (string.IsNullOrEmpty(id))
@@ -120,5 +142,17 @@ namespace BuildATower
 
         static ChallengeDef? ResolveFromCatalog(string id) =>
             ChallengeCatalog.TryGet(id, out var def) ? def : (ChallengeDef?)null;
+
+        static void AddAll(HashSet<string> target, string[] ids)
+        {
+            if (ids == null)
+                return;
+
+            for (var i = 0; i < ids.Length; i++)
+            {
+                if (!string.IsNullOrEmpty(ids[i]))
+                    target.Add(ids[i]);
+            }
+        }
     }
 }

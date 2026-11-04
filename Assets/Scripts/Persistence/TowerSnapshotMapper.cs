@@ -70,6 +70,7 @@ namespace BuildATower
                     present = true,
                     percent = simulation.Cleanliness
                 },
+                rewards = simulation.Rewards?.CaptureSnapshot(),
                 rooms = build.Grid.CaptureRooms(Time.realtimeSinceStartup).ToArray()
             };
         }

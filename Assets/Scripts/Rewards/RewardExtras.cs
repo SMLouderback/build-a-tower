@@ -59,6 +59,35 @@ namespace BuildATower
         public int DemandExpiresDayIndex { get; private set; }
         public int CrewDays { get; private set; }
 
+        public RewardExtrasSnapshotV1 CaptureSnapshot() =>
+            new RewardExtrasSnapshotV1
+            {
+                currentDayIndex = CurrentDayIndex,
+                pendingBuildCredit = PendingBuildCredit,
+                demandMultiplier = DemandMultiplier,
+                demandExpiresDayIndex = DemandExpiresDayIndex,
+                crewDays = CrewDays
+            };
+
+        public void RestoreSnapshot(RewardExtrasSnapshotV1 snapshot)
+        {
+            if (snapshot == null)
+            {
+                CurrentDayIndex = 0;
+                PendingBuildCredit = 0;
+                DemandMultiplier = 1f;
+                DemandExpiresDayIndex = -1;
+                CrewDays = 0;
+                return;
+            }
+
+            CurrentDayIndex = Math.Max(0, snapshot.currentDayIndex);
+            PendingBuildCredit = Math.Max(0, snapshot.pendingBuildCredit);
+            DemandMultiplier = snapshot.demandMultiplier > 0f ? snapshot.demandMultiplier : 1f;
+            DemandExpiresDayIndex = snapshot.demandExpiresDayIndex;
+            CrewDays = Math.Max(0, snapshot.crewDays);
+        }
+
         public void OnClaim(ChallengeDef def, TrophyCase trophyCase)
         {
             var grant = def.Extras;

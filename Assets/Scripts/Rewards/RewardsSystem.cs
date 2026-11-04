@@ -11,12 +11,14 @@ namespace BuildATower
             ClaimLedger ledger = null,
             TrophyCase trophyCase = null,
             ContractBoard board = null,
-            IReadOnlyList<ChallengeDef> catalog = null)
+            IReadOnlyList<ChallengeDef> catalog = null,
+            RewardExtras extras = null)
         {
             Tracker = tracker ?? new ChallengeTracker();
             Ledger = ledger ?? new ClaimLedger();
             TrophyCase = trophyCase ?? new TrophyCase();
             _catalog = catalog ?? ChallengeCatalog.All;
+            Extras = extras ?? new RewardExtras();
             Board = board ?? new ContractBoard();
             Board.Refresh(0, _catalog, Ledger);
         }
@@ -25,7 +27,43 @@ namespace BuildATower
         public ClaimLedger Ledger { get; }
         public TrophyCase TrophyCase { get; }
         public ContractBoard Board { get; }
+        public RewardExtras Extras { get; }
         public bool RewardTutorialSeen { get; set; }
+
+        public static bool IsAbsent(RewardsSnapshotV1 snapshot) =>
+            snapshot == null || !snapshot.present;
+
+        public RewardsSnapshotV1 CaptureSnapshot() =>
+            new RewardsSnapshotV1
+            {
+                present = true,
+                pendingIds = Ledger.CapturePendingIds(),
+                claimedIds = Ledger.CaptureClaimedIds(),
+                trophies = TrophyCase.CaptureSnapshot(),
+                rewardTutorialSeen = RewardTutorialSeen,
+                contracts = Board.CaptureSnapshot(),
+                extras = Extras.CaptureSnapshot()
+            };
+
+        public void RestoreSnapshot(RewardsSnapshotV1 snapshot)
+        {
+            Ledger.RestoreSnapshot(null, null);
+            TrophyCase.RestoreSnapshot(null);
+            Extras.RestoreSnapshot(null);
+            RewardTutorialSeen = false;
+
+            if (IsAbsent(snapshot))
+            {
+                Board.RestoreDefault(0, _catalog, Ledger);
+                return;
+            }
+
+            Ledger.RestoreSnapshot(snapshot.pendingIds, snapshot.claimedIds);
+            TrophyCase.RestoreSnapshot(snapshot.trophies);
+            Extras.RestoreSnapshot(snapshot.extras);
+            RewardTutorialSeen = snapshot.rewardTutorialSeen;
+            Board.RestoreSnapshot(snapshot.contracts, _catalog);
+        }
 
         public int Evaluate(RewardsMetrics metrics, TowerNews news) =>
             EvaluateInternal(metrics, news, daily: false);

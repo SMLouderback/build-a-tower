@@ -56,7 +56,51 @@ namespace BuildATower
         public HealthSnapshotV1 health;
         /// <summary>Optional: null or absent (older saves) restores 100% cleanliness. A saved 0 stays 0.</summary>
         public CleanlinessSnapshotV1 cleanliness;
+        /// <summary>Optional: null or absent (older saves) restores a fresh rewards state.</summary>
+        public RewardsSnapshotV1 rewards;
         public RoomSnapshotV1[] rooms;
+    }
+
+    [Serializable]
+    public sealed class RewardsSnapshotV1
+    {
+        public bool present;
+        public string[] pendingIds;
+        public string[] claimedIds;
+        public TrophySnapshotV1[] trophies;
+        public bool rewardTutorialSeen;
+        public ActiveContractSnapshotV1[] contracts;
+        public RewardExtrasSnapshotV1 extras;
+    }
+
+    [Serializable]
+    public sealed class TrophySnapshotV1
+    {
+        /// <summary><see cref="ChallengeSubject"/> enum name.</summary>
+        public string subject;
+        /// <summary><see cref="TrophyMetal"/> enum name.</summary>
+        public string metal;
+        public string title;
+        public string ribbon;
+    }
+
+    [Serializable]
+    public sealed class ActiveContractSnapshotV1
+    {
+        public string challengeId;
+        public int startedDayIndex;
+        public int expiresDayIndex;
+        public int progressValue;
+    }
+
+    [Serializable]
+    public sealed class RewardExtrasSnapshotV1
+    {
+        public int currentDayIndex;
+        public int pendingBuildCredit;
+        public float demandMultiplier;
+        public int demandExpiresDayIndex;
+        public int crewDays;
     }
 
     [Serializable]

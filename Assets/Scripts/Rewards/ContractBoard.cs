@@ -41,6 +41,52 @@ namespace BuildATower
 
         public IReadOnlyList<ActiveContract> Active => _active;
 
+        public ActiveContractSnapshotV1[] CaptureSnapshot()
+        {
+            var snapshot = new ActiveContractSnapshotV1[_active.Count];
+            for (var i = 0; i < _active.Count; i++)
+            {
+                var contract = _active[i];
+                snapshot[i] = new ActiveContractSnapshotV1
+                {
+                    challengeId = contract.Def.Id,
+                    startedDayIndex = contract.StartedDayIndex,
+                    expiresDayIndex = contract.ExpiresDayIndex,
+                    progressValue = contract.ProgressValue
+                };
+            }
+
+            return snapshot;
+        }
+
+        public void RestoreDefault(int dayIndex, IReadOnlyList<ChallengeDef> catalog, ClaimLedger ledger)
+        {
+            _active.Clear();
+            Refresh(dayIndex, catalog, ledger);
+        }
+
+        public void RestoreSnapshot(ActiveContractSnapshotV1[] contracts, IReadOnlyList<ChallengeDef> catalog)
+        {
+            _active.Clear();
+            if (contracts == null || catalog == null)
+                return;
+
+            for (var i = 0; i < contracts.Length; i++)
+            {
+                var snapshot = contracts[i];
+                if (snapshot == null || string.IsNullOrEmpty(snapshot.challengeId))
+                    continue;
+                if (!TryFindContract(catalog, snapshot.challengeId, out var def))
+                    continue;
+
+                _active.Add(new ActiveContract(
+                    def,
+                    snapshot.startedDayIndex,
+                    snapshot.expiresDayIndex,
+                    snapshot.progressValue < 0 ? 0 : snapshot.progressValue));
+            }
+        }
+
         public bool Contains(string id)
         {
             for (var i = 0; i < _active.Count; i++)
@@ -129,5 +175,18 @@ namespace BuildATower
                 ChallengeConditionKind.DurationHold => progress >= condition.HoldDays,
                 _ => false
             };
+
+        static bool TryFindContract(IReadOnlyList<ChallengeDef> catalog, string id, out ChallengeDef def)
+        {
+            for (var i = 0; i < catalog.Count; i++)
+            {
+                def = catalog[i];
+                if (def.Kind == ChallengeKind.Contract && def.Id == id)
+                    return true;
+            }
+
+            def = default;
+            return false;
+        }
     }
 }
