@@ -91,6 +91,7 @@ namespace BuildATower
         WeatherSystem _weather;
         HealthSystem _health;
         MetroSystem _metro;
+        RewardsSystem _rewards;
         TutorialDirector _tutorialDirector;
         bool _tutorialBootAttempted;
         readonly System.Random _climateRng = new();
@@ -115,6 +116,7 @@ namespace BuildATower
         public WeatherSystem Weather => _weather;
         public HealthSystem Health => _health;
         public MetroSystem Metro => _metro;
+        public RewardsSystem Rewards => _rewards;
         public StairsPathfinder Pathfinder => _pathfinder;
         public ElevatorSystem Elevators => _elevators;
         public TransitRouter Router => _router;
@@ -174,6 +176,7 @@ namespace BuildATower
                 _weather = new WeatherSystem();
                 _health = new HealthSystem();
                 _metro = new MetroSystem();
+                _rewards = new RewardsSystem();
                 _agents = new AgentSystem(
                     _router,
                     shopDemand: _shopDemand,
@@ -196,6 +199,7 @@ namespace BuildATower
             else
             {
                 _metro ??= new MetroSystem();
+                _rewards ??= new RewardsSystem();
                 _agents?.SetMetro(_metro);
                 _agents?.SetHealth(_health);
             }
@@ -505,6 +509,7 @@ namespace BuildATower
             if (build == null || build.Grid == null || _agents == null) return;
             _stars?.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
             DrainStarCelebrationsAndSyncArt();
+            _rewards?.Evaluate(CollectRewardsMetrics(_clock?.DayIndex ?? 0), _news);
         }
 
         /// <summary>Recomputes plant pool assignment for every drawing room.</summary>
@@ -1054,6 +1059,7 @@ namespace BuildATower
                 else
                     _stars.TryPromote(build.Grid, _agents.AverageStress, _agents.Population);
                 DrainStarCelebrationsAndSyncArt();
+                _rewards?.OnDayRolled(CollectRewardsMetrics(day), _news);
 
                 EnsureMapController()?.NotifyMidnight(
                     day,
@@ -1068,6 +1074,37 @@ namespace BuildATower
             }
 
             _lastDayIndex = _clock.DayIndex;
+        }
+
+        RewardsMetrics CollectRewardsMetrics(int dayIndex)
+        {
+            var metrics = new RewardsMetrics
+            {
+                Population = _agents?.Population ?? 0,
+                Stars = _stars?.CurrentStars ?? 0,
+                EffectiveHealth = Mathf.RoundToInt(100f - (_health?.AverageIllness ?? 0f)),
+                EffectiveCleanliness = Mathf.RoundToInt(Cleanliness),
+                DayIndex = dayIndex,
+                QuarantineEver = _health?.Quarantined ?? false
+            };
+
+            var grid = build?.Grid;
+            if (grid?.Rooms == null)
+                return metrics;
+
+            metrics.RoomCount = grid.Rooms.Count;
+            for (var i = 0; i < grid.Rooms.Count; i++)
+            {
+                var room = grid.Rooms[i];
+                if (room?.Type == null) continue;
+                var cells = room.Size.x * room.Size.y;
+                if (room.Type.isElevatorShaft)
+                    metrics.ElevatorShaftCells += cells;
+                if (room.Type.isStairs)
+                    metrics.StairCells += cells;
+            }
+
+            return metrics;
         }
 
         void PushOpsAndQuirkNews(int dayIndex, TowerGrid grid, float averageStress, float averageCrime)

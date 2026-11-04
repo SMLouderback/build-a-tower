@@ -53,6 +53,8 @@ namespace BuildATower
         readonly HashSet<string> _pending = new HashSet<string>();
         readonly HashSet<string> _claimed = new HashSet<string>();
 
+        public int PendingCount => _pending.Count;
+
         public bool IsPending(string id) => _pending.Contains(id);
 
         public bool IsClaimed(string id) => _claimed.Contains(id);
