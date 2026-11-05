@@ -172,6 +172,7 @@ namespace BuildATower
         int _researchPickLevel = 1;
         RewardBookTab _rewardBookTab = RewardBookTab.Ready;
         readonly RewardTutorialGate _rewardTutorialGate = new();
+        readonly TrophyRoomGalleryModal _trophyGalleryModal = new();
 
         Texture2D _whiteTex;
         string _hoverTooltip;
@@ -356,6 +357,7 @@ namespace BuildATower
                 return IsEscPauseOpen
                        || GameSession.HasRestoreFallbackNotice
                        || _rewardTutorialGate.IsModalOpen
+                       || _trophyGalleryModal.BlocksWorld
                        || (celeb != null && celeb.IsActive);
             }
         }
@@ -371,8 +373,11 @@ namespace BuildATower
         public TutorialDirector TutorialDirector =>
             simulation != null ? simulation.TutorialDirector : null;
 
-        /// <summary>True when the GUI point (IMGUI / flipped Y) is over the top bar, info/goals/maps dropdown, graph, or side panel.</summary>
+        public void OpenTrophyGallery() => _trophyGalleryModal.Open();
+
+        /// <summary>True when the GUI point (IMGUI / flipped Y) is over the top bar, info/goals/maps dropdown, graph, side panel, or an open trophy gallery.</summary>
         public bool ContainsGuiPoint(Vector2 guiPoint) =>
+            _trophyGalleryModal.BlocksWorld ||
             GameSession.HasRestoreFallbackNotice ||
             _topBarRect.Contains(guiPoint) ||
             _statusBarRect.Contains(guiPoint) ||
@@ -581,6 +586,8 @@ namespace BuildATower
             if (celeb != null && celeb.IsModalOpen)
                 return;
             if (_rewardTutorialGate.IsModalOpen)
+                return;
+            if (_trophyGalleryModal.HandleEsc())
                 return;
 
             HandlePauseEscape();
@@ -796,6 +803,10 @@ namespace BuildATower
             title.normal.textColor = new Color(1f, 0.86f, 0.47f);
             label.normal.textColor = Color.white;
 
+            // First pass consumes clicks before dock/info controls; the pass at the
+            // end of OnGUI paints the same panel on top.
+            DrawTrophyGalleryModal(title, label);
+
             var iconStyle = new GUIStyle(GUI.skin.button)
             {
                 fontSize = 11,
@@ -862,6 +873,7 @@ namespace BuildATower
             DrawHoverTooltip(label);
             DrawRestoreFallbackOverlay(title, label);
             DrawPauseOverlay(title, label);
+            DrawTrophyGalleryModal(title, label);
         }
 
         void EnterPause()
@@ -870,6 +882,7 @@ namespace BuildATower
             // Continue-only while celebration modal owns pause; skip Esc pause overlay.
             if (ResolveCelebration()?.IsModalOpen == true) return;
             if (_rewardTutorialGate.IsModalOpen) return;
+            if (_trophyGalleryModal.IsOpen) return;
             if (simulation?.Clock != null)
             {
                 _speedBeforePause = simulation.Clock.MinutesPerRealSecond;
@@ -1891,6 +1904,56 @@ namespace BuildATower
                 _rewardBookTab = RewardBookTab.Trophies;
                 _rewardTutorialGate.Dismiss(simulation?.Rewards, ApplyRewardTutorialSpeed);
             }
+        }
+
+        void DrawTrophyGalleryModal(GUIStyle title, GUIStyle label)
+        {
+            if (!_trophyGalleryModal.IsOpen)
+                return;
+
+            EnsureWhiteTex();
+            var shade = GUI.color;
+            GUI.color = new Color(0.05f, 0.04f, 0.03f, 0.62f);
+            GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _whiteTex);
+            GUI.color = shade;
+
+            const float panelW = 720f;
+            const float panelH = 420f;
+            var panel = new Rect(
+                (Screen.width - panelW) * 0.5f,
+                (Screen.height - panelH) * 0.5f,
+                panelW,
+                panelH);
+            GUI.Box(panel, GUIContent.none);
+
+            var cx = panel.x + 20f;
+            var cy = panel.y + 16f;
+            var inner = panelW - 40f;
+            GUI.Label(new Rect(cx, cy, inner - 100f, 28f), "Trophy Room", title);
+            if (GUI.Button(new Rect(panel.xMax - 108f, panel.y + 16f, 88f, 28f), "Close"))
+                _trophyGalleryModal.Close();
+
+            cy += 44f;
+            var pedestals = TrophyRoomDisplay.BuildPedestals(simulation?.Rewards?.TrophyCase);
+            const float rowH = 22f;
+            var colW = (inner - 16f) * 0.5f;
+            for (var i = 0; i < pedestals.Count; i++)
+            {
+                var slot = pedestals[i];
+                var metal = slot.HasTrophy ? slot.Metal.ToString() : "empty";
+                var col = i % 2;
+                var rowIndex = i / 2;
+                GUI.Label(
+                    new Rect(cx + col * (colW + 16f), cy + rowIndex * rowH, colW, rowH),
+                    $"{slot.Subject} - {metal}",
+                    label);
+            }
+
+            var pointer = Event.current;
+            if (pointer == null || pointer.type == EventType.Used || GUIUtility.hotControl != 0)
+                return;
+            if (pointer.type is EventType.MouseDown or EventType.MouseUp or EventType.MouseDrag or EventType.ScrollWheel)
+                pointer.Use();
         }
 
         void DrawResearchDropdown(
@@ -3121,6 +3184,13 @@ namespace BuildATower
                 cy += row * 2f;
             }
 
+            if (build.SelectedRoom?.Type?.id == TrophyRoomDisplay.RoomTypeId)
+            {
+                if (GUI.Button(new Rect(cx, cy, inner, btnH), "View trophies"))
+                    OpenTrophyGallery();
+                cy += btnH + 4f;
+            }
+
             var elevStatus = build.GetElevatorStatusText();
             if (elevStatus == null) return;
 
@@ -3330,6 +3400,7 @@ namespace BuildATower
             if (_pauseUi != PauseUiState.Playing) return;
             if (GameSession.HasRestoreFallbackNotice) return;
             if (_rewardTutorialGate.IsModalOpen) return;
+            if (_trophyGalleryModal.IsOpen) return;
 
             var highlight = director.GetHighlight();
             var intro = director.AwaitingContinue;
@@ -4429,6 +4500,7 @@ namespace BuildATower
             // Celebration pause snapshot must stay intact until Continue.
             if (ResolveCelebration()?.IsModalOpen == true) return;
             if (_rewardTutorialGate.IsModalOpen) return;
+            if (_trophyGalleryModal.IsOpen) return;
 
             // minutesPerRealSecond: 360x ≈ 6 game hours/sec; 1d = 1440 = one game day/sec.
             var labels = new[] { "||", "1x", "5x", "60x", "360x", "1d" };
