@@ -16,5 +16,14 @@ namespace BuildATower
             Close();
             return true;
         }
+
+        /// <summary>Mirrors HUD <c>BlocksWorldInput</c> so EditMode can lock the gallery clause.</summary>
+        public static bool ComposeBlocksWorld(
+            bool escPause,
+            bool restoreNotice,
+            bool rewardTutorial,
+            bool gallery,
+            bool celebrationActive) =>
+            escPause || restoreNotice || rewardTutorial || gallery || celebrationActive;
     }
 }

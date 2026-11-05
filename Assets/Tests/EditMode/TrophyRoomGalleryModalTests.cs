@@ -32,13 +32,45 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void Open_does_not_require_or_invoke_pause_callbacks()
+        public void Open_Close_API_has_no_pause_or_speed_members()
         {
-            // Modal API has no pause parameters; constructing/opening must not throw.
+            var modalType = typeof(TrophyRoomGalleryModal);
+            foreach (var method in modalType.GetMethods(
+                         System.Reflection.BindingFlags.Instance
+                         | System.Reflection.BindingFlags.Public
+                         | System.Reflection.BindingFlags.DeclaredOnly))
+            {
+                var name = method.Name;
+                Assert.IsFalse(
+                    name.IndexOf("Pause", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.IndexOf("Speed", System.StringComparison.OrdinalIgnoreCase) >= 0,
+                    $"Unexpected pause/speed API on gallery modal: {name}");
+            }
+
             var modal = new TrophyRoomGalleryModal();
             modal.Open();
+            Assert.IsTrue(modal.IsOpen);
             modal.Close();
-            Assert.Pass();
+            Assert.IsFalse(modal.IsOpen);
+        }
+
+        [Test]
+        public void BlocksWorldInput_composition_includes_gallery_flag()
+        {
+            Assert.IsTrue(
+                TrophyRoomGalleryModal.ComposeBlocksWorld(
+                    escPause: false,
+                    restoreNotice: false,
+                    rewardTutorial: false,
+                    gallery: true,
+                    celebrationActive: false));
+            Assert.IsFalse(
+                TrophyRoomGalleryModal.ComposeBlocksWorld(
+                    escPause: false,
+                    restoreNotice: false,
+                    rewardTutorial: false,
+                    gallery: false,
+                    celebrationActive: false));
         }
     }
 }

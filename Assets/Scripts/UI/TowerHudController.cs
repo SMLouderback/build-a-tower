@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -354,11 +354,12 @@ namespace BuildATower
             get
             {
                 var celeb = ResolveCelebration();
-                return IsEscPauseOpen
-                       || GameSession.HasRestoreFallbackNotice
-                       || _rewardTutorialGate.IsModalOpen
-                       || _trophyGalleryModal.BlocksWorld
-                       || (celeb != null && celeb.IsActive);
+                return TrophyRoomGalleryModal.ComposeBlocksWorld(
+                    IsEscPauseOpen,
+                    GameSession.HasRestoreFallbackNotice,
+                    _rewardTutorialGate.IsModalOpen,
+                    _trophyGalleryModal.BlocksWorld,
+                    celeb != null && celeb.IsActive);
             }
         }
 
@@ -580,14 +581,16 @@ namespace BuildATower
             if (build == null) return;
             if (!Input.GetKeyDown(KeyCode.Escape)) return;
 
+            // Gallery closes on Esc even under celebration / reward-tutorial overlays.
+            if (_trophyGalleryModal.HandleEsc())
+                return;
+
             // Continue-only while celebration modal is showing; still allow Esc to close a
             // pre-existing pause menu when celebrations are only queued and waiting.
             var celeb = ResolveCelebration();
             if (celeb != null && celeb.IsModalOpen)
                 return;
             if (_rewardTutorialGate.IsModalOpen)
-                return;
-            if (_trophyGalleryModal.HandleEsc())
                 return;
 
             HandlePauseEscape();
