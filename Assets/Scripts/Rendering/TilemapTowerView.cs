@@ -43,6 +43,7 @@ namespace BuildATower
         Transform _rampOverlayRoot;
         Transform _dollhouseOverlayRoot;
         Transform _condemnedOverlayRoot;
+        TrophyRoomChipLayer _trophyChips;
         int _lastLightingBucket = int.MinValue;
         bool _suppressDollhouseNeighborRepaint;
 
@@ -982,6 +983,7 @@ namespace BuildATower
 
             SetDollhouseOverlay(room, sprite, DollhouseTint(room));
             SetDollhouseInfrastructureOverlay(room, leftExterior, rightExterior);
+            SyncTrophyRoomChips(room);
             return true;
         }
 
@@ -1113,9 +1115,41 @@ namespace BuildATower
             _dollhouseInfraOverlays.Remove(instanceId);
         }
 
+        TrophyCase ResolveTrophyCase()
+        {
+            if (TrophyRoomDisplay.CutawayPaintCase != null)
+                return TrophyRoomDisplay.CutawayPaintCase;
+
+            if (simulation == null)
+            {
+                simulation = build != null
+                    ? build.GetComponent<TowerSimulation>()
+                    : null;
+                if (simulation == null)
+                    simulation = FindAnyObjectByType<TowerSimulation>();
+            }
+
+            return simulation?.Rewards?.TrophyCase;
+        }
+
+        void SyncTrophyRoomChips(RoomInstance room)
+        {
+            if (room?.Type == null || room.Type.id != TrophyRoomDisplay.RoomTypeId)
+                return;
+            if (_trophyChips == null)
+                _trophyChips = new TrophyRoomChipLayer(transform);
+            _trophyChips.Apply(room, ResolveTrophyCase());
+        }
+
+        void ClearTrophyRoomChips(int instanceId)
+        {
+            _trophyChips?.Clear(instanceId);
+        }
+
         void ClearDollhouseOverlay(int instanceId)
         {
             ClearDollhouseInfrastructureOverlay(instanceId);
+            ClearTrophyRoomChips(instanceId);
             if (!_dollhouseOverlays.TryGetValue(instanceId, out var sr)) return;
             if (sr != null)
                 Destroy(sr.gameObject);

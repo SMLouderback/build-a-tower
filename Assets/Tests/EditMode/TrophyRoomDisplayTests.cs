@@ -44,5 +44,19 @@ namespace BuildATower.Tests
                 "Art/Trophies/trophy_population_bronze",
                 TrophyRoomDisplay.MetalSpriteResourcePath(ChallengeSubject.Population, TrophyMetal.Bronze));
         }
+
+        [Test]
+        public void CutawayChipNormalizedCenters_one_per_subject_in_enum_order()
+        {
+            var centers = TrophyRoomDisplay.CutawayChipNormalizedCenters;
+            Assert.AreEqual(10, centers.Length);
+            foreach (var c in centers)
+            {
+                Assert.GreaterOrEqual(c.x, 0f);
+                Assert.LessOrEqual(c.x, 1f);
+                Assert.GreaterOrEqual(c.y, 0f);
+                Assert.LessOrEqual(c.y, 1f);
+            }
+        }
     }
 }
