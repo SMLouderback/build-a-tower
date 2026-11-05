@@ -1917,37 +1917,15 @@ namespace BuildATower
             GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _whiteTex);
             GUI.color = shade;
 
-            const float panelW = 720f;
-            const float panelH = 420f;
+            var panelW = Mathf.Min(TrophyRoomGalleryHud.PreferredPanelWidth, Mathf.Max(320f, Screen.width - 32f));
+            var panelH = Mathf.Min(TrophyRoomGalleryHud.PreferredPanelHeight, Mathf.Max(240f, Screen.height - 32f));
             var panel = new Rect(
                 (Screen.width - panelW) * 0.5f,
                 (Screen.height - panelH) * 0.5f,
                 panelW,
                 panelH);
-            GUI.Box(panel, GUIContent.none);
-
-            var cx = panel.x + 20f;
-            var cy = panel.y + 16f;
-            var inner = panelW - 40f;
-            GUI.Label(new Rect(cx, cy, inner - 100f, 28f), "Trophy Room", title);
-            if (GUI.Button(new Rect(panel.xMax - 108f, panel.y + 16f, 88f, 28f), "Close"))
+            if (TrophyRoomGalleryHud.Draw(panel, simulation?.Rewards?.TrophyCase, title, label))
                 _trophyGalleryModal.Close();
-
-            cy += 44f;
-            var pedestals = TrophyRoomDisplay.BuildPedestals(simulation?.Rewards?.TrophyCase);
-            const float rowH = 22f;
-            var colW = (inner - 16f) * 0.5f;
-            for (var i = 0; i < pedestals.Count; i++)
-            {
-                var slot = pedestals[i];
-                var metal = slot.HasTrophy ? slot.Metal.ToString() : "empty";
-                var col = i % 2;
-                var rowIndex = i / 2;
-                GUI.Label(
-                    new Rect(cx + col * (colW + 16f), cy + rowIndex * rowH, colW, rowH),
-                    $"{slot.Subject} - {metal}",
-                    label);
-            }
 
             var pointer = Event.current;
             if (pointer == null || pointer.type == EventType.Used || GUIUtility.hotControl != 0)
