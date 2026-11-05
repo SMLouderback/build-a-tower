@@ -1502,7 +1502,21 @@ namespace BuildATower
                         return;
                 }
 
+                RoomInstance hit = null;
+                if (Grid != null)
+                    Grid.TryGetRoomAt(cell, out hit);
+
+                var shouldOpen = TrophyRoomOpenPolicy.ShouldOpenGallery(
+                    hit?.Type?.id,
+                    hit?.InstanceId ?? 0,
+                    SelectedRoom?.Type?.id,
+                    SelectedRoom?.InstanceId ?? 0,
+                    SelectedRoom != null);
+
                 TrySelectAt(cell);
+
+                if (shouldOpen && hud != null)
+                    hud.OpenTrophyGallery();
                 return;
             }
 
