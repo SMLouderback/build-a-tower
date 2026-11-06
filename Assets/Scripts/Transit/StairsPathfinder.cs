@@ -4,8 +4,9 @@ using UnityEngine;
 namespace BuildATower
 {
     /// <summary>
-    /// Grid pathfinder: horizontal on occupied cells; vertical only on stairs.
-    /// Journeys with |Δfloor| &gt; <see cref="MaxStairsFloorSpan"/> are rejected.
+    /// Grid pathfinder: horizontal on occupied cells; vertical only on stairs and inside atriums.
+    /// The 3-arg overload rejects journeys with |Δfloor| &gt; <see cref="MaxStairsFloorSpan"/>.
+    /// The 4-arg overload accepts <c>maxFloorSpan &lt; 0</c> to skip the span gate (unlimited).
     /// </summary>
     public sealed class StairsPathfinder
     {
@@ -13,12 +14,14 @@ namespace BuildATower
 
         readonly HashSet<Vector2Int> _walkable = new();
         readonly HashSet<Vector2Int> _stairsCells = new();
+        readonly HashSet<Vector2Int> _atriumCells = new();
         readonly Dictionary<Vector2Int, List<Vector2Int>> _edges = new();
 
         public void Rebuild(TowerGrid grid)
         {
             _walkable.Clear();
             _stairsCells.Clear();
+            _atriumCells.Clear();
             _edges.Clear();
             if (grid == null) return;
 
@@ -26,10 +29,12 @@ namespace BuildATower
             {
                 if (room?.Type == null) continue;
                 var isStairs = room.Type.isStairs;
+                var isAtrium = room.Type.isAtrium;
                 foreach (var cell in room.OccupiedCells())
                 {
                     _walkable.Add(cell);
                     if (isStairs) _stairsCells.Add(cell);
+                    if (isAtrium) _atriumCells.Add(cell);
                 }
             }
 
@@ -44,13 +49,27 @@ namespace BuildATower
             }
         }
 
-        public bool TryFindPath(Vector2Int start, Vector2Int goal, out List<Vector2Int> path)
+        public bool IsWalkable(Vector2Int cell) => _walkable.Contains(cell);
+
+        public bool IsAtriumCell(Vector2Int cell) => _atriumCells.Contains(cell);
+
+        public bool TryFindPath(Vector2Int start, Vector2Int goal, out List<Vector2Int> path) =>
+            TryFindPath(start, goal, MaxStairsFloorSpan, out path);
+
+        public bool TryFindPath(
+            Vector2Int start,
+            Vector2Int goal,
+            int maxFloorSpan,
+            out List<Vector2Int> path)
         {
             path = null;
             if (!_walkable.Contains(start) || !_walkable.Contains(goal)) return false;
 
-            var floorSpan = Mathf.Abs(goal.y - start.y);
-            if (floorSpan > MaxStairsFloorSpan) return false;
+            if (maxFloorSpan >= 0)
+            {
+                var floorSpan = Mathf.Abs(goal.y - start.y);
+                if (floorSpan > maxFloorSpan) return false;
+            }
 
             if (start == goal)
             {
@@ -102,6 +121,15 @@ namespace BuildATower
 
             // Normal stairs shafts: both cells are stairs.
             if (_stairsCells.Contains(from) && _stairsCells.Contains(to))
+            {
+                neighbors.Add(to);
+                return;
+            }
+
+            // Atrium shafts: same-x vertical neighbors inside atrium cells.
+            if (from.x == to.x &&
+                _atriumCells.Contains(from) &&
+                _atriumCells.Contains(to))
             {
                 neighbors.Add(to);
                 return;

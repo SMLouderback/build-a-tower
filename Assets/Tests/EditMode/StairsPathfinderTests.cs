@@ -1,3 +1,4 @@
+using System.Linq;
 using BuildATower;
 using NUnit.Framework;
 using UnityEngine;
@@ -64,6 +65,26 @@ namespace BuildATower.Tests
 
             Assert.IsTrue(pf.TryFindPath(new Vector2Int(5, 0), new Vector2Int(5, 1), out var path));
             Assert.Greater(path.Count, 1);
+        }
+
+        [Test]
+        public void TryDemolishAt_removes_stairs_and_restores_underlay()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 40, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Office(), new Vector2Int(0, 1), out var office));
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(0, 0), out var stairs));
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(0, 0), out var atStairs));
+            Assert.IsTrue(atStairs.Type.isStairs);
+
+            Assert.IsTrue(grid.TryDemolishAt(new Vector2Int(0, 0), out var removed, out _, out var restored));
+            Assert.AreSame(stairs, removed);
+            Assert.IsFalse(grid.Rooms.Contains(stairs));
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(0, 0), out var afterLobby));
+            Assert.IsTrue(afterLobby.Type.isLobby);
+            Assert.IsTrue(grid.TryGetRoomAt(new Vector2Int(0, 1), out var afterOffice));
+            Assert.AreSame(office, afterOffice);
+            Assert.Contains(office, restored);
         }
 
         [Test]

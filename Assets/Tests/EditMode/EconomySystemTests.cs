@@ -17,17 +17,22 @@ namespace BuildATower.Tests
             return so;
         }
 
-        RoomTypeSO Office(int baseIncome)
+        // Mid office 9x1: rentEq 120*9*1*1 = 1080; upkeep Mid 25% = 270
+        RoomTypeSO Office(int baseIncome = 0)
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
-            so.id = "office";
+            so.id = OfficeLuxury.MidStandardId;
             so.category = RoomCategory.Office;
+            so.luxuryBand = LuxuryBand.Mid;
             so.size = new Vector2Int(9, 1);
             so.allowAboveGround = true;
             so.incomeModel = IncomeModel.QuarterlyRent;
-            so.baseIncome = baseIncome;
+            so.baseIncome = baseIncome; // unused by sim money
             return so;
         }
+
+        const int MidOfficeIncome = 810; // 1080 * street Mid fit 0.75
+        const int MidOfficeUpkeep = 270;
 
         RoomTypeSO Elevator()
         {
@@ -40,16 +45,20 @@ namespace BuildATower.Tests
             return so;
         }
 
-        RoomTypeSO Condo(int baseIncome)
+        // Condo base 1x1 Mid: rentEq 160*0.90 = 144
+        RoomTypeSO Condo(int baseIncome = 0)
         {
             var so = ScriptableObject.CreateInstance<RoomTypeSO>();
-            so.id = "condo";
+            so.id = CondoLuxury.BaseId;
             so.category = RoomCategory.Condo;
+            so.luxuryBand = LuxuryBand.Base;
             so.size = Vector2Int.one;
             so.incomeModel = IncomeModel.UpfrontSale;
-            so.baseIncome = baseIncome;
+            so.baseIncome = baseIncome; // unused by sim money
             return so;
         }
+
+        const int CondoBaseSale = 108; // 144 * street Mid fit 0.75
 
         [Test]
         public void Midnight_pays_daily_rent_for_occupied_office()
@@ -61,17 +70,17 @@ namespace BuildATower.Tests
             var wallet = new FundsWallet(100_000);
             var economy = new EconomySystem();
 
-            economy.OnNewDay(grid, agents, wallet);
+            economy.OnNewDay(grid, agents, wallet, currentStars: 1);
 
-            Assert.AreEqual(103_000, wallet.Balance);
-            Assert.AreEqual(3000, economy.LastIncome);
-            Assert.AreEqual(0, economy.LastExpense);
-            Assert.AreEqual(3000, economy.LastNet);
-            Assert.AreEqual(3000, economy.GetLastRoomIncome(office));
-            Assert.AreEqual(0, economy.GetLastRoomExpense(office));
-            Assert.AreEqual(3000, economy.GetLastRoomNet(office));
-            Assert.AreEqual(3000, office.LifetimeIncome);
-            Assert.AreEqual(0, office.LifetimeExpense);
+            Assert.AreEqual(100_000 + MidOfficeIncome - MidOfficeUpkeep, wallet.Balance);
+            Assert.AreEqual(MidOfficeIncome, economy.LastIncome);
+            Assert.AreEqual(MidOfficeUpkeep, economy.LastExpense);
+            Assert.AreEqual(MidOfficeIncome - MidOfficeUpkeep, economy.LastNet);
+            Assert.AreEqual(MidOfficeIncome, economy.GetLastRoomIncome(office));
+            Assert.AreEqual(MidOfficeUpkeep, economy.GetLastRoomExpense(office));
+            Assert.AreEqual(MidOfficeIncome - MidOfficeUpkeep, economy.GetLastRoomNet(office));
+            Assert.AreEqual(MidOfficeIncome, office.LifetimeIncome);
+            Assert.AreEqual(MidOfficeUpkeep, office.LifetimeExpense);
         }
 
         [Test]
@@ -105,10 +114,10 @@ namespace BuildATower.Tests
             Assert.IsTrue(economy.TrySellCondo(condoRoom, wallet));
             Assert.IsFalse(economy.TrySellCondo(condoRoom, wallet));
 
-            Assert.AreEqual(150_000, wallet.Balance);
+            Assert.AreEqual(CondoBaseSale, wallet.Balance);
             Assert.IsTrue(condoRoom.CondoSold);
-            Assert.AreEqual(150_000, economy.GetLastRoomIncome(condoRoom));
-            Assert.AreEqual(150_000, condoRoom.LifetimeIncome);
+            Assert.AreEqual(CondoBaseSale, economy.GetLastRoomIncome(condoRoom));
+            Assert.AreEqual(CondoBaseSale, condoRoom.LifetimeIncome);
             Assert.IsTrue(economy.HasRecordedEconomyEvent);
         }
 
@@ -125,8 +134,9 @@ namespace BuildATower.Tests
 
             economy.OnNewDay(grid, agents, wallet, currentStars: 3);
 
-            Assert.AreEqual(3900, economy.LastIncome);
-            Assert.AreEqual(103_900, wallet.Balance);
+            // High tier 1.3x * street fit 0.75 → 1053; upkeep still 270
+            Assert.AreEqual(1053, economy.LastIncome);
+            Assert.AreEqual(100_000 + 1053 - MidOfficeUpkeep, wallet.Balance);
         }
 
         [Test]
@@ -138,7 +148,126 @@ namespace BuildATower.Tests
             var economy = new EconomySystem();
 
             Assert.IsTrue(economy.TrySellCondo(condoRoom, wallet));
-            Assert.AreEqual(105_000, wallet.Balance);
+            // Low tier 0.7x * street fit 0.75 → Round(75.6)=76
+            Assert.AreEqual(76, wallet.Balance);
+        }
+
+        RoomTypeSO FastFoodShop(int baseIncome = 40)
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "shop_food_fast";
+            so.category = RoomCategory.Commercial;
+            so.size = Vector2Int.one;
+            so.allowAboveGround = true;
+            so.incomeModel = IncomeModel.TrafficVariable;
+            so.baseIncome = baseIncome;
+            so.maxOccupants = 4;
+            return so;
+        }
+
+        [Test]
+        public void Shop_upkeep_uses_vpsf_period_upkeep()
+        {
+            // tier1 Mid: rentEq 110*0.70=77; upkeep 25% → 19
+            Assert.AreEqual(19, ShopDemandBalance.DailyUpkeep(FastFoodShop()));
+        }
+
+        [Test]
+        public void Empty_shop_charges_upkeep_and_reports_negative_net()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(FastFoodShop(baseIncome: 50), new Vector2Int(0, 1), out var shop));
+            var wallet = new FundsWallet(100_000);
+            var economy = new EconomySystem();
+
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+
+            Assert.AreEqual(19, economy.GetLastRoomExpense(shop));
+            Assert.AreEqual(0, shop.ShopRevenueYesterday);
+            Assert.AreEqual(19, shop.ShopUpkeepYesterday);
+            Assert.AreEqual(-19, shop.ShopNetYesterday);
+            Assert.AreEqual(19, shop.LifetimeExpense);
+            Assert.AreEqual(99_981, wallet.Balance);
+        }
+
+        [Test]
+        public void Broken_shop_still_pays_upkeep_without_income()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(FastFoodShop(baseIncome: 50), new Vector2Int(0, 1), out var shop));
+            shop.RecordShopSpend(100);
+            shop.Condition = 0;
+            var wallet = new FundsWallet(100_000);
+            var economy = new EconomySystem();
+
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+
+            Assert.AreEqual(0, shop.ShopRevenueYesterday);
+            Assert.AreEqual(19, shop.ShopUpkeepYesterday);
+            Assert.AreEqual(-19, shop.ShopNetYesterday);
+            Assert.AreEqual(0, shop.ShopEarningsToday);
+            Assert.AreEqual(99_981, wallet.Balance);
+        }
+
+        [Test]
+        public void Midnight_pays_traffic_from_visits_and_clears_counter()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(FastFoodShop(baseIncome: 40), new Vector2Int(0, 1), out var shop));
+            shop.RecordVisit();
+            shop.RecordShopSpend(30);
+            shop.RecordVisit();
+            shop.RecordShopSpend(40);
+            shop.RecordVisit();
+            shop.RecordShopSpend(50);
+            Assert.AreEqual(3, shop.VisitsToday);
+            Assert.AreEqual(120, shop.ShopEarningsToday);
+
+            var wallet = new FundsWallet(100_000);
+            var economy = new EconomySystem();
+
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+
+            Assert.AreEqual(120, economy.LastIncome);
+            Assert.AreEqual(19, economy.LastExpense);
+            Assert.AreEqual(100_101, wallet.Balance);
+            Assert.AreEqual(0, shop.VisitsToday);
+            Assert.AreEqual(0, shop.ShopEarningsToday);
+            Assert.AreEqual(120, shop.LifetimeIncome);
+            Assert.AreEqual(19, shop.LifetimeExpense);
+            Assert.AreEqual(120, economy.GetLastRoomIncome(shop));
+            Assert.AreEqual(120, shop.ShopRevenueYesterday);
+            Assert.AreEqual(19, shop.ShopUpkeepYesterday);
+            Assert.AreEqual(101, shop.ShopNetYesterday);
+            Assert.IsTrue(economy.HasRecordedEconomyEvent);
+        }
+
+        [Test]
+        public void Shop_revenue_yesterday_records_credited_difficulty_scaled_income()
+        {
+            GameSession.Difficulty = GameDifficulty.Hard;
+            try
+            {
+                var grid = new TowerGrid();
+                grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+                Assert.IsTrue(grid.TryPlace(FastFoodShop(baseIncome: 40), new Vector2Int(0, 1), out var shop));
+                shop.RecordShopSpend(101);
+                var wallet = new FundsWallet(100_000);
+
+                new EconomySystem().OnNewDay(grid, new List<Agent>(), wallet);
+
+                Assert.AreEqual(BuildEconomy.ApplyIncome(101), shop.ShopRevenueYesterday);
+                Assert.AreEqual(81, shop.ShopRevenueYesterday);
+                // Hard upkeep Round(77*0.25*0.8)=15
+                Assert.AreEqual(100_000 + 81 - 15, wallet.Balance);
+            }
+            finally
+            {
+                GameSession.ResetForTests();
+            }
         }
 
         [Test]
@@ -156,7 +285,480 @@ namespace BuildATower.Tests
 
             // Max at 0★ → 10% demand; seed 7 first roll is ~0.38 so income is skipped.
             Assert.AreEqual(0, economy.LastIncome);
-            Assert.AreEqual(100_000, wallet.Balance);
+            Assert.AreEqual(MidOfficeUpkeep, economy.LastExpense);
+            Assert.AreEqual(100_000 - MidOfficeUpkeep, wallet.Balance);
+        }
+
+        RoomTypeSO HotelBase()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "hotel_base";
+            so.category = RoomCategory.Hotel;
+            so.luxuryBand = LuxuryBand.Base;
+            so.size = Vector2Int.one;
+            so.allowAboveGround = true;
+            so.incomeModel = IncomeModel.NightlyRate;
+            so.baseIncome = 1000;
+            return so;
+        }
+
+        [Test]
+        public void PassesDemand_base_hotel_recession_mild_overprice_uses_floor()
+        {
+            // stars=1, Recession offset -2 → comfort Low; Normal tier → 1 overprice step.
+            // Raw DemandChance=0.4; Base Recession floor raises to 0.85.
+            var room = new RoomInstance(1, HotelBase(), Vector2Int.zero, Vector2Int.one);
+            room.PriceTier = PricePricing.TierNormal;
+
+            int? seed = null;
+            for (var s = 0; s < 500; s++)
+            {
+                var roll = new System.Random(s).NextDouble();
+                if (roll > 0.4 && roll < 0.85)
+                {
+                    seed = s;
+                    break;
+                }
+            }
+
+            Assert.IsNotNull(seed);
+            var economy = new EconomySystem(seed: seed.Value);
+            Assert.IsTrue(economy.PassesDemand(room, currentStars: 1, climateOffset: -2));
+        }
+
+        [Test]
+        public void EffectiveDemandClimateOffset_mid_recession_applies_luxury_bias()
+        {
+            var so = HotelBase();
+            so.luxuryBand = LuxuryBand.Mid;
+            // Mid Recession bias -1; DemandChance often saturates at Low so offset is the Mid assert.
+            Assert.AreEqual(-3, EconomySystem.EffectiveDemandClimateOffset(so, climateOffset: -2));
+            Assert.AreEqual(-2, EconomySystem.EffectiveDemandClimateOffset(HotelBase(), climateOffset: -2));
+        }
+
+        [Test]
+        public void EffectiveDemandClimateOffset_upper_slow_applies_luxury_bias()
+        {
+            var so = HotelBase();
+            so.luxuryBand = LuxuryBand.Upper;
+            Assert.AreEqual(-2, EconomySystem.EffectiveDemandClimateOffset(so, climateOffset: -1));
+        }
+
+        [Test]
+        public void PassesDemand_upper_hotel_slow_high_tier_applies_luxury_climate_bias()
+        {
+            // 3★ High tier, Slow (offset -1):
+            // without Upper bias → comfort Normal, 1 overprice → chance 0.4
+            // with Upper Slow bias -1 → comfort Low, 2 overprice → chance 0.1
+            var so = HotelBase();
+            so.id = "hotel_upper";
+            so.luxuryBand = LuxuryBand.Upper;
+            var room = new RoomInstance(1, so, Vector2Int.zero, Vector2Int.one);
+            room.PriceTier = PricePricing.TierHigh;
+
+            int? seed = null;
+            for (var s = 0; s < 500; s++)
+            {
+                var roll = new System.Random(s).NextDouble();
+                if (roll > 0.1 && roll < 0.4)
+                {
+                    seed = s;
+                    break;
+                }
+            }
+
+            Assert.IsNotNull(seed);
+            var economy = new EconomySystem(seed: seed.Value);
+            Assert.IsFalse(economy.PassesDemand(room, currentStars: 3, climateOffset: -1));
+
+            // Same seed/tier/stars without Upper bias (Base) still clears the 0.4 chance.
+            var baseRoom = new RoomInstance(2, HotelBase(), Vector2Int.zero, Vector2Int.one);
+            baseRoom.PriceTier = PricePricing.TierHigh;
+            var baseEconomy = new EconomySystem(seed: seed.Value);
+            Assert.IsTrue(baseEconomy.PassesDemand(baseRoom, currentStars: 3, climateOffset: -1));
+        }
+
+        [Test]
+        public void EffectiveDemandClimateOffset_upper_recession_vs_boom_bias()
+        {
+            // Same tier/stars climate span: Upper adds Recession -2 / Boom +1 on top of offset.
+            var so = HotelBase();
+            so.luxuryBand = LuxuryBand.Upper;
+            Assert.AreEqual(-4, EconomySystem.EffectiveDemandClimateOffset(so, climateOffset: -2));
+            Assert.AreEqual(3, EconomySystem.EffectiveDemandClimateOffset(so, climateOffset: 2));
+            Assert.AreEqual(-2, EconomySystem.EffectiveDemandClimateOffset(HotelBase(), climateOffset: -2));
+            Assert.AreEqual(2, EconomySystem.EffectiveDemandClimateOffset(HotelBase(), climateOffset: 2));
+        }
+
+        [Test]
+        public void EffectiveDemandClimateOffset_office_upper_recession_applies_bias()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.category = RoomCategory.Office;
+            so.luxuryBand = LuxuryBand.Upper;
+            var climateOffset = MarketClimate.Recession - MarketClimate.Normal;
+            var effective = EconomySystem.EffectiveDemandClimateOffset(so, climateOffset);
+            Assert.AreEqual(
+                climateOffset + LivingLuxury.LuxuryClimateBias(LuxuryBand.Upper, MarketClimate.Recession),
+                effective);
+        }
+
+        [Test]
+        public void EffectiveDemandClimateOffset_condo_upper_recession_applies_bias()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.category = RoomCategory.Condo;
+            so.luxuryBand = LuxuryBand.Upper;
+            var climateOffset = MarketClimate.Recession - MarketClimate.Normal;
+            var effective = EconomySystem.EffectiveDemandClimateOffset(so, climateOffset);
+            Assert.AreEqual(
+                climateOffset + LivingLuxury.LuxuryClimateBias(LuxuryBand.Upper, MarketClimate.Recession),
+                effective);
+        }
+
+        RoomTypeSO Housekeeping()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "service_housekeeping";
+            so.category = RoomCategory.Service;
+            so.size = Vector2Int.one;
+            so.allowAboveGround = true;
+            return so;
+        }
+
+        RoomTypeSO Maintenance()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "service_maintenance";
+            so.category = RoomCategory.Service;
+            so.size = Vector2Int.one;
+            so.allowAboveGround = true;
+            return so;
+        }
+
+        [Test]
+        public void Midnight_decays_condition_on_degradable_rooms()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out var lobby);
+            Assert.IsTrue(grid.TryPlace(Office(baseIncome: 3000), new Vector2Int(0, 1), out var office));
+            Assert.AreEqual(100, office.Condition);
+            Assert.AreEqual(100, lobby.Condition);
+
+            new EconomySystem().OnNewDay(grid, new List<Agent>(), new FundsWallet(100_000));
+
+            Assert.AreEqual(99, office.Condition);
+            Assert.AreEqual(100, lobby.Condition);
+        }
+
+        [Test]
+        public void Midnight_skips_income_when_condition_paused_or_broken()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Office(baseIncome: 3000), new Vector2Int(0, 1), out var office));
+            office.Condition = 39;
+            var agents = new List<Agent> { new Agent(1, AgentRole.OfficeWorker, office, office.Origin) };
+            var wallet = new FundsWallet(100_000);
+            var economy = new EconomySystem();
+
+            economy.OnNewDay(grid, agents, wallet);
+
+            Assert.AreEqual(0, economy.LastIncome);
+            Assert.AreEqual(MidOfficeUpkeep, economy.LastExpense);
+            Assert.AreEqual(100_000 - MidOfficeUpkeep, wallet.Balance);
+            Assert.AreEqual(38, office.Condition);
+
+            office.Condition = 0;
+            economy.OnNewDay(grid, agents, wallet);
+            Assert.AreEqual(0, economy.LastIncome);
+            Assert.IsTrue(office.IsBroken);
+        }
+
+        [Test]
+        public void Midnight_skips_shop_earnings_when_income_paused()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(FastFoodShop(baseIncome: 40), new Vector2Int(0, 1), out var shop));
+            shop.RecordVisit();
+            shop.RecordShopSpend(80);
+            shop.Condition = 20;
+            var wallet = new FundsWallet(100_000);
+            var economy = new EconomySystem();
+
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+
+            Assert.AreEqual(0, economy.LastIncome);
+            Assert.AreEqual(19, economy.LastExpense);
+            Assert.AreEqual(99_981, wallet.Balance);
+            Assert.AreEqual(0, shop.VisitsToday);
+            Assert.AreEqual(0, shop.ShopEarningsToday);
+            Assert.AreEqual(0, shop.ShopRevenueYesterday);
+            Assert.AreEqual(19, shop.ShopUpkeepYesterday);
+        }
+
+        [Test]
+        public void Midnight_debits_housekeeping_and_maintenance_wages()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Housekeeping(), new Vector2Int(0, 1), out var hk));
+            Assert.IsTrue(grid.TryPlace(Maintenance(), new Vector2Int(1, 1), out var maint));
+            hk.SetStaffedWorkers(2);
+            maint.SetStaffedWorkers(1);
+            var wallet = new FundsWallet(100_000);
+            var economy = new EconomySystem();
+
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+
+            const int expectedWages = 2 * EconomySystem.MaidWagePerDay + 1 * EconomySystem.HandymanWagePerDay;
+            Assert.AreEqual(expectedWages, economy.LastWageExpense);
+            Assert.AreEqual(expectedWages, economy.LastExpense);
+            Assert.AreEqual(100_000 - expectedWages, wallet.Balance);
+            Assert.AreEqual(2 * EconomySystem.MaidWagePerDay, economy.GetLastRoomExpense(hk));
+            Assert.AreEqual(EconomySystem.HandymanWagePerDay, economy.GetLastRoomExpense(maint));
+            Assert.AreEqual(2 * EconomySystem.MaidWagePerDay, hk.LifetimeExpense);
+            Assert.AreEqual(EconomySystem.HandymanWagePerDay, maint.LifetimeExpense);
+        }
+
+        [Test]
+        public void Midnight_charges_security_wages()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            var security = ScriptableObject.CreateInstance<RoomTypeSO>();
+            security.id = "service_security";
+            security.size = new Vector2Int(2, 1);
+            security.allowAboveGround = true;
+            Assert.IsTrue(grid.TryPlace(security, new Vector2Int(0, 1), out var room));
+            room.SetStaffedWorkers(2);
+            var wallet = new FundsWallet(50_000);
+            var economy = new EconomySystem();
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+            Assert.AreEqual(50_000 - 2 * EconomySystem.SecurityGuardWagePerDay,
+                wallet.Balance);
+            Assert.AreEqual(2 * EconomySystem.SecurityGuardWagePerDay, economy.LastWageExpense);
+        }
+
+        [Test]
+        public void AverageDailyProfit_tracks_running_average_of_LastNet()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(Office(baseIncome: 3000), new Vector2Int(0, 1), out var office));
+            var agents = new List<Agent> { new Agent(1, AgentRole.OfficeWorker, office, office.Origin) };
+            var wallet = new FundsWallet(100_000);
+            var economy = new EconomySystem();
+
+            Assert.AreEqual(0f, economy.AverageDailyProfit);
+
+            economy.OnNewDay(grid, agents, wallet, currentStars: 1);
+            Assert.AreEqual(MidOfficeIncome - MidOfficeUpkeep, economy.LastNet);
+            Assert.AreEqual((float)(MidOfficeIncome - MidOfficeUpkeep), economy.AverageDailyProfit);
+
+            // Second midnight vacant: upkeep only.
+            economy.OnNewDay(grid, new List<Agent>(), wallet, currentStars: 1);
+            Assert.AreEqual(-MidOfficeUpkeep, economy.LastNet);
+            Assert.AreEqual(
+                (MidOfficeIncome - MidOfficeUpkeep - MidOfficeUpkeep) / 2f,
+                economy.AverageDailyProfit);
+        }
+
+        [Test]
+        public void Security_is_staffed_service_and_auto_hires()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = "service_security";
+            Assert.IsTrue(BuildController.IsStaffedServiceRoom(so));
+            var room = new RoomInstance(1, so, Vector2Int.zero, new Vector2Int(2, 1));
+            BuildController.ApplyAutoHireOnPlace(room);
+            Assert.AreEqual(1, room.StaffedWorkers);
+        }
+
+        RoomTypeSO ResearchLab()
+        {
+            var so = ScriptableObject.CreateInstance<RoomTypeSO>();
+            so.id = EconomySystem.ResearchId;
+            so.category = RoomCategory.Service;
+            so.size = new Vector2Int(3, 1);
+            so.allowAboveGround = true;
+            return so;
+        }
+
+        [Test]
+        public void Research_is_staffed_service_and_auto_hires()
+        {
+            var so = ResearchLab();
+            Assert.IsTrue(BuildController.IsStaffedServiceRoom(so));
+            var room = new RoomInstance(1, so, Vector2Int.zero, so.size);
+            BuildController.ApplyAutoHireOnPlace(room);
+            Assert.AreEqual(1, room.StaffedWorkers);
+        }
+
+        [Test]
+        public void Midnight_charges_research_wages()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(ResearchLab(), new Vector2Int(0, 1), out var lab));
+            lab.SetStaffedWorkers(2);
+            var wallet = new FundsWallet(50_000);
+            var economy = new EconomySystem();
+
+            economy.OnNewDay(grid, new List<Agent>(), wallet);
+
+            var wages = 2 * EconomySystem.ResearchWagePerDay;
+            var idleBurn = ResearchCatalog.IdlePerLabPerDay;
+            Assert.AreEqual(wages, economy.LastWageExpense);
+            Assert.AreEqual(idleBurn, economy.LastResearchBurn);
+            Assert.AreEqual(50_000 - wages - idleBurn, wallet.Balance);
+            Assert.AreEqual(wages, economy.GetLastRoomExpense(lab));
+        }
+
+        [Test]
+        public void Midnight_charges_idle_research_burn_only_when_paused()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(ResearchLab(), new Vector2Int(0, 1), out var lab));
+            lab.SetStaffedWorkers(1);
+            var research = new ResearchSystem();
+            Assert.IsTrue(research.TryStart(ResearchBranch.Marketing, 1));
+            research.Pause();
+
+            var wallet = new FundsWallet(50_000);
+            var economy = new EconomySystem();
+            economy.OnNewDay(grid, new List<Agent>(), wallet, research: research, climateSpendMult: 1f);
+
+            var expectedWage = EconomySystem.ResearchWagePerDay;
+            var expectedBurn = ResearchCatalog.IdlePerLabPerDay;
+            Assert.AreEqual(expectedBurn, economy.LastResearchBurn);
+            Assert.AreEqual(50_000 - expectedWage - expectedBurn, wallet.Balance);
+            Assert.IsTrue(research.IsPaused);
+        }
+
+        [Test]
+        public void Midnight_charges_idle_plus_active_research_burn_when_running()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(ResearchLab(), new Vector2Int(0, 1), out var lab));
+            lab.SetStaffedWorkers(1);
+            var research = new ResearchSystem();
+            Assert.IsTrue(research.TryStart(ResearchBranch.Elevator, 1));
+
+            var wallet = new FundsWallet(50_000);
+            var economy = new EconomySystem();
+            economy.OnNewDay(grid, new List<Agent>(), wallet, research: research, climateSpendMult: 1f);
+
+            var expectedBurn = ResearchCatalog.IdlePerLabPerDay + ResearchCatalog.ActivePerDay;
+            Assert.AreEqual(expectedBurn, economy.LastResearchBurn);
+            Assert.AreEqual(
+                50_000 - EconomySystem.ResearchWagePerDay - expectedBurn,
+                wallet.Balance);
+            Assert.IsFalse(research.IsPaused);
+        }
+
+        [Test]
+        public void Midnight_research_burn_cheaper_in_recession_than_boom()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(ResearchLab(), new Vector2Int(0, 1), out var lab));
+            lab.SetStaffedWorkers(0);
+
+            var researchRecession = new ResearchSystem();
+            Assert.IsTrue(researchRecession.TryStart(ResearchBranch.Security, 1));
+            var researchBoom = new ResearchSystem();
+            Assert.IsTrue(researchBoom.TryStart(ResearchBranch.Security, 1));
+
+            // Match MarketClimate.SpendMultiplier for Recession / Boom.
+            const float recessionMult = 0.7f;
+            const float boomMult = 1.3f;
+
+            var walletRecession = new FundsWallet(50_000);
+            var economyRecession = new EconomySystem();
+            economyRecession.OnNewDay(
+                grid, new List<Agent>(), walletRecession,
+                research: researchRecession, climateSpendMult: recessionMult);
+
+            var walletBoom = new FundsWallet(50_000);
+            var economyBoom = new EconomySystem();
+            economyBoom.OnNewDay(
+                grid, new List<Agent>(), walletBoom,
+                research: researchBoom, climateSpendMult: boomMult);
+
+            var baseBurn = ResearchCatalog.IdlePerLabPerDay + ResearchCatalog.ActivePerDay;
+            Assert.AreEqual((int)System.Math.Round(baseBurn * recessionMult), economyRecession.LastResearchBurn);
+            Assert.AreEqual((int)System.Math.Round(baseBurn * boomMult), economyBoom.LastResearchBurn);
+            Assert.Less(economyRecession.LastResearchBurn, economyBoom.LastResearchBurn);
+        }
+
+        [Test]
+        public void Midnight_unaffordable_research_burn_pauses_and_charges_zero()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(ResearchLab(), new Vector2Int(0, 1), out var lab));
+            lab.SetStaffedWorkers(1);
+            var research = new ResearchSystem();
+            Assert.IsTrue(research.TryStart(ResearchBranch.Housekeeping, 1));
+            Assert.IsFalse(research.IsPaused);
+
+            // Enough for wage ($350) but not idle+active burn ($2500).
+            var wallet = new FundsWallet(EconomySystem.ResearchWagePerDay + 100);
+            var economy = new EconomySystem();
+            economy.OnNewDay(grid, new List<Agent>(), wallet, research: research, climateSpendMult: 1f);
+
+            Assert.AreEqual(0, economy.LastResearchBurn);
+            Assert.IsTrue(research.IsPaused);
+            Assert.AreEqual(100, wallet.Balance);
+        }
+
+        [Test]
+        public void Count_helpers_skip_broken_labs_and_sum_researcher_pool()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 8, 0, out _);
+            Assert.IsTrue(grid.TryPlace(ResearchLab(), new Vector2Int(0, 1), out var labA));
+            Assert.IsTrue(grid.TryPlace(ResearchLab(), new Vector2Int(3, 1), out var labB));
+            labA.SetStaffedWorkers(2);
+            labB.SetStaffedWorkers(3);
+            labB.Condition = 0;
+
+            Assert.AreEqual(1, EconomySystem.CountNonBrokenResearchLabs(grid));
+            Assert.AreEqual(2, EconomySystem.CountResearcherPool(grid));
+        }
+
+        [Test]
+        public void OnNewDay_archives_shop_visits_yesterday_and_tower_average()
+        {
+            var grid = new TowerGrid();
+            grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _);
+            Assert.IsTrue(grid.TryPlace(FastFoodShop(), new Vector2Int(0, 1), out var a));
+            Assert.IsTrue(grid.TryPlace(FastFoodShop(), new Vector2Int(10, 1), out var b));
+            for (var i = 0; i < 5; i++) a.RecordVisit();
+            for (var i = 0; i < 3; i++) b.RecordVisit();
+
+            var economy = new EconomySystem();
+            economy.OnNewDay(grid, new List<Agent>(), new FundsWallet(0));
+
+            Assert.AreEqual(0, a.VisitsToday);
+            Assert.AreEqual(0, b.VisitsToday);
+            Assert.AreEqual(5, a.VisitsYesterday);
+            Assert.AreEqual(3, b.VisitsYesterday);
+            Assert.AreEqual(5f, a.AverageVisitsLast7Days);
+            Assert.AreEqual(3f, b.AverageVisitsLast7Days);
+            Assert.AreEqual(8, economy.LastShopVisitsYesterday);
+            Assert.AreEqual(8f, economy.AverageShopVisitsLast7Days);
+
+            for (var i = 0; i < 2; i++) a.RecordVisit();
+            economy.OnNewDay(grid, new List<Agent>(), new FundsWallet(0));
+            Assert.AreEqual(2, a.VisitsYesterday);
+            Assert.AreEqual(0, b.VisitsYesterday);
+            Assert.AreEqual(3.5f, a.AverageVisitsLast7Days); // (5+2)/2
+            Assert.AreEqual(5f, economy.AverageShopVisitsLast7Days); // (8+2)/2
         }
     }
 }

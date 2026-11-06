@@ -1,0 +1,364 @@
+using System;
+using System.Collections.Generic;
+
+namespace BuildATower
+{
+    public sealed class ResearchSystem
+    {
+        const float EtaEpsilon = 0.0001f;
+
+        readonly HashSet<(ResearchBranch Branch, int Level)> _completed = new();
+        readonly Dictionary<(ResearchBranch Branch, int Level), float> _progress = new();
+
+        ResearchBranch? _activeBranch;
+        int _activeLevel;
+        bool _paused;
+
+        public ResearchBranch? ActiveBranch => _activeBranch;
+        public int ActiveLevel => _activeBranch.HasValue ? _activeLevel : 0;
+        public float ActiveProgress =>
+            _activeBranch.HasValue ? GetProgress(_activeBranch.Value, _activeLevel) : 0f;
+        public bool IsRunning => _activeBranch.HasValue;
+        public bool IsPaused => _paused;
+
+        public bool IsComplete(ResearchBranch branch, int level) =>
+            _completed.Contains((branch, level));
+
+        public int HighestCompleted(ResearchBranch branch)
+        {
+            for (var level = ResearchCatalog.MaxLevel; level >= 1; level--)
+            {
+                if (IsComplete(branch, level))
+                    return level;
+            }
+
+            return 0;
+        }
+
+        public bool CanStart(ResearchBranch branch, int level)
+        {
+            if (level < 1 || level > ResearchCatalog.MaxLevel)
+                return false;
+            if (IsComplete(branch, level))
+                return false;
+            if (level == 1)
+                return true;
+            return IsComplete(branch, level - 1);
+        }
+
+        public bool TryStart(ResearchBranch branch, int level)
+        {
+            if (!CanStart(branch, level))
+                return false;
+
+            PersistActiveProgress();
+            _activeBranch = branch;
+            _activeLevel = level;
+            _paused = false;
+            return true;
+        }
+
+        public void Pause()
+        {
+            if (!_activeBranch.HasValue)
+                return;
+            PersistActiveProgress();
+            _paused = true;
+        }
+
+        public void TickProgress(float deltaGameMinutes, int researcherPool)
+        {
+            if (!_activeBranch.HasValue)
+                return;
+
+            if (_paused || researcherPool <= 0)
+            {
+                _paused = true;
+                PersistActiveProgress();
+                return;
+            }
+
+            if (deltaGameMinutes <= 0f)
+                return;
+
+            var key = (_activeBranch.Value, _activeLevel);
+            var baseWork = ResearchCatalog.BaseWorkMinutes(_activeLevel);
+            var next = GetProgress(key.Item1, key.Item2) + WorkPerGameMinute(researcherPool) * deltaGameMinutes;
+            if (next >= baseWork)
+            {
+                _completed.Add(key);
+                _progress.Remove(key);
+                _activeBranch = null;
+                _activeLevel = 0;
+                _paused = false;
+                return;
+            }
+
+            _progress[key] = next;
+        }
+
+        public void TickDayDecay()
+        {
+            // Spec §7.3: decay all incomplete stored nodes except the currently
+            // running unpaused project (switched-away progress still decays).
+            if (_progress.Count == 0)
+                return;
+
+            var keys = new List<(ResearchBranch Branch, int Level)>(_progress.Keys);
+            foreach (var key in keys)
+            {
+                var isActiveRunningUnpaused =
+                    _activeBranch.HasValue &&
+                    !_paused &&
+                    key.Branch == _activeBranch.Value &&
+                    key.Level == _activeLevel;
+                if (isActiveRunningUnpaused)
+                    continue;
+
+                var baseWork = ResearchCatalog.BaseWorkMinutes(key.Level);
+                var decay = ResearchCatalog.DecayFractionPerDay * baseWork;
+                _progress[key] = Math.Max(0f, GetProgress(key.Branch, key.Level) - decay);
+            }
+        }
+
+        public float WorkPerGameMinute(int researcherPool) =>
+            researcherPool <= 0
+                ? 0f
+                : 1f + (researcherPool - 1) * ResearchCatalog.ResearcherSpeedBonus;
+
+        public float GetNodeProgress(ResearchBranch branch, int level) =>
+            GetProgress(branch, level);
+
+        public float GetProgressPercent(ResearchBranch branch, int level)
+        {
+            if (IsComplete(branch, level))
+                return 100f;
+            var baseWork = ResearchCatalog.BaseWorkMinutes(level);
+            if (baseWork <= 0f)
+                return 0f;
+            return 100f * GetProgress(branch, level) / baseWork;
+        }
+
+        public float EstimateEtaMinutes(int researcherPool)
+        {
+            if (!_activeBranch.HasValue)
+                return 0f;
+            return EstimateEtaMinutes(_activeBranch.Value, _activeLevel, researcherPool);
+        }
+
+        public float EstimateEtaMinutes(ResearchBranch branch, int level, int researcherPool)
+        {
+            if (IsComplete(branch, level))
+                return 0f;
+
+            var remaining = ResearchCatalog.BaseWorkMinutes(level) - GetProgress(branch, level);
+            if (remaining <= 0f)
+                return 0f;
+
+            var rate = WorkPerGameMinute(researcherPool);
+            if (rate <= EtaEpsilon)
+                return float.PositiveInfinity;
+
+            return remaining / rate;
+        }
+
+        public int EstimateRemainingCost(int researcherPool, int nonBrokenLabs, float climateMult)
+        {
+            if (!_activeBranch.HasValue)
+                return 0;
+            return EstimateRemainingCost(
+                _activeBranch.Value,
+                _activeLevel,
+                researcherPool,
+                nonBrokenLabs,
+                climateMult);
+        }
+
+        public int EstimateRemainingCost(
+            ResearchBranch branch,
+            int level,
+            int researcherPool,
+            int nonBrokenLabs,
+            float climateMult)
+        {
+            var etaMinutes = EstimateEtaMinutes(branch, level, researcherPool);
+            if (float.IsInfinity(etaMinutes) || etaMinutes <= 0f)
+                return 0;
+
+            var etaDays = etaMinutes / (24f * 60f);
+            var daily = ResearchCatalog.IdlePerLabPerDay * Math.Max(0, nonBrokenLabs)
+                        + ResearchCatalog.ActivePerDay;
+            return (int)Math.Round(etaDays * daily * climateMult);
+        }
+
+        public ResearchSnapshotV1 CaptureSnapshot()
+        {
+            PersistActiveProgress();
+
+            var completed = new ResearchCompletedNodeV1[_completed.Count];
+            var completedIndex = 0;
+            foreach (var node in _completed)
+            {
+                completed[completedIndex++] = new ResearchCompletedNodeV1
+                {
+                    branch = node.Branch.ToString(),
+                    level = node.Level
+                };
+            }
+
+            var progress = new ResearchProgressNodeV1[_progress.Count];
+            var progressIndex = 0;
+            foreach (var pair in _progress)
+            {
+                progress[progressIndex++] = new ResearchProgressNodeV1
+                {
+                    branch = pair.Key.Branch.ToString(),
+                    level = pair.Key.Level,
+                    workMinutes = pair.Value
+                };
+            }
+
+            return new ResearchSnapshotV1
+            {
+                completed = completed,
+                progress = progress,
+                activeBranch = _activeBranch.HasValue ? _activeBranch.Value.ToString() : string.Empty,
+                activeLevel = _activeBranch.HasValue ? _activeLevel : 0,
+                paused = _paused
+            };
+        }
+
+        public void RestoreSnapshot(ResearchSnapshotV1 snapshot)
+        {
+            if (snapshot == null)
+                throw new ArgumentNullException(nameof(snapshot));
+            if (!TryValidateSnapshot(snapshot, out var error))
+                throw new ArgumentException(error, nameof(snapshot));
+
+            _completed.Clear();
+            _progress.Clear();
+            _activeBranch = null;
+            _activeLevel = 0;
+            _paused = false;
+
+            if (snapshot.completed != null)
+            {
+                for (var i = 0; i < snapshot.completed.Length; i++)
+                {
+                    var node = snapshot.completed[i];
+                    if (node == null) continue;
+                    Enum.TryParse(node.branch, false, out ResearchBranch branch);
+                    _completed.Add((branch, node.level));
+                }
+            }
+
+            if (snapshot.progress != null)
+            {
+                for (var i = 0; i < snapshot.progress.Length; i++)
+                {
+                    var node = snapshot.progress[i];
+                    if (node == null) continue;
+                    Enum.TryParse(node.branch, false, out ResearchBranch branch);
+                    _progress[(branch, node.level)] = node.workMinutes;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(snapshot.activeBranch)
+                && Enum.TryParse(snapshot.activeBranch, false, out ResearchBranch active))
+            {
+                _activeBranch = active;
+                _activeLevel = snapshot.activeLevel;
+                _paused = snapshot.paused;
+            }
+        }
+
+        public static bool TryValidateSnapshot(ResearchSnapshotV1 snapshot, out string errorMessage)
+        {
+            if (snapshot == null)
+            {
+                errorMessage = "The research snapshot is missing.";
+                return false;
+            }
+
+            if (snapshot.completed != null)
+            {
+                for (var i = 0; i < snapshot.completed.Length; i++)
+                {
+                    var node = snapshot.completed[i];
+                    if (node == null)
+                    {
+                        errorMessage = "A completed research node is missing.";
+                        return false;
+                    }
+
+                    if (!IsNamedBranch(node.branch) || !IsValidLevel(node.level))
+                    {
+                        errorMessage = "A completed research node is invalid.";
+                        return false;
+                    }
+                }
+            }
+
+            if (snapshot.progress != null)
+            {
+                for (var i = 0; i < snapshot.progress.Length; i++)
+                {
+                    var node = snapshot.progress[i];
+                    if (node == null)
+                    {
+                        errorMessage = "A research progress node is missing.";
+                        return false;
+                    }
+
+                    if (!IsNamedBranch(node.branch)
+                        || !IsValidLevel(node.level)
+                        || float.IsNaN(node.workMinutes)
+                        || float.IsInfinity(node.workMinutes)
+                        || node.workMinutes < 0f)
+                    {
+                        errorMessage = "A research progress node is invalid.";
+                        return false;
+                    }
+                }
+            }
+
+            var hasActive = !string.IsNullOrEmpty(snapshot.activeBranch);
+            if (hasActive)
+            {
+                if (!IsNamedBranch(snapshot.activeBranch) || !IsValidLevel(snapshot.activeLevel))
+                {
+                    errorMessage = "The active research project is invalid.";
+                    return false;
+                }
+            }
+            else if (snapshot.activeLevel != 0)
+            {
+                errorMessage = "The active research level must be zero when no branch is active.";
+                return false;
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        static bool IsNamedBranch(string value) =>
+            Enum.TryParse(value, false, out ResearchBranch parsed)
+            && Enum.IsDefined(typeof(ResearchBranch), parsed)
+            && string.Equals(Enum.GetName(typeof(ResearchBranch), parsed), value, StringComparison.Ordinal);
+
+        static bool IsValidLevel(int level) => level >= 1 && level <= ResearchCatalog.MaxLevel;
+
+        float GetProgress(ResearchBranch branch, int level) =>
+            _progress.TryGetValue((branch, level), out var value) ? value : 0f;
+
+        void PersistActiveProgress()
+        {
+            if (!_activeBranch.HasValue)
+                return;
+
+            var key = (_activeBranch.Value, _activeLevel);
+            if (!_progress.ContainsKey(key))
+                _progress[key] = 0f;
+        }
+    }
+}

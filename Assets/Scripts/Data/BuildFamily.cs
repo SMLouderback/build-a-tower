@@ -8,13 +8,18 @@ namespace BuildATower
         Condo,
         Shops,
         Utility,
-        Transit
+        Transit,
+        Leisure
     }
 
     public enum BuildSubgroup
     {
         None = 0,
         Food,
-        Retail
+        Retail,
+        HealthSanitation,
+        Power,
+        Water,
+        Services
     }
 }

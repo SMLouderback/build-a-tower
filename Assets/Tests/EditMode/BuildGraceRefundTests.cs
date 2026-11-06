@@ -90,13 +90,16 @@ namespace BuildATower.Tests
         public void Condo_sale_increments_LifetimeIncome()
         {
             var condo = ScriptableObject.CreateInstance<RoomTypeSO>();
+            condo.id = CondoLuxury.BaseId;
+            condo.category = RoomCategory.Condo;
+            condo.luxuryBand = LuxuryBand.Base;
             condo.incomeModel = IncomeModel.UpfrontSale;
-            condo.baseIncome = 150_000;
+            condo.size = Vector2Int.one;
             var room = new RoomInstance(1, condo, Vector2Int.zero, Vector2Int.one);
             var economy = new EconomySystem();
             var wallet = new FundsWallet(0);
             Assert.IsTrue(economy.TrySellCondo(room, wallet));
-            Assert.AreEqual(150_000, room.LifetimeIncome);
+            Assert.AreEqual(108, room.LifetimeIncome); // street Mid fit
         }
 
         [Test]

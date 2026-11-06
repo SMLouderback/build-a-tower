@@ -3,14 +3,41 @@ using UnityEngine;
 
 namespace BuildATower
 {
-    /// <summary>Draws one marker at each runtime elevator car position.</summary>
+    /// <summary>Draws one car sprite at each runtime elevator position.</summary>
     public sealed class ElevatorView : MonoBehaviour
     {
         readonly List<SpriteRenderer> _renderers = new();
+        readonly ElevatorShaftFloorLabels _floorLabels = new();
         ElevatorSystem _elevators;
         Sprite _carSprite;
+        int _starRating = -1;
 
         public void Bind(ElevatorSystem elevators) => _elevators = elevators;
+
+        /// <summary>
+        /// Refresh shaft floor labels after elevators rebuild from the grid
+        /// (place / remove / resize / sky lobby Express stops).
+        /// </summary>
+        public void SyncFloorLabels(TowerGrid grid)
+        {
+            if (_elevators == null) return;
+            _floorLabels.Sync(grid, _elevators, transform);
+        }
+
+        public static string ElevatorCarResource(int star) =>
+            $"elevator_car_s{Mathf.Clamp(star, 0, 5):00}";
+
+        /// <summary>Reload car art for the given star (0–5). Applies to all car renderers.</summary>
+        public void SetStarRating(int stars)
+        {
+            var clamped = Mathf.Clamp(stars, 0, 5);
+            if (clamped == _starRating && _carSprite != null) return;
+            _starRating = clamped;
+            _carSprite = null;
+            EnsureSprite();
+            for (var i = 0; i < _renderers.Count; i++)
+                _renderers[i].sprite = _carSprite;
+        }
 
         void LateUpdate()
         {
@@ -24,9 +51,8 @@ namespace BuildATower
                 go.transform.SetParent(transform, false);
                 var renderer = go.AddComponent<SpriteRenderer>();
                 renderer.sprite = _carSprite;
-                renderer.color = new Color(1f, 0.78f, 0.18f, 1f);
+                renderer.color = Color.white;
                 renderer.sortingOrder = 30;
-                renderer.transform.localScale = new Vector3(0.62f, 0.48f, 1f);
                 _renderers.Add(renderer);
             }
 
@@ -41,24 +67,168 @@ namespace BuildATower
 
                 var shaft = shafts[i];
                 renderer.enabled = true;
+                renderer.sprite = _carSprite;
+                var carCenterX = shaft.Width > 1
+                    ? shaft.X + shaft.Width * 0.5f
+                    : shaft.X + 0.5f;
                 renderer.transform.position =
-                    new Vector3(shaft.X + 0.5f, shaft.Car.Floor + 0.5f, 0f);
+                    new Vector3(carCenterX, shaft.Car.Floor + 0.5f, 0f);
+                // Real cars run inches from the shaft walls — fill nearly the full cell.
+                var b = _carSprite != null ? _carSprite.bounds.size : Vector3.one;
+                var cellWidth = shaft.Width > 1 ? shaft.Width * 0.98f : 0.98f;
+                var sx = b.x > 0.01f ? cellWidth / b.x : 1f;
+                var sy = b.y > 0.01f ? 0.94f / b.y : 1f;
+                renderer.transform.localScale = new Vector3(sx, sy, 1f);
             }
         }
 
         void EnsureSprite()
         {
             if (_carSprite != null) return;
+            if (_starRating < 0) _starRating = 0;
+            _carSprite = LoadCarSpriteForStar(_starRating) ?? BuildFallbackCar();
+        }
 
-            var texture = new Texture2D(1, 1, TextureFormat.RGBA32, false);
-            texture.SetPixel(0, 0, Color.white);
-            texture.Apply();
-            texture.filterMode = FilterMode.Point;
-            _carSprite = Sprite.Create(
-                texture,
-                new Rect(0, 0, 1, 1),
+        static Sprite LoadCarSpriteForStar(int star)
+        {
+            var clamped = Mathf.Clamp(star, 0, 5);
+            var sprite = TryLoadCarResource(ElevatorCarResource(clamped));
+            if (sprite != null) return sprite;
+
+            for (var s = clamped - 1; s >= 0; s--)
+            {
+                sprite = TryLoadCarResource(ElevatorCarResource(s));
+                if (sprite != null) return sprite;
+            }
+
+            for (var s = clamped + 1; s <= 5; s++)
+            {
+                sprite = TryLoadCarResource(ElevatorCarResource(s));
+                if (sprite != null) return sprite;
+            }
+
+            return TryLoadCarResource("elevator_car");
+        }
+
+        static Sprite TryLoadCarResource(string resourceName)
+        {
+            var path = "Art/Structure/" + resourceName;
+            return LoadCarSpriteFromPath(path);
+        }
+
+        static Sprite LoadCarSpriteFromPath(string path)
+        {
+            byte[] png = null;
+            var ta = Resources.Load<TextAsset>(path);
+            if (ta != null) png = ta.bytes;
+            if (png == null || png.Length < 32)
+            {
+                var srcTex = Resources.Load<Texture2D>(path);
+                if (srcTex == null) return null;
+                try { png = srcTex.EncodeToPNG(); }
+                catch (UnityException) { return null; }
+            }
+
+            if (png == null || png.Length < 32) return null;
+            var runtime = new Texture2D(2, 2, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            if (!runtime.LoadImage(png, false)) return null;
+
+            // Key near-black plate, then crop to opaque bounds so padding
+            // doesn't leave empty gaps inside the shaft.
+            var px = runtime.GetPixels();
+            var w = runtime.width;
+            var h = runtime.height;
+            for (var i = 0; i < px.Length; i++)
+            {
+                var c = px[i];
+                var lum = c.r * 0.3f + c.g * 0.59f + c.b * 0.11f;
+                if (lum < 0.08f) px[i] = Color.clear;
+            }
+
+            var minX = w;
+            var minY = h;
+            var maxX = -1;
+            var maxY = -1;
+            for (var y = 0; y < h; y++)
+            for (var x = 0; x < w; x++)
+            {
+                if (px[y * w + x].a < 0.08f) continue;
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            }
+
+            if (maxX < minX)
+            {
+                runtime.SetPixels(px);
+                runtime.Apply(false, false);
+                return Sprite.Create(
+                    runtime,
+                    new Rect(0, 0, w, h),
+                    new Vector2(0.5f, 0.5f),
+                    64f);
+            }
+
+            var cw = maxX - minX + 1;
+            var ch = maxY - minY + 1;
+            var cropped = new Color[cw * ch];
+            for (var y = 0; y < ch; y++)
+            for (var x = 0; x < cw; x++)
+                cropped[y * cw + x] = px[(minY + y) * w + (minX + x)];
+
+            var croppedTex = new Texture2D(cw, ch, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            croppedTex.SetPixels(cropped);
+            croppedTex.Apply(false, false);
+            Object.Destroy(runtime);
+            return Sprite.Create(
+                croppedTex,
+                new Rect(0, 0, cw, ch),
                 new Vector2(0.5f, 0.5f),
-                1f);
+                64f);
+        }
+
+        static Sprite BuildFallbackCar()
+        {
+            const int w = 32;
+            const int h = 40;
+            var px = new Color[w * h];
+            var body = new Color(0.72f, 0.58f, 0.28f, 1f);
+            var dark = new Color(0.35f, 0.28f, 0.16f, 1f);
+            var win = new Color(0.55f, 0.75f, 0.85f, 1f);
+            for (var y = 0; y < h; y++)
+            for (var x = 0; x < w; x++)
+            {
+                if (x < 3 || x >= w - 3 || y < 2 || y >= h - 4)
+                    px[y * w + x] = dark;
+                else if (y > h * 0.45f && y < h * 0.78f && x > 7 && x < w - 7)
+                    px[y * w + x] = win;
+                else
+                    px[y * w + x] = body;
+            }
+
+            // Cable stub
+            for (var y = h - 4; y < h; y++)
+            {
+                px[y * w + w / 2] = dark;
+                px[y * w + w / 2 - 1] = dark;
+            }
+
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Point
+            };
+            tex.SetPixels(px);
+            tex.Apply();
+            return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 40f);
         }
     }
 }

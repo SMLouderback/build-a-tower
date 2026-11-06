@@ -1,0 +1,29 @@
+fileFormatVersion: 2
+guid: e6102cee423f496db59aa3b2c887488a
+TextureImporter:
+  serializedVersion: 12
+  mipmaps:
+    enableMipMap: 0
+    sRGBTexture: 1
+  isReadable: 1
+  nPOTScale: 0
+  maxTextureSize: 8192
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    wrapU: 1
+    wrapV: 1
+  spriteMode: 1
+  spritePixelsToUnits: 128
+  spritePivot: {x: 0, y: 0}
+  alphaIsTransparency: 1
+  textureType: 8
+  platformSettings:
+  - serializedVersion: 3
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 8192
+    textureCompression: 0
+    overridden: 0
+  spriteSheet:
+    serializedVersion: 2
+    spriteID: 6b8210d06f884e3f8f37bad11cc7958b

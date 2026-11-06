@@ -1,0 +1,44 @@
+# Audio attribution
+
+Procedural beds for Build-A-Tower (`Tools/generate_ambient_wavs.py`):
+room profiles use **random chatter** (not brown-noise walls); elevator is a quiet
+electric motor whir; outdoor is near-silent breeze + distant birds.
+
+## Ambience (`Assets/Resources/Audio/Ambience/`)
+
+| File | Profile | Source | License | Notes |
+|------|---------|--------|---------|-------|
+| `outdoor.wav` | Outdoor | Generated near-silent breeze + infrequent distant multi-bird chirps | N/A (procedural) | ~12s loop; ducks quickly as tower rooms add ambience |
+| `office.wav` | Office | Generated room tone + soft clicks | N/A (procedural) | ~6s loop |
+| `restaurant.wav` | Restaurant | Generated busier mid bed | N/A (procedural) | ~6s loop |
+| `retail.wav` | Retail | Generated soft shop bed | N/A (procedural) | ~6s loop |
+| `condo.wav` | Condo | Generated quiet living bed | N/A (procedural) | ~7s loop |
+| `hotel.wav` | Hotel | Generated quiet room tone | N/A (procedural) | ~7s loop |
+| `conference.wav` | Conference | Generated meeting-room bed | N/A (procedural) | ~6s loop |
+| `event.wav` | Event | Generated crowd-ish bed | N/A (procedural) | ~6s loop |
+| `elevator.wav` | Elevator | Quiet electric motor whir | N/A (procedural) | ~6s loop |
+| `parking.wav` | Parking | Generated garage rumble | N/A (procedural) | ~7s loop |
+| `utility.wav` | Utility | Generated HVAC-ish bed | N/A (procedural) | ~5s loop |
+| `lobby.wav` | Lobby | Generated lobby murmur bed | N/A (procedural) | ~6s loop |
+| `stairs.wav` | Stairs | Generated soft footfall accents | N/A (procedural) | ~5s loop |
+
+## SFX (`Assets/Resources/Audio/Sfx/`)
+
+| File | Use | Source | License | Notes |
+|------|-----|--------|---------|-------|
+| `build_place.wav` | Successful room place | Generated thud + click | N/A (procedural) | Short |
+| `elevator_ping.wav` | Elevator floor arrival | Short decaying ding + noise body | N/A (procedural) | Short |
+| `elevator_door.wav` | Elevator doors | Generated whoosh + soft impacts | N/A (procedural) | Short |
+
+## Import paths (Resources)
+
+- Ambience: `Audio/Ambience/{profile}` (lowercase enum name)
+- SFX: `Audio/Sfx/build_place`, `Audio/Sfx/elevator_ping`, `Audio/Sfx/elevator_door`
+
+## Regenerating
+
+```bash
+python Tools/generate_ambient_wavs.py
+```
+
+Then re-enter Play Mode so `TowerAudio` reloads clips.

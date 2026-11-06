@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace BuildATower
 {
     public sealed class StarSystem
@@ -7,22 +9,47 @@ namespace BuildATower
         public const float OneStarMaxStress = 40f;
         public const int TwoStarPopulation = 30;
         public const float TwoStarMaxStress = 25f;
-        public const int MaxStars = 2;
+        public const int ThreeStarPopulation = 60;
+        public const float ThreeStarMaxStress = 20f;
+        public const int FourStarPopulation = 100;
+        public const float FourStarMaxStress = 15f;
+        public const int FiveStarPopulation = 150;
+        public const float FiveStarMaxStress = 12f;
+        public const int MaxStars = 5;
+        /// <summary>HUD star track length (matches <see cref="MaxStars"/>).</summary>
+        public const int StarSlots = 5;
+
+        const string SecurityId = "service_security";
+        const string HousekeepingId = "service_housekeeping";
+        const string MaintenanceId = "service_maintenance";
+
+        readonly List<StarChangeEvent> _pendingChanges = new();
 
         public int CurrentStars { get; private set; }
         public string LastResult { get; private set; }
+        public IReadOnlyList<StarChangeEvent> PendingChanges => _pendingChanges;
+
+        public void ClearPendingChanges() => _pendingChanges.Clear();
 
         /// <summary>
-        /// Grants the next star as soon as its criteria are met. Never demotes.
+        /// Grants every consecutive star whose criteria are currently met. Never demotes.
+        /// Cascades (e.g. 0→2) so a single eligibility check cannot leave Goals all-✓ while stuck mid-tier.
         /// </summary>
         public bool TryPromote(TowerGrid grid, float averageStress, int population)
         {
             if (CurrentStars >= MaxStars) return false;
-            if (!MeetsCriteria(CurrentStars + 1, grid, averageStress, population)) return false;
 
-            CurrentStars++;
-            LastResult = $"Earned {CurrentStars}★.";
-            return true;
+            var promoted = false;
+            while (CurrentStars < MaxStars &&
+                   MeetsCriteria(CurrentStars + 1, grid, averageStress, population))
+            {
+                CurrentStars++;
+                _pendingChanges.Add(new StarChangeEvent(StarChangeKind.Promoted, CurrentStars));
+                promoted = true;
+                LastResult = $"Earned {CurrentStars}★.";
+            }
+
+            return promoted;
         }
 
         /// <summary>
@@ -33,6 +60,7 @@ namespace BuildATower
             if (CurrentStars > 0 && !MeetsCriteria(CurrentStars, grid, averageStress, population))
             {
                 CurrentStars--;
+                _pendingChanges.Add(new StarChangeEvent(StarChangeKind.Demoted, CurrentStars));
                 LastResult = $"Quarterly review: demoted to {CurrentStars}★.";
                 return;
             }
@@ -49,6 +77,7 @@ namespace BuildATower
         public void ForceStars(int stars)
         {
             CurrentStars = System.Math.Clamp(stars, 0, MaxStars);
+            ClearPendingChanges();
         }
 
         /// <summary>
@@ -65,20 +94,47 @@ namespace BuildATower
 
             var lines = $"Next ★ ({target}★) needs:";
             lines += $"\n  Pop {population}/{neededPopulation} {Mark(population >= neededPopulation)}";
-            lines += $"\n  Stress {averageStress:0}/{allowedStress:0} max {Mark(averageStress <= allowedStress)}";
+            // Show one decimal so HUD ✓ matches MeetsCriteria (≤) when avg is e.g. 25.4 vs max 25.
+            lines += $"\n  Stress {averageStress:0.#}/{allowedStress:0} max {Mark(averageStress <= allowedStress)}";
             lines += $"\n  Lobby {Mark(grid != null && grid.HasLobby)}";
 
             if (target >= 2)
                 lines += $"\n  Elevator {Mark(HasElevator(grid))}";
 
+            if (target >= 3)
+            {
+                // Security is a 3★ unlock — do not require it to earn 3★ (chicken-and-egg).
+                lines += $"\n  Housekeeping {Mark(HasOperationalFacility(grid, HousekeepingId))}";
+                lines += $"\n  Maintenance {Mark(HasOperationalFacility(grid, MaintenanceId))}";
+            }
+
+            if (target >= 4)
+                lines += $"\n  Security {Mark(HasStaffedSecurity(grid))}";
+
+            if (target >= 5)
+            {
+                var stalls = ParkingStalls.TotalStalls(grid);
+                lines += $"\n  Valet {Mark(ParkingStalls.HasOperationalValet(grid))}";
+                lines +=
+                    $"\n  Parking stalls {stalls}/{ParkingStalls.FiveStarMinStalls} {Mark(stalls >= ParkingStalls.FiveStarMinStalls)}";
+            }
+
             return lines;
         }
 
         public static int RequiredPopulation(int stars) =>
-            stars >= 2 ? TwoStarPopulation : OneStarPopulation;
+            stars >= 5 ? FiveStarPopulation :
+            stars >= 4 ? FourStarPopulation :
+            stars >= 3 ? ThreeStarPopulation :
+            stars >= 2 ? TwoStarPopulation :
+            OneStarPopulation;
 
         public static float AllowedStress(int stars) =>
-            stars >= 2 ? TwoStarMaxStress : OneStarMaxStress;
+            stars >= 5 ? FiveStarMaxStress :
+            stars >= 4 ? FourStarMaxStress :
+            stars >= 3 ? ThreeStarMaxStress :
+            stars >= 2 ? TwoStarMaxStress :
+            OneStarMaxStress;
 
         static string Mark(bool met) => met ? "✓" : "✗";
 
@@ -88,7 +144,16 @@ namespace BuildATower
             if (population < RequiredPopulation(stars) || averageStress > AllowedStress(stars))
                 return false;
 
-            return stars < 2 || HasElevator(grid);
+            if (stars >= 2 && !HasElevator(grid)) return false;
+            if (stars >= 3 && !HasOperationalServiceFacilities(grid)) return false;
+            if (stars >= 4 && !HasStaffedSecurity(grid)) return false;
+            if (stars >= 5)
+            {
+                if (!ParkingStalls.HasOperationalValet(grid)) return false;
+                if (ParkingStalls.TotalStalls(grid) < ParkingStalls.FiveStarMinStalls) return false;
+            }
+
+            return true;
         }
 
         static bool HasElevator(TowerGrid grid)
@@ -102,6 +167,47 @@ namespace BuildATower
             }
 
             return false;
+        }
+
+        static bool HasOperationalServiceFacilities(TowerGrid grid) =>
+            HasOperationalFacility(grid, HousekeepingId) &&
+            HasOperationalFacility(grid, MaintenanceId);
+
+        static bool HasStaffedSecurity(TowerGrid grid)
+        {
+            if (grid == null) return false;
+
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                if (room.Type.id != SecurityId) continue;
+                if (IsBroken(room)) continue;
+                if (room.StaffedWorkers < 1) continue;
+                return true;
+            }
+
+            return false;
+        }
+
+        static bool HasOperationalFacility(TowerGrid grid, string typeId)
+        {
+            if (grid == null || string.IsNullOrEmpty(typeId)) return false;
+
+            foreach (var room in grid.Rooms)
+            {
+                if (room?.Type == null) continue;
+                if (room.Type.id != typeId) continue;
+                if (IsBroken(room)) continue;
+                return true;
+            }
+
+            return false;
+        }
+
+        static bool IsBroken(RoomInstance room)
+        {
+            if (room == null) return false;
+            return room.IsBroken;
         }
     }
 }

@@ -40,7 +40,8 @@ namespace BuildATower.Tests
             var grid = new TowerGrid();
             Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
             Assert.IsTrue(grid.TryPlace(Condo(), new Vector2Int(0, 1), out var condo));
-            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(10, 0), out _));
+            // Stairs beside condo (not overlapping its cell) so lobby→home is reachable.
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(1, 0), out _));
             var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
             router.Rebuild(grid);
             var agents = new AgentSystem(router);
@@ -48,11 +49,12 @@ namespace BuildATower.Tests
             var wallet = new FundsWallet(0);
             var economy = new EconomySystem();
 
+            // Mid-band condo matches Mid buyer rolls; stars>=1 keeps Normal price tier comfortable.
             agents.SyncHomes(grid, room =>
             {
                 notifiedRooms.Add(room);
                 economy.TrySellCondo(room, wallet);
-            });
+            }, currentStars: 2, averageCrime: 0f);
 
             var buyer = agents.Agents.Single();
             Assert.AreEqual(AgentPhase.Outside, buyer.Phase);
@@ -68,7 +70,15 @@ namespace BuildATower.Tests
             Assert.AreEqual(AgentPhase.AtHome, buyer.Phase);
             Assert.AreEqual(1, agents.Population);
             Assert.IsTrue(condo.CondoSold);
-            Assert.AreEqual(condo.Type.baseIncome, wallet.Balance);
+            Assert.AreEqual(
+                EconomicBalancingManager.PeriodIncome(
+                    condo.Type,
+                    PricePricing.TierNormal,
+                    GameSession.Difficulty,
+                    1f,
+                    1f,
+                    EconomySystem.FloorFitFor(condo, stars: 1)),
+                wallet.Balance);
             CollectionAssert.AreEqual(new[] { condo }, notifiedRooms);
         }
 
@@ -277,6 +287,64 @@ namespace BuildATower.Tests
             return room;
         }
 
+        [Test]
+        public void IsMovementStuck_true_when_moving_with_goal_and_empty_path()
+        {
+            var agent = new Agent(1, AgentRole.OfficeWorker, null, new Vector2Int(5, 0));
+            agent.Phase = AgentPhase.Moving;
+            agent.GoalCell = new Vector2Int(5, 4);
+            agent.Path = new List<Vector2Int>();
+            Assert.IsTrue(AgentSystem.IsMovementStuck(agent));
+
+            agent.Path = new List<Vector2Int> { new Vector2Int(5, 0), new Vector2Int(5, 1) };
+            agent.PathIndex = 0;
+            Assert.IsFalse(AgentSystem.IsMovementStuck(agent));
+
+            agent.PathIndex = 2;
+            Assert.IsTrue(AgentSystem.IsMovementStuck(agent));
+        }
+
+        [Test]
+        public void Path_stuck_replan_recovers_when_route_appears()
+        {
+            var grid = new TowerGrid();
+            Assert.IsTrue(grid.TryPlaceLobby(Lobby(), 0, 20, 0, out _));
+            Assert.IsTrue(grid.TryPlace(Office(true), new Vector2Int(0, 1), out _));
+            var router = new TransitRouter(new StairsPathfinder(), new ElevatorSystem());
+            router.Rebuild(grid);
+            var agents = new AgentSystem(router);
+            var clock = new GameClock();
+
+            agents.SyncHomes(grid);
+            Assert.Greater(agents.Agents.Count, 0);
+            var agent = agents.Agents[0];
+            agent.Cell = new Vector2Int(5, 0);
+            agent.WorldPosition = new Vector2(5.5f, 0.5f);
+            agent.Phase = AgentPhase.Moving;
+            agent.GoalCell = new Vector2Int(4, 1);
+            agent.PhaseAfterMove = AgentPhase.Working;
+            agent.Path = new List<Vector2Int>();
+            agent.PathIndex = 0;
+            agent.TripLegs = new List<TransitLeg>();
+            agent.PathStuckMinutes = AgentSystem.PathStuckReplanIntervalMinutes;
+
+            // Still no vertical route → replan keeps stall.
+            agents.Tick(1f, clock, grid);
+            Assert.IsTrue(AgentSystem.IsMovementStuck(agent));
+
+            Assert.IsTrue(grid.TryPlace(Stairs(), new Vector2Int(8, 0), out _));
+            router.Rebuild(grid);
+            agent.Phase = AgentPhase.Moving;
+            agent.GoalCell = new Vector2Int(4, 1);
+            agent.Path = new List<Vector2Int>();
+            agent.PathIndex = 0;
+            agent.PathStuckMinutes = AgentSystem.PathStuckReplanIntervalMinutes;
+            agents.Tick(1f, clock, grid);
+
+            Assert.IsFalse(AgentSystem.IsMovementStuck(agent));
+            Assert.IsTrue(agent.Path != null && agent.Path.Count > 0);
+        }
+
         static TowerGrid CreateFourFloorOfficeTower()
         {
             var grid = new TowerGrid();
@@ -324,8 +392,9 @@ namespace BuildATower.Tests
         static RoomTypeSO Condo()
         {
             var room = ScriptableObject.CreateInstance<RoomTypeSO>();
-            room.id = "condo";
+            room.id = CondoLuxury.MidStandardId;
             room.category = RoomCategory.Condo;
+            room.luxuryBand = LuxuryBand.Mid;
             room.size = Vector2Int.one;
             room.maxOccupants = 1;
             room.allowAboveGround = true;
