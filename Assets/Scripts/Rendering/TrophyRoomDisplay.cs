@@ -225,74 +225,27 @@ namespace BuildATower
                     return null;
                 }
 
-                KeyDarkMedalPlate(tex);
+                // Keep the shipped dark plate — color-keying brown shadows punched holes
+                // in bronze/gold cups (same hue family as the backdrop).
                 return tex;
             }
 
             return Resources.Load<Texture2D>(path);
         }
 
-        /// <summary>
-        /// Medal plates ship with a dark brown field. Drop pixels near the corner color
-        /// so a 20px chip reads as the cup, not a postage stamp.
-        /// </summary>
-        static void KeyDarkMedalPlate(Texture2D tex)
+        public static void ResetChipCache()
         {
-            Color[] px;
-            try
+            foreach (var pair in ChipSprites)
             {
-                px = tex.GetPixels();
-            }
-            catch (UnityException)
-            {
-                return;
+                if (pair.Value == null)
+                    continue;
+                var tex = pair.Value.texture;
+                DestroyOwned(pair.Value);
+                if (tex != null)
+                    DestroyOwned(tex);
             }
 
-            if (px == null || px.Length == 0)
-                return;
-
-            var w = tex.width;
-            var h = tex.height;
-            var plate = AverageCorners(px, w, h);
-            if (plate.a < 0.25f || plate.maxColorComponent >= 0.35f)
-                return;
-
-            for (var i = 0; i < px.Length; i++)
-            {
-                var c = px[i];
-                var dist = PlateDistance(c, plate);
-                if (dist < 22f)
-                    c.a = 0f;
-                else if (dist < 48f)
-                    c.a *= (dist - 22f) / 26f;
-                px[i] = c;
-            }
-
-            tex.SetPixels(px);
-            tex.Apply(false, false);
-        }
-
-        static Color AverageCorners(Color[] px, int w, int h)
-        {
-            var corners = new[]
-            {
-                px[0],
-                px[w - 1],
-                px[(h - 1) * w],
-                px[h * w - 1]
-            };
-            var sum = Color.clear;
-            for (var i = 0; i < corners.Length; i++)
-                sum += corners[i];
-            return sum / corners.Length;
-        }
-
-        static float PlateDistance(Color c, Color plate)
-        {
-            var dr = (c.r - plate.r) * 255f;
-            var dg = (c.g - plate.g) * 255f;
-            var db = (c.b - plate.b) * 255f;
-            return Mathf.Sqrt(dr * dr + dg * dg + db * db);
+            ChipSprites.Clear();
         }
 
         static void DestroyOwned(UnityEngine.Object obj)

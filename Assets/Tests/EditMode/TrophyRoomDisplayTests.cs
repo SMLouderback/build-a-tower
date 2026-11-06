@@ -1,10 +1,14 @@
 using System.Linq;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace BuildATower.Tests
 {
     public sealed class TrophyRoomDisplayTests
     {
+        [TearDown]
+        public void TearDown() => TrophyRoomDisplay.ResetChipCache();
+
         [Test]
         public void BuildPedestals_maps_empty_case_to_empty_slots_for_every_subject()
         {
@@ -57,6 +61,31 @@ namespace BuildATower.Tests
                 Assert.GreaterOrEqual(c.y, 0f);
                 Assert.LessOrEqual(c.y, 1f);
             }
+        }
+
+        [Test]
+        public void LoadChipSprite_keeps_opaque_bronze_cup_body()
+        {
+            var sprite = TrophyRoomDisplay.LoadChipSprite("trophy_population_bronze");
+            Assert.IsNotNull(sprite);
+            Assert.IsNotNull(sprite.texture);
+
+            var tex = sprite.texture;
+            var cx = tex.width / 2;
+            var cy = tex.height / 2;
+            var center = tex.GetPixel(cx, cy);
+            Assert.Greater(center.a, 0.9f, "Cup body must stay opaque (no dark-plate punch-through)");
+
+            var opaque = 0;
+            var px = tex.GetPixels();
+            for (var i = 0; i < px.Length; i++)
+            {
+                if (px[i].a > 0.9f)
+                    opaque++;
+            }
+
+            // Full 96x96 plate keeps the cup; brown-keying used to leave ~1k opaque pixels.
+            Assert.Greater(opaque, 4000, $"Expected intact medal pixels, got {opaque}");
         }
     }
 }

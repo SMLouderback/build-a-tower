@@ -413,6 +413,7 @@ namespace BuildATower
             // Domain-reload off can keep stale keyed icons; always rebuild on play.
             MenuIconArt.ResetCache();
             SeasonHudArt.ResetCache();
+            TrophyRoomDisplay.ResetChipCache();
             if (simulation == null && build != null)
                 simulation = build.GetComponent<TowerSimulation>();
             ResolveCelebration();
