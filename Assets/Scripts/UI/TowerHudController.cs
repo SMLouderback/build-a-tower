@@ -83,6 +83,7 @@ namespace BuildATower
             BuildSubgroup.HealthSanitation => "subgroup_health",
             BuildSubgroup.Power => "subgroup_power",
             BuildSubgroup.Water => "subgroup_water",
+            BuildSubgroup.BusinessSupport => "subgroup_business",
             BuildSubgroup.Services => "subgroup_services",
             _ => null
         };
@@ -3997,6 +3998,7 @@ namespace BuildATower
             BuildSubgroup.HealthSanitation => "HS",
             BuildSubgroup.Power => "Pw",
             BuildSubgroup.Water => "Wa",
+            BuildSubgroup.BusinessSupport => "Bs",
             BuildSubgroup.Services => "Sv",
             _ => "?"
         };
