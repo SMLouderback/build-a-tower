@@ -122,8 +122,10 @@ namespace BuildATower
                     or "service_recycling" or "service_housekeeping" => BuildSubgroup.HealthSanitation,
                 "service_power" => BuildSubgroup.Power,
                 "service_pump" or "service_treatment" => BuildSubgroup.Water,
-                "service_security" or "service_mail" or "service_loading_dock" or "service_maintenance"
-                    or "service_research" or "service_trophy_room" => BuildSubgroup.Services,
+                "service_mail" or "service_loading_dock" or "service_conference" or "service_event_hall"
+                    => BuildSubgroup.BusinessSupport,
+                "service_security" or "service_maintenance" or "service_research" or "service_trophy_room"
+                    => BuildSubgroup.Services,
                 _ => BuildSubgroup.None
             };
         }

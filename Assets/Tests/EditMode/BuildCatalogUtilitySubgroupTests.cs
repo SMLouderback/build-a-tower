@@ -46,17 +46,19 @@ namespace BuildATower.Tests
                 Make("service_power", "Breaker", RoomCategory.Service, family: BuildFamily.Utility),
                 Make("service_pump", "Pump", RoomCategory.Service, family: BuildFamily.Utility),
                 Make("service_treatment", "Treatment", RoomCategory.Service, family: BuildFamily.Utility),
+                Make("service_mail", "Mail", RoomCategory.Service, family: BuildFamily.Utility),
                 Make("service_trophy_room", "Trophy Room", RoomCategory.Service, family: BuildFamily.Utility),
             };
 
             var utility = UtilityGroup(rooms);
             Assert.IsNotNull(utility);
             Assert.AreEqual(0, utility.Rooms.Count);
-            Assert.AreEqual(4, utility.Subgroups.Count);
+            Assert.AreEqual(5, utility.Subgroups.Count);
             Assert.AreEqual(BuildSubgroup.HealthSanitation, utility.Subgroups[0].Subgroup);
             Assert.AreEqual(BuildSubgroup.Power, utility.Subgroups[1].Subgroup);
             Assert.AreEqual(BuildSubgroup.Water, utility.Subgroups[2].Subgroup);
-            Assert.AreEqual(BuildSubgroup.Services, utility.Subgroups[3].Subgroup);
+            Assert.AreEqual(BuildSubgroup.BusinessSupport, utility.Subgroups[3].Subgroup);
+            Assert.AreEqual(BuildSubgroup.Services, utility.Subgroups[4].Subgroup);
         }
 
         [Test]
@@ -65,6 +67,7 @@ namespace BuildATower.Tests
             Assert.AreEqual("Health / Sanitation", BuildCatalog.SubgroupLabel(BuildSubgroup.HealthSanitation));
             Assert.AreEqual("Power", BuildCatalog.SubgroupLabel(BuildSubgroup.Power));
             Assert.AreEqual("Water", BuildCatalog.SubgroupLabel(BuildSubgroup.Water));
+            Assert.AreEqual("Business Support", BuildCatalog.SubgroupLabel(BuildSubgroup.BusinessSupport));
             Assert.AreEqual("Services", BuildCatalog.SubgroupLabel(BuildSubgroup.Services));
         }
 
@@ -79,6 +82,14 @@ namespace BuildATower.Tests
                 Make("service_pump", "Pump", RoomCategory.Service).ResolvedBuildSubgroup());
             Assert.AreEqual(BuildSubgroup.Water,
                 Make("service_treatment", "Treatment", RoomCategory.Service).ResolvedBuildSubgroup());
+            Assert.AreEqual(BuildSubgroup.BusinessSupport,
+                Make("service_mail", "Mail", RoomCategory.Service).ResolvedBuildSubgroup());
+            Assert.AreEqual(BuildSubgroup.BusinessSupport,
+                Make("service_loading_dock", "Dock", RoomCategory.Service).ResolvedBuildSubgroup());
+            Assert.AreEqual(BuildSubgroup.BusinessSupport,
+                Make("service_conference", "Conference", RoomCategory.Service).ResolvedBuildSubgroup());
+            Assert.AreEqual(BuildSubgroup.BusinessSupport,
+                Make("service_event_hall", "Event Hall", RoomCategory.Service).ResolvedBuildSubgroup());
             Assert.AreEqual(BuildSubgroup.Services,
                 Make("service_trophy_room", "Trophy", RoomCategory.Service).ResolvedBuildSubgroup());
         }
@@ -92,6 +103,10 @@ namespace BuildATower.Tests
                 Make("service_power", "Breaker", RoomCategory.Service, family: BuildFamily.Utility),
                 Make("service_pump", "Pump", RoomCategory.Service, family: BuildFamily.Utility),
                 Make("service_treatment", "Treatment", RoomCategory.Service, family: BuildFamily.Utility),
+                Make("service_mail", "Mail", RoomCategory.Service, family: BuildFamily.Utility),
+                Make("service_loading_dock", "Dock", RoomCategory.Service, family: BuildFamily.Utility),
+                Make("service_conference", "Conference", RoomCategory.Service, family: BuildFamily.Utility),
+                Make("service_event_hall", "Event Hall", RoomCategory.Service, family: BuildFamily.Utility),
                 Make("service_trophy_room", "Trophy Room", RoomCategory.Service, family: BuildFamily.Utility),
             };
 
@@ -99,6 +114,7 @@ namespace BuildATower.Tests
             var health = FindSubgroup(utility, BuildSubgroup.HealthSanitation);
             var power = FindSubgroup(utility, BuildSubgroup.Power);
             var water = FindSubgroup(utility, BuildSubgroup.Water);
+            var businessSupport = FindSubgroup(utility, BuildSubgroup.BusinessSupport);
             var services = FindSubgroup(utility, BuildSubgroup.Services);
 
             Assert.IsNotNull(health);
@@ -110,7 +126,13 @@ namespace BuildATower.Tests
             CollectionAssert.AreEquivalent(
                 new[] { "service_pump", "service_treatment" },
                 water.Rooms.Select(r => r.id).ToArray());
+            Assert.IsNotNull(businessSupport);
+            Assert.AreEqual(4, businessSupport.Rooms.Count);
+            CollectionAssert.AreEquivalent(
+                new[] { "service_mail", "service_loading_dock", "service_conference", "service_event_hall" },
+                businessSupport.Rooms.Select(r => r.id).ToArray());
             Assert.IsNotNull(services);
+            Assert.AreEqual(1, services.Rooms.Count);
             Assert.AreEqual("service_trophy_room", services.Rooms[0].id);
         }
 

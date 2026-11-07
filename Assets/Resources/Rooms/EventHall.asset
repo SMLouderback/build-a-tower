@@ -36,4 +36,4 @@ MonoBehaviour:
   maxOccupants: 0
   eventCapacity: 120
   buildFamily: 5
-  buildSubgroup: 0
+  buildSubgroup: 7

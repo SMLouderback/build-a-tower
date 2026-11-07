@@ -92,11 +92,13 @@ namespace BuildATower.Tests
             AssertUtilitySubgroup("Rooms/ServicePump", BuildSubgroup.Water);
             AssertUtilitySubgroup("Rooms/ServiceTreatment", BuildSubgroup.Water);
             AssertUtilitySubgroup("Rooms/SecurityPost", BuildSubgroup.Services);
-            AssertUtilitySubgroup("Rooms/ServiceMail", BuildSubgroup.Services);
-            AssertUtilitySubgroup("Rooms/ServiceLoadingDock", BuildSubgroup.Services);
             AssertUtilitySubgroup("Rooms/Maintenance", BuildSubgroup.Services);
             AssertUtilitySubgroup("Rooms/ResearchLab", BuildSubgroup.Services);
             AssertUtilitySubgroup("Rooms/TrophyRoom", BuildSubgroup.Services);
+            AssertUtilitySubgroup("Rooms/ServiceMail", BuildSubgroup.BusinessSupport);
+            AssertUtilitySubgroup("Rooms/ServiceLoadingDock", BuildSubgroup.BusinessSupport);
+            AssertUtilitySubgroup("Rooms/Conference", BuildSubgroup.BusinessSupport);
+            AssertUtilitySubgroup("Rooms/EventHall", BuildSubgroup.BusinessSupport);
         }
 
         static void AssertUtilitySubgroup(string path, BuildSubgroup expected)

@@ -76,6 +76,7 @@ namespace BuildATower
                     AddSubgroup(entry, BuildSubgroup.HealthSanitation, list);
                     AddSubgroup(entry, BuildSubgroup.Power, list);
                     AddSubgroup(entry, BuildSubgroup.Water, list);
+                    AddSubgroup(entry, BuildSubgroup.BusinessSupport, list);
                     AddSubgroup(entry, BuildSubgroup.Services, list);
                     if (entry.Subgroups.Count == 0)
                         continue;
@@ -128,6 +129,7 @@ namespace BuildATower
             BuildSubgroup.HealthSanitation => "Health / Sanitation",
             BuildSubgroup.Power => "Power",
             BuildSubgroup.Water => "Water",
+            BuildSubgroup.BusinessSupport => "Business Support",
             BuildSubgroup.Services => "Services",
             _ => "Other"
         };

@@ -20,6 +20,7 @@ namespace BuildATower
         HealthSanitation,
         Power,
         Water,
-        Services
+        Services,
+        BusinessSupport
     }
 }
