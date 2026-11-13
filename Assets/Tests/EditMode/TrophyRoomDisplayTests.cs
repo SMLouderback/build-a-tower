@@ -64,17 +64,31 @@ namespace BuildATower.Tests
         }
 
         [Test]
-        public void LoadChipSprite_keeps_opaque_bronze_cup_body()
+        public void LoadChipSprite_keeps_opaque_bronze_cup_without_plate_box()
         {
             var sprite = TrophyRoomDisplay.LoadChipSprite("trophy_population_bronze");
             Assert.IsNotNull(sprite);
             Assert.IsNotNull(sprite.texture);
 
             var tex = sprite.texture;
-            var cx = tex.width / 2;
-            var cy = tex.height / 2;
-            var center = tex.GetPixel(cx, cy);
-            Assert.Greater(center.a, 0.9f, "Cup body must stay opaque (no dark-plate punch-through)");
+            var center = tex.GetPixel(tex.width / 2, tex.height / 2);
+            Assert.Greater(center.a, 0.9f, "Cup body must stay opaque");
+
+            var clearCorners = 0;
+            var corners = new[]
+            {
+                tex.GetPixel(0, 0),
+                tex.GetPixel(tex.width - 1, 0),
+                tex.GetPixel(0, tex.height - 1),
+                tex.GetPixel(tex.width - 1, tex.height - 1)
+            };
+            foreach (var c in corners)
+            {
+                if (c.a < 0.08f)
+                    clearCorners++;
+            }
+
+            Assert.GreaterOrEqual(clearCorners, 3, "Matted medals should not keep a solid plate box");
 
             var opaque = 0;
             var px = tex.GetPixels();
@@ -84,8 +98,7 @@ namespace BuildATower.Tests
                     opaque++;
             }
 
-            // Full 96x96 plate keeps the cup; brown-keying used to leave ~1k opaque pixels.
-            Assert.Greater(opaque, 4000, $"Expected intact medal pixels, got {opaque}");
+            Assert.Greater(opaque, 1500, $"Expected intact medal pixels, got {opaque}");
         }
     }
 }

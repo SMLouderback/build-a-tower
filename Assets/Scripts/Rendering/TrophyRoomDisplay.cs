@@ -225,8 +225,8 @@ namespace BuildATower
                     return null;
                 }
 
-                // Keep the shipped dark plate — color-keying brown shadows punched holes
-                // in bronze/gold cups (same hue family as the backdrop).
+                // Assets are pre-matted (Tools/matte_trophy_plates.py). Do not
+                // color-key brown plates at runtime — that punches cup shadows.
                 return tex;
             }
 
