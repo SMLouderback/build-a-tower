@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: ServicePower
   m_EditorClassIdentifier: BuildATower.Runtime::BuildATower.RoomTypeSO
   id: service_power
-  displayName: Power Plant
+  displayName: Breaker Room
   category: 7
-  size: {x: 8, y: 1}
+  size: {x: 4, y: 1}
   buildCost: 140000
   placeholderColor: {r: 0.48, g: 0.42, b: 0.32, a: 1}
   incomeModel: 0
