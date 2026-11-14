@@ -1,0 +1,24 @@
+{
+  "label": "office-face-adjacency",
+  "stars": 2,
+  "funds": 5000000,
+  "lobbyMin": 0,
+  "lobbyMax": 24,
+  "placements": [
+    { "type": "office_micro", "x": 0, "y": 1 },
+    { "type": "office_micro", "x": 3, "y": 1 },
+    { "type": "office_micro", "x": 6, "y": 1 },
+    { "type": "office_studio", "x": 9, "y": 1 },
+    { "type": "office_micro", "x": 0, "y": 2 },
+    { "type": "office_micro", "x": 3, "y": 2 },
+    { "type": "office_studio", "x": 6, "y": 2 }
+  ],
+  "expect": {
+    "maxMagentaPct": 0.12,
+    "notes": [
+      "Shared sides between micros show finished plaster wall + decor, not grey-painted glass.",
+      "Solo outer edges keep sky through exterior glass.",
+      "Rooms read as solid interiors (furniture not floating on sky)."
+    ]
+  }
+}

@@ -1,3 +1,14 @@
+### Task 10 Report: Reward Book HUD + badge pulse + Claim All
+
+Implemented:
+- Added `RewardBookHud` with testable helpers for visibility, badge text, tabs, ready ordering, ordered claim-all, and IMGUI panel drawing.
+- Added a top-bar Rewards button near Goals, gated by lobby OR pending rewards, with pulsing pending badge.
+- Added Ready / Catalog / Contracts / Trophies tabs plus Claim and Claim All flows through `RewardsSystem` state.
+- Followed the `TowerHudController.cs` dirty-file protocol: copied WIP aside, reset the HUD file to HEAD, and kept the task diff isolated before commit.
+
+Verification:
+- Red: `RewardBookHudTests` failed on missing `RewardBookHud`.
+- Green: `RewardBookHudTests` passed `5/5` via Unity EditMode (`TestResults/reward-book-hud-green3.xml`).
 # Task 10 Report: TowerSandbox Scene
 
 ## Status

@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloud-save-api-cloudinit
+  namespace: default
+type: Opaque
+stringData:
+  userdata: |
+    #cloud-config
+    hostname: cloud-save-api
+    manage_etc_hosts: true
+    timezone: America/New_York
+
+    users:
+      - name: ubuntu
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        groups: docker
+        shell: /bin/bash
+        ssh_authorized_keys:
+          - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMRN9Ju0RrAVkm/5aDjIVJcrvDgyNIEp9ddHQpKhJDLm escapemobileproductions@gmail.com
+
+    package_update: true
+    packages:
+      - qemu-guest-agent
+      - docker.io
+      - curl
+      - ca-certificates
+      - rsync
+      - git
+      - postgresql-client
+
+    write_files:
+      - path: /opt/cloud-save-api/README.BOOTSTRAP
+        permissions: "0644"
+        content: |
+          Cloud Save API VM bootstrap
+          1. Copy Build-A-Tower/CloudSaveApi to /opt/cloud-save-api (rsync/scp)
+          2. cp .env.example .env && edit secrets (Postgres password, JWT, SMTP — never commit)
+          3. docker compose up -d --build
+          4. curl -sf http://127.0.0.1:8080/health
+          5. NPM: see deploy/npm-proxy.md on edge-proxy (Postgres stays off NPM)
+          6. Backups: deploy/backup.md
+      - path: /usr/local/bin/ensure-docker-compose
+        permissions: "0755"
+        content: |
+          #!/bin/bash
+          set -euo pipefail
+          if ! command -v docker >/dev/null; then
+            echo "docker missing" >&2
+            exit 1
+          fi
+          if ! docker compose version >/dev/null 2>&1; then
+            curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64" \
+              -o /usr/local/bin/docker-compose
+            chmod +x /usr/local/bin/docker-compose
+            mkdir -p /usr/local/lib/docker/cli-plugins
+            ln -sf /usr/local/bin/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
+          fi
+
+    runcmd:
+      - systemctl enable --now qemu-guest-agent
+      - systemctl enable --now docker
+      - /usr/local/bin/ensure-docker-compose
+      - mkdir -p /opt/cloud-save-api
+      - chown ubuntu:ubuntu /opt/cloud-save-api
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: cloud-save-api
+  namespace: default
+  labels:
+    harvesterhci.io/creator: harvester
+    harvesterhci.io/os: linux
+  annotations:
+    harvesterhci.io/vmRunStrategy: Always
+    harvesterhci.io/volumeClaimTemplates: '[{"metadata":{"name":"cloud-save-api-disk-0","annotations":{"harvesterhci.io/imageId":"default/image-d6rjr"}},"spec":{"accessModes":["ReadWriteMany"],"resources":{"requests":{"storage":"30Gi"}},"storageClassName":"longhorn-image-d6rjr","volumeMode":"Block"}}]'
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      labels:
+        harvesterhci.io/vmName: cloud-save-api
+    spec:
+      architecture: amd64
+      domain:
+        cpu:
+          cores: 2
+          sockets: 1
+          threads: 1
+        devices:
+          disks:
+            - bootOrder: 1
+              disk:
+                bus: virtio
+              name: disk-0
+            - disk:
+                bus: virtio
+              name: cloudinitdisk
+          interfaces:
+            - bridge: {}
+              model: virtio
+              name: nic-1
+        machine:
+          type: q35
+        resources:
+          limits:
+            cpu: "2"
+            memory: 4Gi
+          requests:
+            cpu: 500m
+            memory: 2Gi
+      hostname: cloud-save-api
+      networks:
+        - multus:
+            networkName: jellyfin/internet
+          name: nic-1
+      volumes:
+        - name: disk-0
+          persistentVolumeClaim:
+            claimName: cloud-save-api-disk-0
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            secretRef:
+              name: cloud-save-api-cloudinit

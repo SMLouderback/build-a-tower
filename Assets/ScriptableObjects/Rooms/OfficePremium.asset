@@ -1,4 +1,4 @@
-%YAML 1.1
+﻿%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!114 &11400000
 MonoBehaviour:
@@ -16,10 +16,10 @@ MonoBehaviour:
   displayName: Premium Office
   category: 1
   size: {x: 9, y: 1}
-  buildCost: 60000
+  buildCost: 87000
   placeholderColor: {r: 0.18039216, g: 0.41960785, b: 0.6784314, a: 1}
   incomeModel: 1
-  baseIncome: 5000
+  baseIncome: 1400
   noiseOutput: 0
   noiseSensitivity: 0
   requiresHousekeeping: 0

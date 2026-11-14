@@ -13,6 +13,8 @@ namespace BuildATower.Tests
         [UnityTest]
         public IEnumerator Lobby_office_stairs_agents_and_bulldoze()
         {
+            GameSession.ResetForTests();
+            GameSession.EnsureDefault();
             SceneManager.LoadScene("TowerSandbox", LoadSceneMode.Single);
             yield return null;
 
@@ -67,6 +69,8 @@ namespace BuildATower.Tests
         [UnityTest]
         public IEnumerator Elevator_place_extend_and_route_beyond_stairs()
         {
+            GameSession.ResetForTests();
+            GameSession.EnsureDefault();
             SceneManager.LoadScene("TowerSandbox", LoadSceneMode.Single);
             yield return null;
 

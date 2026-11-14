@@ -1,0 +1,27 @@
+---
+description: Build-A-Tower economic systems architecture, VPSF scaling, and unit class matrix
+alwaysApply: true
+---
+
+# PROJECT ARCHITECTURE & ECONOMIC SYSTEMS SIMULATION RULES
+
+Scope: **Build-A-Tower only**. Apply when changing rents, costs, demand, difficulty, transport↔economy coupling, or unit tier/class balancing.
+
+## Global Constraints
+
+- Never hardcode magic numbers for unit rents, maintenance costs, or sizes.
+- All economic changes must loop through the central Value-Per-Square-Foot (VPSF) system.
+- Always preserve the 5 difficulty tiers (Sandbox, Easy, Normal, Hard, Extreme).
+- Keep code fully modular so the MacroEconomicController, EconomicBalancingManager, and Transportation networks talk via strict APIs.
+
+## Unit & Economic Scaling Matrix
+
+- Support 3 unit types (Office, Hotel, Condo), 9 tiers per type, and 3 classes (Lower, Mid, Upper) = 108 variations.
+- **Lower class:** High density, resilient to tower stress, high upkeep ratio relative to rent (approx. 40%).
+- **Mid class:** Standard balancing baseline.
+- **Upper class:** Low density / high footprint, zero tolerance for elevator wait times (>15s triggers stress), low upkeep ratio (approx. 15%), highly prone to class clashing if near lower class or service facilities.
+
+## Code & Architectural Integrity
+
+- Before altering any unit behavior, verify how the changes impact the Global Market Pulse week-loop.
+- Maintain decoupled state management: logistics variables (elevator queue sizes, transit stress) must pass clean float/integer metrics to the Economic Engine rather than modifying tenant script states directly.

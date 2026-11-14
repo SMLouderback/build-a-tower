@@ -32,10 +32,16 @@ namespace BuildATower
         /// <summary>
         /// Highest tier the market comfortably supports at the given star count (0–5 band).
         /// </summary>
-        public static int ComfortMaxTier(int stars)
+        public static int ComfortMaxTier(int stars) =>
+            ComfortMaxTier(stars, climateOffset: 0);
+
+        /// <summary>
+        /// Stars baseline comfort plus climate offset, clamped to Low…Max.
+        /// </summary>
+        public static int ComfortMaxTier(int stars, int climateOffset)
         {
             stars = System.Math.Clamp(stars, 0, 5);
-            return stars switch
+            var baseline = stars switch
             {
                 0 => TierLow,
                 1 => TierNormal,
@@ -44,17 +50,21 @@ namespace BuildATower
                 4 => TierHigh,
                 _ => TierMax
             };
+            return System.Math.Clamp(baseline + climateOffset, TierLow, TierMax);
         }
 
-        public static int OverpriceSteps(int tier, int stars) =>
-            System.Math.Max(0, ClampTier(tier) - ComfortMaxTier(stars));
+        public static int OverpriceSteps(int tier, int stars, int climateOffset = 0) =>
+            System.Math.Max(0, ClampTier(tier) - ComfortMaxTier(stars, climateOffset));
 
         /// <summary>
         /// Chance a room earns / accepts occupancy, or a condo buyer spawns.
         /// </summary>
-        public static float DemandChance(int tier, int stars)
+        public static float DemandChance(int tier, int stars) =>
+            DemandChance(tier, stars, climateOffset: 0);
+
+        public static float DemandChance(int tier, int stars, int climateOffset)
         {
-            var steps = OverpriceSteps(tier, stars);
+            var steps = OverpriceSteps(tier, stars, climateOffset);
             return steps switch
             {
                 0 => 1f,
@@ -63,13 +73,25 @@ namespace BuildATower
             };
         }
 
-        public static string MarketHint(int tier, int stars)
+        public static string MarketHint(int tier, int stars) =>
+            MarketHint(tier, stars, climateOffset: 0);
+
+        public static string MarketHint(int tier, int stars, int climateOffset)
         {
             tier = ClampTier(tier);
-            var comfort = ComfortMaxTier(stars);
-            if (tier <= comfort)
-                return $"Market: OK for {stars}★";
-            return $"Market: Overpriced for {stars}★";
+            var comfort = ComfortMaxTier(stars, climateOffset);
+            var baseHint = tier <= comfort
+                ? $"Market: OK for {stars}★"
+                : $"Market: Overpriced for {stars}★";
+
+            if (climateOffset == 0)
+                return baseHint;
+
+            var step = System.Math.Clamp(
+                MarketClimate.Normal + climateOffset,
+                MarketClimate.Recession,
+                MarketClimate.Boom);
+            return $"{baseHint} · {MarketClimate.Labels[step]} economy";
         }
 
         public static bool IsPricedRoom(RoomTypeSO type)

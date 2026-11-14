@@ -4,6 +4,7 @@ namespace BuildATower
     {
         Select,
         Bulldoze,
-        PlaceRoom
+        PlaceRoom,
+        Scaffold
     }
 }
