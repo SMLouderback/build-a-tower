@@ -7,15 +7,15 @@ All Docker / `/opt/playtest` commands below run on **edge-proxy**, not your Wind
 From PowerShell on your PC:
 
 ```powershell
-ssh ubuntu@192.168.0.35
+ssh smlouderback@192.168.0.25
 ```
 
 You should see a Linux prompt on that machine before running any `docker` / `cd /opt/playtest` steps.
 
 | What | Where |
 |------|--------|
-| Host | `ubuntu@192.168.0.35` (edge-proxy LAN) |
-| API data | `/opt/playtest/data` (also referenced historically as `/home/ubuntu/playtest/data`) |
+| Host | `smlouderback@192.168.0.25` (EliteDesk lab edge; replaced Harvester `edge-proxy` at `.35`) |
+| API data | `/opt/playtest/data` |
 | API listen | `172.17.0.1:5080` → container `:8080` (docker0 — required so `escape-web` can reach it; not `127.0.0.1`) |
 | Site proxy | `escape-web` nginx proxies `/playtest/` → `172.17.0.1:5080` |
 
